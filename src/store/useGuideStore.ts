@@ -20,7 +20,7 @@ interface GuideState {
   resetGuideState: () => void;
 }
 
-const initialState = {
+export const initialGuideState = {
   targetUrl: '',
   status: 'IDLE' as SystemStatus,
   overlayCoords: null,
@@ -29,7 +29,7 @@ const initialState = {
 };
 
 export const useGuideStore = create<GuideState>((set) => ({
-  ...initialState,
+  ...initialGuideState,
   setTargetUrl: (url) => set({ targetUrl: url }),
   setStatus: (status) => set({ status }),
   setOverlayCoords: (coords) => set({ overlayCoords: coords }),
@@ -53,5 +53,5 @@ export const useGuideStore = create<GuideState>((set) => ({
       overlayCoords: coords ?? state.overlayCoords,
       guideMessage: message ?? state.guideMessage
     })),
-  resetGuideState: () => set({ ...initialState })
+  resetGuideState: () => set({ ...initialGuideState })
 }));

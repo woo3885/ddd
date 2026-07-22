@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import F1_Dashboard from '@/components/F1_Dashboard/F1_Dashboard';
-import F2_StreamViewer from '@/components/F2_StreamViewer/F2_StreamViewer';
-import F3_SmartOverlay from '@/components/F3_SmartOverlay/F3_SmartOverlay';
-import F4_VoiceController from '@/components/F4_VoiceController/F4_VoiceController';
-import F5_MainController from '@/components/F5_MainController/F5_MainController';
+import F1_Dashboard from '@/features/F1_Dashboard/ui/F1_Dashboard';
+import F2_StreamViewer from '@/features/F2_StreamViewer/ui/F2_StreamViewer';
+import F3_SmartOverlay from '@/features/F3_SmartOverlay/ui/F3_SmartOverlay';
+import F4_VoiceController from '@/features/F4_VoiceController/ui/F4_VoiceController';
+import F5_MainController from '@/features/F5_MainController/ui/F5_MainController';
 import { useGuideStore } from '@/store/useGuideStore';
 
 export default function App() {
