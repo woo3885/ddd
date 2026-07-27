@@ -29,3 +29,8 @@ dist
 *.local
 .vscode/*
 !.vscode/extensions.json
+# TypeScript build outputs
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+dist/

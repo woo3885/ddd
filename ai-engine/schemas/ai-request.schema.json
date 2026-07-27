@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ai-request.schema.json",
+  "title": "AIRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestId",
+    "sessionId",
+    "userGoal",
+    "workflowContext",
+    "page"
+  ],
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "userGoal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent",
+        "originalText"
+      ],
+      "properties": {
+        "intent": {
+          "type": "string",
+          "enum": [
+            "OPEN_DEPOSIT",
+            "TRANSFER_MONEY",
+            "POSSIBLE_VOICE_PHISHING",
+            "NAVIGATE_MENU",
+            "REQUEST_PRODUCT_INFO",
+            "CANCEL_WORKFLOW",
+            "PAUSE_WORKFLOW",
+            "UNKNOWN"
+          ]
+        },
+        "originalText": {
+          "type": "string"
+        },
+        "amount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "periodMonths": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "recipientText": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceAccountText": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "workflowContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "currentStep",
+        "previousActions"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "SESSION_CREATED",
+            "PAGE_LOADING",
+            "AI_EXECUTING",
+            "USER_DECISION_REQUIRED",
+            "SECURE_INPUT_REQUIRED",
+            "FINAL_CONFIRMATION_REQUIRED",
+            "ADDITIONAL_INFORMATION_REQUIRED",
+            "RISK_WARNING",
+            "COMPLETED",
+            "CANCELLED",
+            "ERROR",
+            "TERMINATED"
+          ]
+        },
+        "currentStep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "previousActions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "targetElementId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "title",
+        "elements"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pageElement"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "pageElement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "elementId",
+        "tag",
+        "visible",
+        "enabled"
+      ],
+      "properties": {
+        "elementId": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ariaLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
