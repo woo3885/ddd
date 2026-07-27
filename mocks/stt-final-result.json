@@ -1,0 +1,34 @@
+{
+  "type": "STT_FINAL_RESULT",
+  "sessionId": "bs-20260727-001",
+  "utteranceId": "utt-001",
+  "timestamp": 1785140002800,
+  "text": "1년 동안 천만 원을 넣을 정기예금에 가입하고 싶어.",
+  "language": "ko-KR",
+  "sequence": 2,
+  "isFinal": true,
+  "confidence": 0.96,
+  "startedAt": 1785140000000,
+  "endedAt": 1785140002800,
+  "durationMs": 2800,
+  "words": [
+    {
+      "text": "1년 동안",
+      "startMs": 0,
+      "endMs": 700,
+      "confidence": 0.97
+    },
+    {
+      "text": "천만 원을",
+      "startMs": 760,
+      "endMs": 1400,
+      "confidence": 0.95
+    },
+    {
+      "text": "넣을 정기예금에 가입하고 싶어.",
+      "startMs": 1460,
+      "endMs": 2800,
+      "confidence": 0.96
+    }
+  ]
+}
