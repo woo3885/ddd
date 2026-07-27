@@ -1,0 +1,16 @@
+{
+  "requestId": "ai-req-003",
+  "status": "RISK_WARNING",
+  "action": "STOP",
+  "targetElementId": null,
+  "inputValue": null,
+  "message": "안전계좌 송금을 요구받았다면 보이스피싱일 가능성이 있습니다.",
+  "confidence": 0.99,
+  "requiresUserAction": true,
+  "decisionType": null,
+  "secureInputType": null,
+  "riskType": "POSSIBLE_VOICE_PHISHING",
+  "options": null,
+  "confirmationId": null,
+  "summary": null
+}

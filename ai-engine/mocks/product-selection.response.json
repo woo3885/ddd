@@ -1,0 +1,27 @@
+{
+  "requestId": "ai-req-002",
+  "status": "USER_DECISION_REQUIRED",
+  "action": "WAIT_FOR_USER",
+  "targetElementId": null,
+  "inputValue": null,
+  "message": "가입할 상품을 선택해 주세요.",
+  "confidence": 0.94,
+  "requiresUserAction": true,
+  "decisionType": "PRODUCT_SELECTION",
+  "secureInputType": null,
+  "riskType": null,
+  "options": [
+    {
+      "id": "product-1",
+      "label": "12개월 정기예금",
+      "required": false
+    },
+    {
+      "id": "product-2",
+      "label": "우대금리 정기예금",
+      "required": false
+    }
+  ],
+  "confirmationId": null,
+  "summary": null
+}
