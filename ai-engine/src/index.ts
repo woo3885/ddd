@@ -1,36 +1,33 @@
-import { aiService } from "./services/ai.service.js";
+import { intentClassifier } from "./intents/intent.classifier.js";
 
-async function main(): Promise<void> {
+const TEST_MESSAGES = [
+  "금리가 높은 예금 상품을 찾고 싶어요",
+  "친구 계좌로 10만 원을 보내고 싶어요",
+  "내 계좌 잔액을 확인하고 싶어요",
+  "이체 한도를 변경하고 싶어요",
+  "모르는 사람이 송금을 요구해서 불안해요",
+  "은행 업무를 도와주세요",
+] as const;
+
+function main(): void {
   console.log("========================================");
-  console.log("금융길잡이 AI Engine");
-  console.log("상태: STARTING");
+  console.log("금융길잡이 AI Engine - Intent Test");
   console.log("========================================");
 
-  const result = await aiService.generateText({
-    prompt: `
-너는 금융 웹사이트 이용을 도와주는 AI 안내 도우미다.
+  for (const message of TEST_MESSAGES) {
+    const result = intentClassifier.classify(message);
 
-사용자의 요청:
-"예금 상품을 찾고 싶어요."
-
-현재는 연결 테스트 단계다.
-사용자에게 한 문장으로 간단히 답변해라.
-    `.trim(),
-  });
-
-  console.log(`[AI Engine] 사용 모델: ${result.model}`);
-  console.log(`[AI Engine] 응답: ${result.text}`);
-  console.log("[AI Engine] 상태: READY");
+    console.log();
+    console.log(`[사용자 요청] ${message}`);
+    console.log(`[분류 결과] ${result.intent}`);
+    console.log(`[신뢰도] ${result.confidence}`);
+    console.log(
+      `[감지 키워드] ${
+        result.matchedKeywords.join(", ") || "없음"
+      }`,
+    );
+    console.log(`[분류 근거] ${result.reason}`);
+  }
 }
 
-main().catch((error: unknown) => {
-  const message =
-    error instanceof Error
-      ? error.message
-      : "알 수 없는 오류가 발생했습니다.";
-
-  console.error("[AI Engine] 실행 실패");
-  console.error(message);
-
-  process.exitCode = 1;
-});
+main();
