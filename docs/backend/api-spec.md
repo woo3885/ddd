@@ -14,6 +14,7 @@
 {
   "success": true,
   "data": {},
+  "errorCode": null,
   "message": null
 }
 ```
@@ -24,11 +25,24 @@
 {
   "success": false,
   "data": null,
-  "message": "오류 메시지"
+  "errorCode": "SESSION_404",
+  "message": "자동화 세션을 찾을 수 없습니다."
 }
 ```
 
-## 3. 상태 확인 API
+## 3. 공통 오류 코드
+
+| 오류 코드 | HTTP 상태 | 설명 |
+|---|---:|---|
+| `COMMON_400` | 400 | 요청값이 올바르지 않은 경우 |
+| `SESSION_404` | 404 | 자동화 세션을 찾을 수 없는 경우 |
+| `SESSION_409` | 409 | 현재 세션 상태에서 요청을 처리할 수 없는 경우 |
+| `COMMON_500` | 500 | 예상하지 못한 서버 오류가 발생한 경우 |
+
+예상하지 못한 서버 내부 예외의 상세 메시지와 요청 본문은 오류 응답 및 로그에 그대로 노출하지 않는다.
+
+
+## 4. 상태 확인 API
 
 ### 백엔드 서버 상태 확인
 
@@ -44,13 +58,14 @@
     "service": "finance-guide-backend",
     "message": "백엔드 서버가 정상 실행 중입니다."
   },
+  "errorCode": null,
   "message": null
 }
 ```
 
-## 4. 자동화 세션 API
+## 5. 자동화 세션 API
 
-### 4.1 자동화 세션 생성
+### 5.1 자동화 세션 생성
 
 사용자의 금융 업무 요청을 기반으로 새로운 자동화 세션을 생성한다.
 
@@ -85,6 +100,7 @@
     "createdAt": "2026-07-28T08:24:18.022376Z",
     "updatedAt": "2026-07-28T08:24:18.022376Z"
   },
+  "errorCode": null,
   "message": "자동화 세션이 생성되었습니다."
 }
 ```
@@ -97,13 +113,14 @@
 {
   "success": false,
   "data": null,
+  "errorCode": "COMMON_400",
   "message": "사용자 요청은 비어 있을 수 없습니다."
 }
 ```
 
 ---
 
-### 4.2 자동화 세션 조회
+### 5.2 자동화 세션 조회
 
 세션 ID를 기준으로 현재 자동화 세션의 상태를 조회한다.
 
@@ -123,6 +140,7 @@
     "createdAt": "2026-07-28T08:24:18.022376Z",
     "updatedAt": "2026-07-28T08:24:18.022376Z"
   },
+  "errorCode": null,
   "message": null
 }
 ```
@@ -135,13 +153,14 @@
 {
   "success": false,
   "data": null,
+  "errorCode": "SESSION_404",
   "message": "자동화 세션을 찾을 수 없습니다. sessionId=not-found-session"
 }
 ```
 
 ---
 
-### 4.3 자동화 세션 취소
+### 5.3 자동화 세션 취소
 
 진행 중인 자동화 세션을 취소한다.
 
@@ -161,6 +180,7 @@
     "createdAt": "2026-07-28T08:24:18.022376Z",
     "updatedAt": "2026-07-28T08:26:07.369907Z"
   },
+  "errorCode": null,
   "message": "자동화 세션이 취소되었습니다."
 }
 ```
@@ -173,11 +193,12 @@
 {
   "success": false,
   "data": null,
+  "errorCode": "SESSION_409",
   "message": "현재 상태에서는 세션을 취소할 수 없습니다."
 }
 ```
 
-## 5. 현재 저장 방식
+## 6. 현재 저장 방식
 
 현재 자동화 세션은 서버 메모리의 `ConcurrentHashMap`에 임시 저장한다.
 
@@ -185,29 +206,29 @@
 - 이후 Redis 기반 저장소로 교체할 예정이다.
 - 도메인 계층은 저장 방식과 분리하기 위해 `AutomationSessionRepository` 인터페이스를 사용한다.
 
-## 6. 사용자 결정 API 예정 명세
+## 7. 사용자 결정 API 예정 명세
 
 > 아래 API는 향후 구현 예정이며, 현재 버전에서는 제공하지 않는다.
 
-### 6.1 사용자 선택 전달
+### 7.1 사용자 선택 전달
 
 - Method: `POST`
 - URL: `/api/v1/sessions/{sessionId}/decisions`
 - 구현 상태: 예정
 
-### 6.2 최종 실행 확인
+### 7.2 최종 실행 확인
 
 - Method: `POST`
 - URL: `/api/v1/sessions/{sessionId}/confirm`
 - 구현 상태: 예정
 
-### 6.3 최종 실행 거절
+### 7.3 최종 실행 거절
 
 - Method: `POST`
 - URL: `/api/v1/sessions/{sessionId}/reject`
 - 구현 상태: 예정
 
-## 7. 주요 워크플로 상태
+## 8. 주요 워크플로 상태
 
 - `SESSION_CREATED`
 - `PAGE_LOADING`
