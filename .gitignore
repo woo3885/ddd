@@ -1,6 +1,36 @@
-node_modules
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# macOS
+.DS_Store
+
+# Gradle
+.gradle/
+**/build/
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.*
+!.env.examplenode_modules
 dist
 .DS_Store
 *.local
 .vscode/*
 !.vscode/extensions.json
+# TypeScript build outputs
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+dist/

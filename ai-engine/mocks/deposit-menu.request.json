@@ -1,0 +1,39 @@
+{
+  "requestId": "ai-req-001",
+  "sessionId": "bs-001",
+  "userGoal": {
+    "intent": "OPEN_DEPOSIT",
+    "originalText": "1년 동안 1,000만 원을 예금하고 싶어",
+    "amount": 10000000,
+    "periodMonths": 12
+  },
+  "workflowContext": {
+    "status": "AI_EXECUTING",
+    "currentStep": 1,
+    "previousActions": []
+  },
+  "page": {
+    "url": "/products",
+    "title": "금융상품",
+    "elements": [
+      {
+        "elementId": "el-31",
+        "tag": "button",
+        "role": "button",
+        "text": "정기예금",
+        "ariaLabel": "정기예금 상품 보기",
+        "visible": true,
+        "enabled": true
+      },
+      {
+        "elementId": "el-32",
+        "tag": "button",
+        "role": "button",
+        "text": "적금",
+        "ariaLabel": "적금 상품 보기",
+        "visible": true,
+        "enabled": true
+      }
+    ]
+  }
+}

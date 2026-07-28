@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ai-response.schema.json",
+  "title": "AIResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestId",
+    "status",
+    "action",
+    "message",
+    "requiresUserAction"
+  ],
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "AI_EXECUTING",
+        "USER_DECISION_REQUIRED",
+        "SECURE_INPUT_REQUIRED",
+        "FINAL_CONFIRMATION_REQUIRED",
+        "ADDITIONAL_INFORMATION_REQUIRED",
+        "RISK_WARNING",
+        "COMPLETED",
+        "ERROR"
+      ]
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "NONE",
+        "CLICK",
+        "TYPE",
+        "SELECT",
+        "SCROLL",
+        "PRESS_KEY",
+        "GO_BACK",
+        "REFRESH",
+        "WAIT",
+        "WAIT_FOR_USER",
+        "PAUSE_FOR_SECURE_INPUT",
+        "REQUEST_FINAL_CONFIRMATION",
+        "STOP"
+      ]
+    },
+    "targetElementId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "inputValue": {
+      "anyOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "null" }
+      ]
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "requiresUserAction": {
+      "type": "boolean"
+    },
+    "decisionType": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "PRODUCT_SELECTION",
+        "SOURCE_ACCOUNT_SELECTION",
+        "RECIPIENT_SELECTION",
+        "TERMS_AGREEMENT",
+        "ADDITIONAL_INFORMATION",
+        null
+      ]
+    },
+    "secureInputType": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "PASSWORD",
+        "ACCOUNT_PASSWORD",
+        "OTP",
+        "SMS_CODE",
+        "SECURITY_CARD",
+        "CERTIFICATE_PASSWORD",
+        "CARD_PASSWORD",
+        "BIOMETRIC_AUTH",
+        null
+      ]
+    },
+    "riskType": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "POSSIBLE_VOICE_PHISHING",
+        "SUSPICIOUS_TRANSFER_REQUEST",
+        null
+      ]
+    },
+    "options": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "confirmationId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "USER_DECISION_REQUIRED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "action": {
+            "const": "WAIT_FOR_USER"
+          },
+          "requiresUserAction": {
+            "const": true
+          }
+        },
+        "required": [
+          "decisionType",
+          "options"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "SECURE_INPUT_REQUIRED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "action": {
+            "const": "PAUSE_FOR_SECURE_INPUT"
+          },
+          "requiresUserAction": {
+            "const": true
+          }
+        },
+        "required": [
+          "secureInputType"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "FINAL_CONFIRMATION_REQUIRED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "action": {
+            "const": "REQUEST_FINAL_CONFIRMATION"
+          },
+          "requiresUserAction": {
+            "const": true
+          }
+        },
+        "required": [
+          "confirmationId",
+          "summary"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "RISK_WARNING"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "action": {
+            "const": "STOP"
+          },
+          "requiresUserAction": {
+            "const": true
+          }
+        },
+        "required": [
+          "riskType"
+        ]
+      }
+    }
+  ]
+}

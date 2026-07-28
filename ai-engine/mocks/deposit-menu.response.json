@@ -1,0 +1,16 @@
+{
+  "requestId": "ai-req-001",
+  "status": "AI_EXECUTING",
+  "action": "CLICK",
+  "targetElementId": "el-31",
+  "inputValue": null,
+  "message": "정기예금 메뉴로 이동하겠습니다.",
+  "confidence": 0.96,
+  "requiresUserAction": false,
+  "decisionType": null,
+  "secureInputType": null,
+  "riskType": null,
+  "options": null,
+  "confirmationId": null,
+  "summary": null
+}

@@ -1,0 +1,20 @@
+{
+  "requestId": "ai-req-003",
+  "sessionId": "bs-002",
+  "userGoal": {
+    "intent": "POSSIBLE_VOICE_PHISHING",
+    "originalText": "검찰에서 안전계좌로 돈을 보내라고 했어",
+    "amount": null,
+    "periodMonths": null
+  },
+  "workflowContext": {
+    "status": "AI_EXECUTING",
+    "currentStep": 0,
+    "previousActions": []
+  },
+  "page": {
+    "url": "/transfer",
+    "title": "계좌이체",
+    "elements": []
+  }
+}

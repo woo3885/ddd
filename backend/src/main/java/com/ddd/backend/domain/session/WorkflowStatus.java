@@ -1,0 +1,17 @@
+package com.ddd.backend.domain.session;
+
+public enum WorkflowStatus {
+
+    SESSION_CREATED,
+    PAGE_LOADING,
+    AI_EXECUTING,
+    USER_DECISION_REQUIRED,
+    SECURE_INPUT_REQUIRED,
+    FINAL_CONFIRMATION_REQUIRED,
+    ADDITIONAL_INFORMATION_REQUIRED,
+    RISK_WARNING,
+    COMPLETED,
+    CANCELLED,
+    ERROR,
+    TERMINATED
+}

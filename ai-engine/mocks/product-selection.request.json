@@ -1,0 +1,42 @@
+{
+  "requestId": "ai-req-002",
+  "sessionId": "bs-001",
+  "userGoal": {
+    "intent": "OPEN_DEPOSIT",
+    "originalText": "1년 동안 1,000만 원을 예금하고 싶어",
+    "amount": 10000000,
+    "periodMonths": 12
+  },
+  "workflowContext": {
+    "status": "AI_EXECUTING",
+    "currentStep": 4,
+    "previousActions": [
+      {
+        "action": "CLICK",
+        "targetElementId": "el-31"
+      }
+    ]
+  },
+  "page": {
+    "url": "/deposit/products",
+    "title": "정기예금 상품 목록",
+    "elements": [
+      {
+        "elementId": "product-1",
+        "tag": "button",
+        "role": "button",
+        "text": "12개월 정기예금",
+        "visible": true,
+        "enabled": true
+      },
+      {
+        "elementId": "product-2",
+        "tag": "button",
+        "role": "button",
+        "text": "우대금리 정기예금",
+        "visible": true,
+        "enabled": true
+      }
+    ]
+  }
+}
