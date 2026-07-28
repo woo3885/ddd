@@ -4,7 +4,7 @@
 
 :root {
   font-family: 'Noto Sans KR', 'Pretendard', sans-serif;
-  line-height: 1.5;
+  line-height: 1.6;
   font-weight: 400;
   color: #0f172a;
   background: radial-gradient(circle at 20% 10%, #e0f2fe, #f8fafc 45%, #eef2ff 100%);
@@ -17,4 +17,20 @@
 body {
   margin: 0;
   min-height: 100vh;
+}
+
+:focus-visible {
+  outline: 3px solid #0ea5e9;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import AppLayout from '@/shared/ui/AppLayout';
+import { Button } from '@/shared/ui/Button';
 import type { FrontendScreenState, ScreenType } from '@/types/frontend-state';
 
 type MockScreenType = Exclude<ScreenType, 'CERTIFICATE_PASSWORD' | 'USER_QUESTION'>;
@@ -147,30 +148,6 @@ function getAppLayoutProps(state: FrontendScreenState) {
   };
 }
 
-interface MockButtonProps {
-  children: ReactNode;
-  disabled?: boolean;
-  danger?: boolean;
-}
-
-function MockButton({ children, disabled = false, danger = false }: MockButtonProps) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      className={`rounded border-2 px-3 py-1.5 text-[10px] font-bold sm:px-5 sm:py-2 sm:text-sm ${
-        disabled
-          ? 'cursor-not-allowed border-slate-300 bg-slate-200 text-slate-400'
-          : danger
-            ? 'border-red-800 bg-red-700 text-white'
-            : 'border-slate-800 bg-white text-slate-900'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 function SelectionCard({
   title,
   detail,
@@ -213,9 +190,9 @@ function ChoiceScreen({
       {...getAppLayoutProps(state)}
       actions={
         <>
-          <MockButton>이전</MockButton>
-          <MockButton danger>취소</MockButton>
-          <MockButton disabled={selected === null}>다음</MockButton>
+          <Button variant="secondary">이전</Button>
+          <Button variant="danger">취소</Button>
+          <Button disabled={selected === null}>다음</Button>
         </>
       }
     >
@@ -252,8 +229,8 @@ function SecureInputScreen({
       tone="secure"
       actions={
         <>
-          <MockButton danger>취소</MockButton>
-          <MockButton>입력 완료</MockButton>
+          <Button variant="danger">취소</Button>
+          <Button>입력 완료</Button>
         </>
       }
     >
@@ -295,9 +272,9 @@ function TermsAgreementScreen({ state }: { state: FrontendScreenState }) {
       {...getAppLayoutProps(state)}
       actions={
         <>
-          <MockButton>이전</MockButton>
-          <MockButton danger>취소</MockButton>
-          <MockButton disabled={!allRequired}>다음</MockButton>
+          <Button variant="secondary">이전</Button>
+          <Button variant="danger">취소</Button>
+          <Button disabled={!allRequired}>다음</Button>
         </>
       }
     >
@@ -361,10 +338,10 @@ function ConfirmationScreen({
       {...getAppLayoutProps(state)}
       actions={
         <>
-          <MockButton danger>취소</MockButton>
-          <MockButton disabled={!approved}>
+          <Button variant="danger">취소</Button>
+          <Button size="lg" disabled={!approved}>
             {kind === 'transfer' ? '최종 승인 및 송금' : '최종 승인 및 가입'}
-          </MockButton>
+          </Button>
         </>
       }
     >
@@ -399,7 +376,7 @@ function renderMockScreen(state: FrontendScreenState) {
   switch (state.screenType) {
     case 'SESSION_READY':
       return (
-        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>시작</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<Button>시작</Button>}>
           <div className="text-center">
             <div className="mx-auto mb-3 size-12 rounded-full border-4 border-slate-500 sm:size-20" />
             <h2 className="text-lg font-black sm:text-3xl">금융 업무를 안전하게 안내합니다</h2>
@@ -411,7 +388,10 @@ function renderMockScreen(state: FrontendScreenState) {
       );
     case 'BROWSER_LOADING':
       return (
-        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton danger>취소</MockButton>}>
+        <AppLayout
+          {...getAppLayoutProps(state)}
+          actions={<Button variant="danger">취소</Button>}
+        >
           <div className="text-center">
             <div className="mx-auto size-10 animate-spin rounded-full border-4 border-slate-300 border-t-slate-800 sm:size-16" />
             <h2 className="mt-4 text-base font-bold sm:text-2xl">금융 페이지 로딩 중</h2>
@@ -425,8 +405,8 @@ function renderMockScreen(state: FrontendScreenState) {
           {...getAppLayoutProps(state)}
           actions={
             <>
-              <MockButton>일시정지</MockButton>
-              <MockButton danger>취소</MockButton>
+              <Button variant="secondary">일시정지</Button>
+              <Button variant="danger">취소</Button>
             </>
           }
         >
@@ -501,7 +481,7 @@ function renderMockScreen(state: FrontendScreenState) {
         <AppLayout
           {...getAppLayoutProps(state)}
           tone="danger"
-          actions={<MockButton danger>세션 종료</MockButton>}
+          actions={<Button variant="danger">세션 종료</Button>}
         >
           <div className="max-w-2xl border-4 border-red-800 bg-white p-4 text-center sm:p-8">
             <div className="text-3xl font-black text-red-800 sm:text-6xl">위험 경고</div>
@@ -519,7 +499,7 @@ function renderMockScreen(state: FrontendScreenState) {
       );
     case 'WORKFLOW_COMPLETED':
       return (
-        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>처음으로</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<Button>처음으로</Button>}>
           <div className="text-center">
             <div className="text-3xl sm:text-6xl">✓</div>
             <h2 className="text-lg font-black sm:text-3xl">업무가 완료되었습니다</h2>
@@ -531,7 +511,7 @@ function renderMockScreen(state: FrontendScreenState) {
       );
     case 'WORKFLOW_CANCELLED':
       return (
-        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>처음으로</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<Button>처음으로</Button>}>
           <div className="text-center">
             <h2 className="text-lg font-black sm:text-3xl">업무가 취소되었습니다</h2>
             <p className="mt-3 text-[10px] text-slate-600 sm:text-base">
@@ -546,8 +526,8 @@ function renderMockScreen(state: FrontendScreenState) {
           {...getAppLayoutProps(state)}
           actions={
             <>
-              <MockButton>재시도</MockButton>
-              <MockButton danger>종료</MockButton>
+              <Button variant="secondary">재시도</Button>
+              <Button variant="danger">종료</Button>
             </>
           }
         >
@@ -562,7 +542,7 @@ function renderMockScreen(state: FrontendScreenState) {
       );
     case 'INITIAL_SCREEN':
       return (
-        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>처음 화면</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<Button>처음 화면</Button>}>
           <div className="text-center">
             <h2 className="text-lg font-black sm:text-3xl">세션 종료</h2>
             <p className="mt-3 text-[10px] text-slate-600 sm:text-base">
