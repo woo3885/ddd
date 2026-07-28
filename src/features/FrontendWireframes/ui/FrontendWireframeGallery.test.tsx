@@ -43,6 +43,24 @@ describe('FrontendWireframeGallery', () => {
     expect(screen.getByText('화면 캡처 중단')).toBeInTheDocument();
   });
 
+  it('최종 승인 전에는 금융 승인 버튼을 비활성화한다', async () => {
+    render(<FrontendWireframeGallery />);
+    const user = await selectMockScreen('TRANSFER_CONFIRMATION');
+    const approvalButton = screen.getByRole('button', {
+      name: '최종 승인 및 송금'
+    });
+
+    expect(approvalButton).toBeDisabled();
+
+    await user.click(
+      screen.getByRole('checkbox', {
+        name: '위 내용을 확인했으며 최종 실행에 동의합니다.'
+      })
+    );
+
+    expect(approvalButton).toBeEnabled();
+  });
+
   it('위험 경고 화면에는 송금 실행 버튼을 표시하지 않는다', async () => {
     render(<FrontendWireframeGallery />);
     await selectMockScreen('VOICE_PHISHING_WARNING');
