@@ -1,9 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import type {
-  FrontendScreenState,
-  ScreenType,
-  WorkflowStatus
-} from '@/types/frontend-state';
+import AppLayout from '@/shared/ui/AppLayout';
+import type { FrontendScreenState, ScreenType } from '@/types/frontend-state';
 
 type MockScreenType = Exclude<ScreenType, 'CERTIFICATE_PASSWORD' | 'USER_QUESTION'>;
 
@@ -140,63 +137,14 @@ const mockStates: Record<MockScreenType, FrontendScreenState> = {
 
 const mockScreenTypes = Object.keys(mockStates) as MockScreenType[];
 
-interface WireframeLayoutProps {
-  state: FrontendScreenState;
-  children: ReactNode;
-  actions?: ReactNode;
-  tone?: 'default' | 'danger' | 'secure';
-}
-
-function WireframeLayout({
-  state,
-  children,
-  actions,
-  tone = 'default'
-}: WireframeLayoutProps) {
-  const workflowStatus: WorkflowStatus = state.workflowStatus;
-  const toneClass =
-    tone === 'danger'
-      ? 'border-red-700 bg-red-50'
-      : tone === 'secure'
-        ? 'border-slate-900 bg-slate-100'
-        : 'border-slate-400 bg-white';
-
-  return (
-    <section
-      className={`relative flex aspect-video w-full min-w-0 flex-col overflow-hidden border-2 ${toneClass}`}
-      aria-label={`${state.screenType} Mock 화면`}
-    >
-      <div className="absolute left-2 top-2 z-20 rounded border border-slate-500 bg-white/95 px-2 py-1 font-mono text-[10px] leading-tight text-slate-800 sm:text-xs">
-        <div>WorkflowStatus: {workflowStatus}</div>
-        <div>ScreenType: {state.screenType}</div>
-      </div>
-
-      <header className="flex h-[13%] items-center justify-between border-b-2 border-slate-300 bg-slate-100 px-[3%] pl-[28%] sm:pl-[24%]">
-        <strong className="text-sm text-slate-900 sm:text-lg lg:text-2xl">금융길잡이 AI</strong>
-        <span className="flex items-center gap-2 text-[10px] font-semibold sm:text-sm">
-          <span
-            className={`inline-block size-2 rounded-full ${
-              state.isConnected ? 'bg-emerald-600' : 'bg-slate-400'
-            }`}
-          />
-          WebSocket {state.isConnected ? '연결됨' : '연결 안 됨'}
-        </span>
-      </header>
-
-      <main className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-[6%] py-[2%]">
-        {children}
-      </main>
-
-      <div className="border-t border-slate-300 bg-slate-50 px-[4%] py-[1.2%] text-center text-[10px] text-slate-700 sm:text-sm">
-        {state.isLoading ? '처리 중 · ' : ''}
-        {state.message}
-      </div>
-
-      <footer className="flex min-h-[12%] items-center justify-end gap-2 border-t-2 border-slate-300 bg-white px-[4%]">
-        {actions}
-      </footer>
-    </section>
-  );
+function getAppLayoutProps(state: FrontendScreenState) {
+  return {
+    workflowStatus: state.workflowStatus,
+    screenType: state.screenType,
+    message: state.message,
+    isConnected: state.isConnected,
+    isLoading: state.isLoading
+  };
 }
 
 interface MockButtonProps {
@@ -261,8 +209,8 @@ function ChoiceScreen({
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
-    <WireframeLayout
-      state={state}
+    <AppLayout
+      {...getAppLayoutProps(state)}
       actions={
         <>
           <MockButton>이전</MockButton>
@@ -287,7 +235,7 @@ function ChoiceScreen({
           선택은 AI가 대신하지 않으며 사용자가 직접 결정합니다.
         </p>
       </div>
-    </WireframeLayout>
+    </AppLayout>
   );
 }
 
@@ -299,8 +247,8 @@ function SecureInputScreen({
   label: string;
 }) {
   return (
-    <WireframeLayout
-      state={state}
+    <AppLayout
+      {...getAppLayoutProps(state)}
       tone="secure"
       actions={
         <>
@@ -327,7 +275,7 @@ function SecureInputScreen({
           <span className="border border-slate-600 px-2 py-1">화면 캡처 중단</span>
         </div>
       </div>
-    </WireframeLayout>
+    </AppLayout>
   );
 }
 
@@ -343,8 +291,8 @@ function TermsAgreementScreen({ state }: { state: FrontendScreenState }) {
   };
 
   return (
-    <WireframeLayout
-      state={state}
+    <AppLayout
+      {...getAppLayoutProps(state)}
       actions={
         <>
           <MockButton>이전</MockButton>
@@ -381,7 +329,7 @@ function TermsAgreementScreen({ state }: { state: FrontendScreenState }) {
           전체 동의 버튼은 제공하지 않습니다. 각 약관을 직접 확인해 주세요.
         </p>
       </div>
-    </WireframeLayout>
+    </AppLayout>
   );
 }
 
@@ -409,8 +357,8 @@ function ConfirmationScreen({
         ];
 
   return (
-    <WireframeLayout
-      state={state}
+    <AppLayout
+      {...getAppLayoutProps(state)}
       actions={
         <>
           <MockButton danger>취소</MockButton>
@@ -443,7 +391,7 @@ function ConfirmationScreen({
           위 내용을 확인했으며 최종 실행에 동의합니다.
         </label>
       </div>
-    </WireframeLayout>
+    </AppLayout>
   );
 }
 
@@ -451,7 +399,7 @@ function renderMockScreen(state: FrontendScreenState) {
   switch (state.screenType) {
     case 'SESSION_READY':
       return (
-        <WireframeLayout state={state} actions={<MockButton>시작</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>시작</MockButton>}>
           <div className="text-center">
             <div className="mx-auto mb-3 size-12 rounded-full border-4 border-slate-500 sm:size-20" />
             <h2 className="text-lg font-black sm:text-3xl">금융 업무를 안전하게 안내합니다</h2>
@@ -459,22 +407,22 @@ function renderMockScreen(state: FrontendScreenState) {
               AI가 일반 탐색을 돕고 중요한 선택은 사용자가 직접 결정합니다.
             </p>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     case 'BROWSER_LOADING':
       return (
-        <WireframeLayout state={state} actions={<MockButton danger>취소</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton danger>취소</MockButton>}>
           <div className="text-center">
             <div className="mx-auto size-10 animate-spin rounded-full border-4 border-slate-300 border-t-slate-800 sm:size-16" />
             <h2 className="mt-4 text-base font-bold sm:text-2xl">금융 페이지 로딩 중</h2>
             <p className="mt-2 text-[10px] text-slate-600 sm:text-sm">잠시만 기다려 주세요.</p>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     case 'AI_PROGRESS':
       return (
-        <WireframeLayout
-          state={state}
+        <AppLayout
+          {...getAppLayoutProps(state)}
           actions={
             <>
               <MockButton>일시정지</MockButton>
@@ -503,7 +451,7 @@ function renderMockScreen(state: FrontendScreenState) {
               </div>
             </div>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     case 'PRODUCT_SELECTION':
       return (
@@ -550,8 +498,8 @@ function renderMockScreen(state: FrontendScreenState) {
       return <ConfirmationScreen state={state} kind="deposit" />;
     case 'VOICE_PHISHING_WARNING':
       return (
-        <WireframeLayout
-          state={state}
+        <AppLayout
+          {...getAppLayoutProps(state)}
           tone="danger"
           actions={<MockButton danger>세션 종료</MockButton>}
         >
@@ -567,11 +515,11 @@ function renderMockScreen(state: FrontendScreenState) {
               금융회사 또는 기관의 공식 연락처를 직접 확인해 주세요.
             </p>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     case 'WORKFLOW_COMPLETED':
       return (
-        <WireframeLayout state={state} actions={<MockButton>처음으로</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>처음으로</MockButton>}>
           <div className="text-center">
             <div className="text-3xl sm:text-6xl">✓</div>
             <h2 className="text-lg font-black sm:text-3xl">업무가 완료되었습니다</h2>
@@ -579,23 +527,23 @@ function renderMockScreen(state: FrontendScreenState) {
               처리 결과: 계좌이체 요청이 정상적으로 완료됨
             </div>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     case 'WORKFLOW_CANCELLED':
       return (
-        <WireframeLayout state={state} actions={<MockButton>처음으로</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>처음으로</MockButton>}>
           <div className="text-center">
             <h2 className="text-lg font-black sm:text-3xl">업무가 취소되었습니다</h2>
             <p className="mt-3 text-[10px] text-slate-600 sm:text-base">
               사용자의 요청으로 진행 중인 작업을 중단했습니다.
             </p>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     case 'WORKFLOW_ERROR':
       return (
-        <WireframeLayout
-          state={state}
+        <AppLayout
+          {...getAppLayoutProps(state)}
           actions={
             <>
               <MockButton>재시도</MockButton>
@@ -610,18 +558,18 @@ function renderMockScreen(state: FrontendScreenState) {
               연결 상태를 확인한 뒤 다시 시도해 주세요.
             </p>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     case 'INITIAL_SCREEN':
       return (
-        <WireframeLayout state={state} actions={<MockButton>처음 화면</MockButton>}>
+        <AppLayout {...getAppLayoutProps(state)} actions={<MockButton>처음 화면</MockButton>}>
           <div className="text-center">
             <h2 className="text-lg font-black sm:text-3xl">세션 종료</h2>
             <p className="mt-3 text-[10px] text-slate-600 sm:text-base">
               안전하게 세션을 정리했습니다.
             </p>
           </div>
-        </WireframeLayout>
+        </AppLayout>
       );
     default:
       return null;
