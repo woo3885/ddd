@@ -1,0 +1,9 @@
+{
+  "type": "STT_ERROR",
+  "sessionId": "bs-20260727-001",
+  "utteranceId": "utt-002",
+  "timestamp": 1785140010000,
+  "code": "NO_SPEECH_DETECTED",
+  "message": "음성이 감지되지 않았습니다. 다시 말씀해 주세요.",
+  "retryable": true
+}
