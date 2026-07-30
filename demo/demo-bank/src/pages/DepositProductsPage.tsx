@@ -62,7 +62,7 @@ export default function DepositProductsPage() {
         className="static-notice"
         role="status"
       >
-        상품 선택은 D4에서 연결합니다. 현재는 상품 정보만 확인할 수
+        상품 선택은 D5 이후에 연결합니다. 현재는 상품 정보만 확인할 수
         있습니다.
       </p>
     </DemoBankLayout>
