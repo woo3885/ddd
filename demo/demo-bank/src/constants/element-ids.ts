@@ -19,7 +19,9 @@ export const ELEMENT_IDS = {
   BUTTON_SELECT_ACCOUNT_SAVINGS: 'btn-select-account-savings',
   STATUS_HOME_STATIC: 'status-home-static',
   STATUS_DEPOSIT_STATIC: 'status-deposit-static',
-  STATUS_TRANSFER_STATIC: 'status-transfer-static'
+  STATUS_TRANSFER_STATIC: 'status-transfer-static',
+  STATUS_SELECTED_DEPOSIT_PRODUCT: 'status-selected-deposit-product',
+  STATUS_SELECTED_TRANSFER_ACCOUNT: 'status-selected-transfer-account'
 } as const;
 
 export function elementIdentity(id: string) {
