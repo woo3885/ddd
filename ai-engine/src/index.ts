@@ -1,4 +1,5 @@
 import { intentClassifier } from "./intents/intent.classifier.js";
+import { extractUserGoal } from "./goals/userGoal.extractor.js";
 import { evaluateActionPolicy } from "./policy/actionPolicy.js";
 import { detectSensitiveData } from "./policy/safetyPolicy.js";
 
@@ -97,4 +98,46 @@ for (const text of sensitiveDataTestCases) {
   console.log(`[민감정보 감지] ${result.detected}`);
   console.log(`[감지 종류] ${result.types.join(", ") || "없음"}`);
   console.log(`[마스킹 결과] ${result.maskedText}`);
+}
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - UserGoal 추출 테스트");
+console.log("========================================");
+
+const userGoalTestCases = [
+  "친구 계좌로 10만 원을 보내고 싶어요",
+  "민수에게 50,000원 이체해 줘",
+  "6개월 동안 금리가 높은 예금 상품을 찾고 싶어요",
+  "1년짜리 수수료 없는 예금을 찾고 있어요",
+  "이체 한도를 300만 원으로 변경하고 싶어요",
+  "10만 원을 보내고 싶어요",
+];
+
+for (const text of userGoalTestCases) {
+  const goal = extractUserGoal(text);
+
+  console.log(`\n[사용자 요청] ${text}`);
+  console.log(`[Intent] ${goal.intent}`);
+  console.log(`[신뢰도] ${goal.confidence}`);
+  console.log(`[금액] ${goal.amount ?? "없음"}`);
+  console.log(`[통화] ${goal.currency ?? "없음"}`);
+  console.log(`[수취인] ${goal.recipient ?? "없음"}`);
+
+  console.log(
+    `[기간] ${
+      goal.duration
+        ? `${goal.duration.value} ${goal.duration.unit}`
+        : "없음"
+    }`,
+  );
+
+  console.log(
+    `[조건] ${goal.conditions.join(", ") || "없음"}`,
+  );
+
+  console.log(
+    `[부족한 정보] ${
+      goal.missingFields.join(", ") || "없음"
+    }`,
+  );
 }
