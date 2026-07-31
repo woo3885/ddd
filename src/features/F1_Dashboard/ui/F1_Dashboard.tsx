@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   DASHBOARD_SITES,
@@ -6,27 +6,37 @@ import {
   type DashboardSiteId,
   type DashboardTaskType
 } from '@/features/F1_Dashboard/model/dashboard-options';
+import type {
+  DashboardSessionStartResult,
+  DashboardStartSelection
+} from '@/features/F1_Dashboard/model/dashboard-session';
 import AppLayout from '@/shared/ui/AppLayout';
 import { Button } from '@/shared/ui/Button';
 import { NoticeBox } from '@/shared/ui/NoticeBox';
 import { Panel } from '@/shared/ui/Panel';
 import { StatusBadge } from '@/shared/ui/StatusBadge';
 import { Text } from '@/shared/ui/Text';
-import { initialFrontendScreenState } from '@/types/frontend-state';
+import type { FrontendScreenState } from '@/types/frontend-state';
 
-export interface DashboardStartSelection {
-  siteId: DashboardSiteId;
-  taskType: DashboardTaskType;
-}
+export type { DashboardStartSelection } from '@/features/F1_Dashboard/model/dashboard-session';
 
 export interface F1DashboardProps {
-  onStart?: (selection: DashboardStartSelection) => void;
+  onStart?: (
+    selection: DashboardStartSelection
+  ) =>
+    | void
+    | DashboardSessionStartResult
+    | Promise<void | DashboardSessionStartResult>;
 }
 
 const INITIAL_STATUS_MESSAGE =
   '사이트와 업무를 선택한 뒤 시작해 주세요.';
 const READY_STATUS_MESSAGE =
   '선택한 업무를 시작할 준비가 완료되었습니다.';
+const STARTING_STATUS_MESSAGE = '세션을 준비하고 있습니다.';
+const SUCCESS_STATUS_MESSAGE = '금융 업무 세션이 준비되었습니다.';
+const ERROR_STATUS_MESSAGE =
+  '세션을 준비하지 못했습니다. 다시 시도해 주세요.';
 
 const taskRadioIds: Record<DashboardTaskType, string> = {
   OPEN_DEPOSIT: 'radio-task-open-deposit',
@@ -34,6 +44,7 @@ const taskRadioIds: Record<DashboardTaskType, string> = {
 };
 
 export default function F1_Dashboard({ onStart }: F1DashboardProps) {
+  const startRequestInFlight = useRef(false);
   const [selectedSiteId, setSelectedSiteId] =
     useState<DashboardSiteId | null>(null);
   const [selectedTaskType, setSelectedTaskType] =
@@ -41,6 +52,10 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
   const [statusMessage, setStatusMessage] = useState(
     INITIAL_STATUS_MESSAGE
   );
+  const [isStarting, setIsStarting] = useState(false);
+  const [startResult, setStartResult] =
+    useState<DashboardSessionStartResult | null>(null);
+  const [startError, setStartError] = useState(false);
 
   const selectedSite = DASHBOARD_SITES.find(
     (site) => site.id === selectedSiteId
@@ -50,6 +65,24 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
   );
   const canStart =
     selectedSiteId !== null && selectedTaskType !== null;
+  const frontendScreenState: FrontendScreenState = {
+    sessionId: startResult?.sessionId ?? null,
+    workflowStatus: startError ? 'ERROR' : 'SESSION_CREATED',
+    screenType: startError
+      ? 'WORKFLOW_ERROR'
+      : startResult
+        ? 'SESSION_READY'
+        : 'INITIAL_SCREEN',
+    message: statusMessage,
+    isConnected: false,
+    isLoading: isStarting
+  };
+
+  const resetStartFeedback = () => {
+    setStartResult(null);
+    setStartError(false);
+    setStatusMessage(INITIAL_STATUS_MESSAGE);
+  };
 
   const handleSiteSelect = (siteId: DashboardSiteId) => {
     const nextSite = DASHBOARD_SITES.find((site) => site.id === siteId);
@@ -65,40 +98,67 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
 
       return currentTaskType;
     });
-    setStatusMessage(INITIAL_STATUS_MESSAGE);
+    resetStartFeedback();
   };
 
   const handleTaskSelect = (taskType: DashboardTaskType) => {
     setSelectedTaskType(taskType);
-    setStatusMessage(INITIAL_STATUS_MESSAGE);
+    resetStartFeedback();
   };
 
-  const handleStart = () => {
-    if (selectedSiteId === null || selectedTaskType === null) {
+  const handleStart = async () => {
+    if (
+      selectedSiteId === null ||
+      selectedTaskType === null ||
+      startRequestInFlight.current
+    ) {
       return;
     }
 
-    onStart?.({
-      siteId: selectedSiteId,
-      taskType: selectedTaskType
-    });
-    setStatusMessage(READY_STATUS_MESSAGE);
+    startRequestInFlight.current = true;
+    setStartResult(null);
+    setStartError(false);
+    setIsStarting(true);
+    setStatusMessage(STARTING_STATUS_MESSAGE);
+
+    try {
+      const result = await onStart?.({
+        siteId: selectedSiteId,
+        taskType: selectedTaskType
+      });
+
+      if (result === undefined) {
+        setStatusMessage(READY_STATUS_MESSAGE);
+        return;
+      }
+
+      setStartResult(result);
+      setStatusMessage(SUCCESS_STATUS_MESSAGE);
+    } catch {
+      setStartError(true);
+      setStatusMessage(ERROR_STATUS_MESSAGE);
+    } finally {
+      startRequestInFlight.current = false;
+      setIsStarting(false);
+    }
   };
 
   return (
     <AppLayout
-      workflowStatus={initialFrontendScreenState.workflowStatus}
-      screenType={initialFrontendScreenState.screenType}
-      message={statusMessage}
-      isConnected={initialFrontendScreenState.isConnected}
-      isLoading={initialFrontendScreenState.isLoading}
+      workflowStatus={frontendScreenState.workflowStatus}
+      screenType={frontendScreenState.screenType}
+      message={frontendScreenState.message}
+      isConnected={frontendScreenState.isConnected}
+      isLoading={frontendScreenState.isLoading}
+      tone={startError ? 'danger' : 'default'}
       actions={
         <Button
           id="btn-start-financial-task"
           data-testid="btn-start-financial-task"
           type="button"
           size="lg"
-          disabled={!canStart}
+          disabled={!canStart || isStarting}
+          isLoading={isStarting}
           onClick={handleStart}
         >
           선택한 업무 시작
@@ -156,6 +216,7 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
                       name="dashboard-site"
                       value={site.id}
                       checked={isSelected}
+                      disabled={isStarting}
                       onChange={() => handleSiteSelect(site.id)}
                       aria-label={site.name}
                       aria-describedby={descriptionId}
@@ -216,7 +277,7 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
                   selectedSite?.supportedTaskTypes.includes(task.id) ??
                   false;
                 const isDisabled =
-                  selectedSiteId === null || !isSupported;
+                  isStarting || selectedSiteId === null || !isSupported;
                 const radioId = taskRadioIds[task.id];
                 const descriptionId = `task-${task.id.toLowerCase()}-description`;
 
@@ -292,6 +353,14 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
                 {selectedTask?.name ?? '선택 전'}
               </dd>
             </div>
+            {startResult ? (
+              <div data-testid="dashboard-session-result">
+                <dt className="font-bold text-text-secondary">세션 ID</dt>
+                <dd className="mt-1 font-semibold text-text-primary">
+                  {startResult.sessionId}
+                </dd>
+              </div>
+            ) : null}
           </dl>
         </Panel>
       </div>

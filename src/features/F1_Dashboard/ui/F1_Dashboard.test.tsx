@@ -1,9 +1,25 @@
-import { render, screen, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as orchestratorClient from '@/shared/api/orchestratorClient';
+import type { DashboardSessionStartResult } from '../model/dashboard-session';
 import F1_Dashboard from './F1_Dashboard';
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+
+  return { promise, resolve };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -172,11 +188,15 @@ describe('F1_Dashboard', () => {
       siteId: 'demo-bank',
       taskType: 'OPEN_DEPOSIT'
     });
-    expect(
-      screen.getByRole('status')
-    ).toHaveTextContent(
+    expect(await screen.findByRole('status')).toHaveTextContent(
       '선택한 업무를 시작할 준비가 완료되었습니다.'
     );
+    expect(
+      screen.queryByText('금융 업무 세션이 준비되었습니다.')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('dashboard-session-result')
+    ).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(createSessionSpy).not.toHaveBeenCalled();
     expect(webSocketMock).not.toHaveBeenCalled();
@@ -215,10 +235,140 @@ describe('F1_Dashboard', () => {
     await user.click(
       screen.getByRole('button', { name: '선택한 업무 시작' })
     );
-    expect(
-      screen.getByRole('status')
-    ).toHaveTextContent(
+    expect(await screen.findByRole('status')).toHaveTextContent(
       '선택한 업무를 시작할 준비가 완료되었습니다.'
+    );
+  });
+
+  it('요청 중 loading과 disabled를 표시하고 중복 시작을 방지한다', async () => {
+    const user = userEvent.setup();
+    const deferred = createDeferred<DashboardSessionStartResult>();
+    const onStart = vi.fn(() => deferred.promise);
+    render(<F1_Dashboard onStart={onStart} />);
+
+    await user.click(
+      screen.getByRole('radio', {
+        name: /금융길잡이 데모뱅크/
+      })
+    );
+    await user.click(
+      screen.getByRole('radio', { name: /예금 가입/ })
+    );
+    const startButton = screen.getByRole('button', {
+      name: '선택한 업무 시작'
+    });
+
+    fireEvent.click(startButton);
+    fireEvent.click(startButton);
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(startButton).toBeDisabled();
+    expect(startButton).toHaveAttribute('aria-busy', 'true');
+    expect(
+      screen.getByRole('radio', {
+        name: /금융길잡이 데모뱅크/
+      })
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('radio', { name: /예금 가입/ })
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('radio', { name: /계좌이체/ })
+    ).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '세션을 준비하고 있습니다.'
+    );
+
+    deferred.resolve({
+      sessionId: 'session-loading-test',
+      createdAt: '2026-07-31T00:00:00.000Z'
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        '금융 업무 세션이 준비되었습니다.'
+      );
+    });
+    expect(startButton).toBeEnabled();
+  });
+
+  it('성공 결과에서 최소 세션 정보와 SESSION_READY를 표시한다', async () => {
+    const user = userEvent.setup();
+    const onStart = vi.fn().mockResolvedValue({
+      sessionId: 'session-001',
+      createdAt: '2026-07-31T00:00:00.000Z'
+    });
+    render(<F1_Dashboard onStart={onStart} />);
+
+    await user.click(
+      screen.getByRole('radio', {
+        name: /금융길잡이 데모뱅크/
+      })
+    );
+    await user.click(
+      screen.getByRole('radio', { name: /계좌이체/ })
+    );
+    await user.click(
+      screen.getByRole('button', { name: '선택한 업무 시작' })
+    );
+
+    expect(
+      await screen.findByText('금융 업무 세션이 준비되었습니다.')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-session-result')).toHaveTextContent(
+      'session-001'
+    );
+    expect(
+      screen.getByText('ScreenType: SESSION_READY')
+    ).toBeInTheDocument();
+    expect(screen.getByText('WebSocket 연결 안 됨')).toBeInTheDocument();
+    expect(screen.queryByText(/createdAt/)).not.toBeInTheDocument();
+  });
+
+  it('오류 원문을 숨기고 선택을 유지한 채 재시도할 수 있다', async () => {
+    const user = userEvent.setup();
+    const onStart = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error('internal response from https://private.example.test')
+      )
+      .mockResolvedValueOnce({
+        sessionId: 'session-retry-success',
+        createdAt: '2026-07-31T00:00:00.000Z'
+      });
+    render(<F1_Dashboard onStart={onStart} />);
+
+    const siteRadio = screen.getByRole('radio', {
+      name: /금융길잡이 데모뱅크/
+    });
+    const depositRadio = screen.getByRole('radio', {
+      name: /예금 가입/
+    });
+    await user.click(siteRadio);
+    await user.click(depositRadio);
+    const startButton = screen.getByRole('button', {
+      name: '선택한 업무 시작'
+    });
+
+    await user.click(startButton);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '세션을 준비하지 못했습니다. 다시 시도해 주세요.'
+    );
+    expect(screen.queryByText(/internal response/)).not.toBeInTheDocument();
+    expect(siteRadio).toBeChecked();
+    expect(depositRadio).toBeChecked();
+    expect(startButton).toBeEnabled();
+
+    await user.click(startButton);
+
+    expect(
+      await screen.findByText('금융 업무 세션이 준비되었습니다.')
+    ).toBeInTheDocument();
+    expect(onStart).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-session-result')).toHaveTextContent(
+      'session-retry-success'
     );
   });
 
