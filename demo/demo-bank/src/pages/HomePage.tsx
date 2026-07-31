@@ -27,7 +27,7 @@ export default function HomePage() {
             type="button"
             className="primary-button"
             aria-describedby={ELEMENT_IDS.STATUS_HOME_STATIC}
-            disabled
+            onClick={() => window.location.assign(ROUTES.DEPOSIT_PRODUCTS)}
           >
             예금 가입 시작
           </button>
@@ -45,7 +45,7 @@ export default function HomePage() {
             type="button"
             className="primary-button"
             aria-describedby={ELEMENT_IDS.STATUS_HOME_STATIC}
-            disabled
+            onClick={() => window.location.assign(ROUTES.TRANSFER_ACCOUNTS)}
           >
             계좌이체 시작
           </button>
@@ -57,8 +57,8 @@ export default function HomePage() {
         className="static-notice"
         role="status"
       >
-        D3 업무 버튼은 정적 상태입니다. 화면 이동은 상단 개발용 링크로
-        확인해 주세요.
+        업무를 선택하면 첫 화면으로 이동합니다. 실제 금융거래는
+        발생하지 않습니다.
       </p>
 
       <aside className="warning-box" aria-label="보이스피싱 위험 요청 주의">

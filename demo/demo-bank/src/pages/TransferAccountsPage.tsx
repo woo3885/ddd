@@ -60,7 +60,7 @@ export default function TransferAccountsPage() {
         className="static-notice"
         role="status"
       >
-        계좌 선택은 D4에서 연결합니다. 실제 계좌 상태는 저장하지
+        계좌 선택은 D5 이후에 연결합니다. 실제 계좌 상태는 저장하지
         않습니다.
       </p>
     </DemoBankLayout>
