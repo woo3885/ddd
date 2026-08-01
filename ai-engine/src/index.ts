@@ -1,5 +1,8 @@
 import { intentClassifier } from "./intents/intent.classifier.js";
 import { extractUserGoal } from "./goals/userGoal.extractor.js";
+import { mapSanitizedDomToModelInput } from "./dom/domMapper.js";
+import { serializeDomModelInput } from "./dom/domSerializer.js";
+import { SanitizedDomSnapshot } from "./dom/types.js";
 import { evaluateActionPolicy } from "./policy/actionPolicy.js";
 import { detectSensitiveData } from "./policy/safetyPolicy.js";
 
@@ -141,3 +144,67 @@ for (const text of userGoalTestCases) {
     }`,
   );
 }
+
+const sampleDom: SanitizedDomSnapshot = {
+  url: "https://example-bank.com/deposit",
+  title: "예금 상품 안내",
+
+  elements: [
+    {
+      id: "el-1",
+      tag: "h1",
+      text: "예금 상품",
+      visible: true,
+    },
+    {
+      id: "el-2",
+      tag: "input",
+      role: "textbox",
+      placeholder: "상품명을 입력하세요",
+      editable: true,
+      visible: true,
+    },
+    {
+      id: "el-3",
+      tag: "button",
+      text: "검색",
+      role: "button",
+      clickable: true,
+      visible: true,
+    },
+    {
+      id: "el-4",
+      tag: "a",
+      text: "정기예금 가입",
+      href: "/deposit/apply",
+      clickable: true,
+      visible: true,
+    },
+    {
+      id: "el-5",
+      tag: "button",
+      text: "사용할 수 없는 버튼",
+      clickable: true,
+      disabled: true,
+      visible: true,
+    },
+    {
+      id: "el-6",
+      tag: "div",
+      text: "화면에서 보이지 않는 내용",
+      visible: false,
+    },
+  ],
+};
+
+const modelInput =
+  mapSanitizedDomToModelInput(sampleDom);
+
+const serializedDom =
+  serializeDomModelInput(modelInput);
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - DOM Mapping Test");
+console.log("========================================\n");
+
+console.log(serializedDom);
