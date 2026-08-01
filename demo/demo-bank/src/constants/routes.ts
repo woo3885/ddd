@@ -6,6 +6,10 @@ export const ROUTES = {
 
 export type DemoBankRoute = (typeof ROUTES)[keyof typeof ROUTES];
 
+export function createDepositProductDetailPath(productId: string): string {
+  return `${ROUTES.DEPOSIT_PRODUCTS}/${encodeURIComponent(productId)}`;
+}
+
 export function normalizePathname(pathname: string): string {
   if (pathname === ROUTES.HOME) {
     return ROUTES.HOME;
