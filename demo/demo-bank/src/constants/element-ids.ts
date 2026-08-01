@@ -12,6 +12,15 @@ export const ELEMENT_IDS = {
   PRODUCT_DEPOSIT_PREFERRED: 'product-deposit-preferred',
   BUTTON_SELECT_DEPOSIT_12M: 'btn-select-deposit-12m',
   BUTTON_SELECT_DEPOSIT_PREFERRED: 'btn-select-deposit-preferred',
+  BUTTON_DEPOSIT_PRODUCT_NEXT: 'btn-deposit-product-next',
+  PAGE_DEPOSIT_PRODUCT_DETAIL: 'page-deposit-product-detail',
+  SUMMARY_DEPOSIT_PRODUCT_NAME: 'summary-deposit-product-name',
+  SUMMARY_DEPOSIT_PRODUCT_PERIOD: 'summary-deposit-product-period',
+  SUMMARY_DEPOSIT_PRODUCT_RATE: 'summary-deposit-product-rate',
+  SUMMARY_DEPOSIT_PRODUCT_MINIMUM_AMOUNT:
+    'summary-deposit-product-minimum-amount',
+  BUTTON_DEPOSIT_PRODUCT_LIST_BACK: 'btn-deposit-product-list-back',
+  STATUS_DEPOSIT_NEXT_STEP: 'status-deposit-next-step',
   ACCOUNT_LIVING_EXPENSE: 'account-living-expense',
   ACCOUNT_SAVINGS: 'account-savings',
   BUTTON_SELECT_ACCOUNT_LIVING_EXPENSE:

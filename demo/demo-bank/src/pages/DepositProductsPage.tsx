@@ -2,7 +2,10 @@ import { useState } from 'react';
 
 import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
-import { ROUTES } from '../constants/routes';
+import {
+  createDepositProductDetailPath,
+  ROUTES
+} from '../constants/routes';
 import { depositProducts, formatWon } from '../data/demo-data';
 
 export default function DepositProductsPage() {
@@ -12,6 +15,16 @@ export default function DepositProductsPage() {
   const selectedProduct = depositProducts.find(
     (product) => product.id === selectedProductId
   );
+
+  const handleNext = () => {
+    if (!selectedProductId) {
+      return;
+    }
+
+    window.location.assign(
+      createDepositProductDetailPath(selectedProductId)
+    );
+  };
 
   return (
     <DemoBankLayout
@@ -93,9 +106,31 @@ export default function DepositProductsPage() {
           : '선택된 예금 상품이 없습니다.'}
       </p>
 
+      <div className="next-action-panel">
+        <p>
+          {selectedProduct
+            ? '선택한 상품의 상세 조건을 확인할 수 있습니다.'
+            : '다음으로 이동하려면 예금 상품을 먼저 선택해 주세요.'}
+        </p>
+        <button
+          {...elementIdentity(ELEMENT_IDS.BUTTON_DEPOSIT_PRODUCT_NEXT)}
+          type="button"
+          className="primary-button"
+          aria-describedby={
+            ELEMENT_IDS.STATUS_SELECTED_DEPOSIT_PRODUCT
+          }
+          disabled={!selectedProduct}
+          onClick={handleNext}
+        >
+          {selectedProduct
+            ? '선택한 상품 상세 보기'
+            : '상품 선택 후 다음'}
+        </button>
+      </div>
+
       <p className="no-transaction-notice">
-        예금 전체 흐름은 D6 이후에 구현하며 현재는 상품 선택만
-        확인할 수 있습니다.
+        상품 상세와 가입 조건만 확인할 수 있으며 실제 예금 가입은
+        진행되지 않습니다.
       </p>
     </DemoBankLayout>
   );
