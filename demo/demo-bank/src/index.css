@@ -267,7 +267,8 @@ h2 {
 }
 
 a:focus-visible,
-button:focus-visible {
+button:focus-visible,
+input:focus-visible {
   outline: 4px solid #fdb022;
   outline-offset: 4px;
 }
@@ -399,6 +400,138 @@ button:focus-visible {
   display: flex;
   max-width: 900px;
   margin-top: 28px;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.detail-action-row .primary-button {
+  width: auto;
+  margin-top: 0;
+}
+
+.deposit-amount-card {
+  max-width: 900px;
+  margin-top: 36px;
+  padding: 32px;
+  border: 2px solid #98a2b3;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(16 24 40 / 8%);
+}
+
+.deposit-amount-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.deposit-amount-summary > div {
+  display: flex;
+  min-width: 0;
+  padding: 18px;
+  border: 2px solid #d0d5dd;
+  border-radius: 12px;
+  flex-direction: column;
+  gap: 6px;
+  background: #f8fafc;
+}
+
+.deposit-amount-summary span {
+  color: #475467;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.deposit-amount-summary strong {
+  color: #101828;
+  font-size: 19px;
+}
+
+.deposit-amount-field {
+  margin-top: 28px;
+}
+
+.deposit-amount-field label {
+  display: block;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.deposit-amount-input-row {
+  display: flex;
+  margin-top: 10px;
+  align-items: center;
+  gap: 12px;
+}
+
+.deposit-amount-input-row input {
+  width: min(100%, 460px);
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 2px solid #667085;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.deposit-amount-input-row input[aria-invalid="true"] {
+  border-color: #b42318;
+  background: #fff7f6;
+}
+
+.deposit-amount-input-row span {
+  color: #344054;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.formatted-amount {
+  min-height: 30px;
+  margin: 12px 0 0;
+  color: #344054;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.amount-validation {
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border: 2px solid #1570ef;
+  border-radius: 10px;
+  background: #eff8ff;
+  color: #0b4a8f;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.amount-validation-invalid_format,
+.amount-validation-non_positive,
+.amount-validation-below_minimum,
+.amount-validation-unsafe_integer {
+  border-color: #b42318;
+  background: #fef3f2;
+  color: #7a271a;
+}
+
+.amount-validation-valid {
+  border-color: #067647;
+  background: #ecfdf3;
+  color: #05603a;
+}
+
+.deposit-amount-actions {
+  display: flex;
+  margin-top: 28px;
+  gap: 16px;
+}
+
+.deposit-amount-actions .primary-button {
+  width: auto;
+  margin-top: 0;
 }
 
 .detail-list {
@@ -487,6 +620,10 @@ button:focus-visible {
   .deposit-condition-list {
     grid-template-columns: 1fr;
   }
+
+  .deposit-amount-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -510,6 +647,7 @@ button:focus-visible {
 
   .information-card,
   .deposit-detail-card,
+  .deposit-amount-card,
   .demo-rate-notice,
   .warning-box,
   .not-found-panel {
@@ -517,6 +655,17 @@ button:focus-visible {
   }
 
   .detail-action-row .secondary-button {
+    width: 100%;
+  }
+
+  .detail-action-row,
+  .deposit-amount-actions {
+    flex-direction: column;
+  }
+
+  .detail-action-row .primary-button,
+  .deposit-amount-actions .primary-button,
+  .deposit-amount-actions .secondary-button {
     width: 100%;
   }
 

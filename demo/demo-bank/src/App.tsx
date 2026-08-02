@@ -1,9 +1,11 @@
 import {
+  createDepositConditionsPath,
   createDepositProductDetailPath,
   normalizePathname,
   ROUTES
 } from './constants/routes';
 import { depositProducts } from './data/demo-data';
+import DepositAmountPage from './pages/DepositAmountPage';
 import DepositProductDetailPage from './pages/DepositProductDetailPage';
 import DepositProductsPage from './pages/DepositProductsPage';
 import HomePage from './pages/HomePage';
@@ -16,6 +18,14 @@ export default function App() {
     (product) =>
       createDepositProductDetailPath(product.id) === currentPath
   );
+  const conditionsProduct = depositProducts.find(
+    (product) =>
+      createDepositConditionsPath(product.id) === currentPath
+  );
+
+  if (conditionsProduct) {
+    return <DepositAmountPage product={conditionsProduct} />;
+  }
 
   if (detailProduct) {
     return <DepositProductDetailPage product={detailProduct} />;
