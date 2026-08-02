@@ -20,7 +20,20 @@ export const ELEMENT_IDS = {
   SUMMARY_DEPOSIT_PRODUCT_MINIMUM_AMOUNT:
     'summary-deposit-product-minimum-amount',
   BUTTON_DEPOSIT_PRODUCT_LIST_BACK: 'btn-deposit-product-list-back',
+  BUTTON_DEPOSIT_AMOUNT_START: 'btn-deposit-amount-start',
   STATUS_DEPOSIT_NEXT_STEP: 'status-deposit-next-step',
+  PAGE_DEPOSIT_AMOUNT: 'page-deposit-amount',
+  SUMMARY_DEPOSIT_AMOUNT_PRODUCT_NAME:
+    'summary-deposit-amount-product-name',
+  SUMMARY_DEPOSIT_AMOUNT_MINIMUM: 'summary-deposit-amount-minimum',
+  INPUT_DEPOSIT_AMOUNT: 'input-deposit-amount',
+  SUMMARY_DEPOSIT_AMOUNT_FORMATTED:
+    'summary-deposit-amount-formatted',
+  STATUS_DEPOSIT_AMOUNT_VALIDATION:
+    'status-deposit-amount-validation',
+  BUTTON_DEPOSIT_AMOUNT_CONFIRM: 'btn-deposit-amount-confirm',
+  BUTTON_DEPOSIT_PRODUCT_DETAIL_BACK:
+    'btn-deposit-product-detail-back',
   ACCOUNT_LIVING_EXPENSE: 'account-living-expense',
   ACCOUNT_SAVINGS: 'account-savings',
   BUTTON_SELECT_ACCOUNT_LIVING_EXPENSE:

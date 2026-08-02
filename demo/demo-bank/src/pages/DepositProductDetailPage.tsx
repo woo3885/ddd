@@ -1,6 +1,7 @@
 import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
+  createDepositConditionsPath,
   createDepositProductDetailPath,
   ROUTES
 } from '../constants/routes';
@@ -89,8 +90,8 @@ export default function DepositProductDetailPage({
         role="status"
         aria-live="polite"
       >
-        다음 가입 조건 입력 단계는 준비 중입니다. 실제 예금 가입이나
-        금융거래는 발생하지 않습니다.
+        가입 금액 입력 화면을 확인할 수 있습니다. 약관 확인과 실제
+        예금 가입은 아직 제공하지 않습니다.
       </p>
 
       <div className="detail-action-row">
@@ -103,6 +104,18 @@ export default function DepositProductDetailPage({
           onClick={() => window.location.assign(ROUTES.DEPOSIT_PRODUCTS)}
         >
           예금 상품 목록으로 돌아가기
+        </button>
+        <button
+          {...elementIdentity(ELEMENT_IDS.BUTTON_DEPOSIT_AMOUNT_START)}
+          type="button"
+          className="primary-button"
+          onClick={() =>
+            window.location.assign(
+              createDepositConditionsPath(product.id)
+            )
+          }
+        >
+          가입 금액 입력하기
         </button>
       </div>
     </DemoBankLayout>
