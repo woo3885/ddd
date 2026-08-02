@@ -2,9 +2,11 @@ import { intentClassifier } from "./intents/intent.classifier.js";
 import { extractUserGoal } from "./goals/userGoal.extractor.js";
 import { mapSanitizedDomToModelInput } from "./dom/domMapper.js";
 import { serializeDomModelInput } from "./dom/domSerializer.js";
-import { SanitizedDomSnapshot } from "./dom/types.js";
+import type { SanitizedDomSnapshot } from "./dom/types.js";
 import { evaluateActionPolicy } from "./policy/actionPolicy.js";
 import { detectSensitiveData } from "./policy/safetyPolicy.js";
+import { selectNextAction } from "./actions/nextAction.selector.js";
+import { createNextActionPrompt } from "./prompts/nextActionPrompt.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -208,3 +210,43 @@ console.log("금융길잡이 AI Engine - DOM Mapping Test");
 console.log("========================================\n");
 
 console.log(serializedDom);
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - 다음 행동 선택 테스트");
+console.log("========================================\n");
+
+const actionGoal = {
+  rawMessage: "금리가 높은 예금 상품을 찾고 싶어요",
+  intent: "DEPOSIT",
+  conditions: ["금리가 높은"],
+};
+
+const nextAction = selectNextAction(
+  actionGoal,
+  modelInput,
+);
+
+console.log("[사용자 목표]");
+console.log(actionGoal.rawMessage);
+
+console.log("\n[선택 결과]");
+console.log(`행동: ${nextAction.action}`);
+console.log(
+  `대상 ID: ${nextAction.targetId ?? "없음"}`,
+);
+console.log(
+  `입력값: ${nextAction.value ?? "없음"}`,
+);
+console.log(
+  `스크롤 방향: ${nextAction.direction ?? "없음"}`,
+);
+console.log(`신뢰도: ${nextAction.confidence}`);
+console.log(`판단 근거: ${nextAction.reason}`);
+
+const nextActionPrompt = createNextActionPrompt(
+  actionGoal,
+  modelInput,
+);
+
+console.log("\n[다음 행동 선택 프롬프트]");
+console.log(nextActionPrompt);
