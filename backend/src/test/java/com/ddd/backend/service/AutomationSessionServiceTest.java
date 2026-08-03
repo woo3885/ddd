@@ -5,6 +5,7 @@ import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.infrastructure.session.InMemoryAutomationSessionRepository;
+import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,6 +23,7 @@ class AutomationSessionServiceTest {
 
     private AutomationSessionService sessionService;
     private BrowserSessionManager browserSessionManager;
+    private AutomationStatusEventPublisher statusEventPublisher;
 
     @BeforeEach
     void setUp() {
@@ -31,10 +33,15 @@ class AutomationSessionServiceTest {
         browserSessionManager =
                 mock(BrowserSessionManager.class);
 
-        sessionService = new AutomationSessionService(
-                repository,
-                browserSessionManager
-        );
+        statusEventPublisher =
+                mock(AutomationStatusEventPublisher.class);
+
+        sessionService =
+                new AutomationSessionService(
+                        repository,
+                        browserSessionManager,
+                        statusEventPublisher
+                );
     }
 
     @Test
@@ -45,19 +52,31 @@ class AutomationSessionServiceTest {
                 );
 
         assertNotNull(session.getSessionId());
+
         assertEquals(
                 "적금 상품을 비교해 줘",
                 session.getUserRequest()
         );
+
         assertEquals(
                 WorkflowStatus.SESSION_CREATED,
                 session.getStatus()
         );
+
         assertNotNull(session.getCreatedAt());
         assertNotNull(session.getUpdatedAt());
 
         verify(browserSessionManager)
-                .createSession(session.getSessionId());
+                .createSession(
+                        session.getSessionId()
+                );
+
+        verify(statusEventPublisher)
+                .publish(
+                        session.getSessionId(),
+                        WorkflowStatus.SESSION_CREATED,
+                        "자동화 세션이 생성되었습니다."
+                );
     }
 
     @Test
@@ -76,6 +95,7 @@ class AutomationSessionServiceTest {
                 created.getSessionId(),
                 found.getSessionId()
         );
+
         assertEquals(
                 "예금 상품을 찾아 줘",
                 found.getUserRequest()
@@ -106,7 +126,16 @@ class AutomationSessionServiceTest {
         );
 
         verify(browserSessionManager)
-                .closeSession(created.getSessionId());
+                .closeSession(
+                        created.getSessionId()
+                );
+
+        verify(statusEventPublisher)
+                .publish(
+                        cancelled.getSessionId(),
+                        WorkflowStatus.CANCELLED,
+                        "자동화 세션이 취소되었습니다."
+                );
     }
 
     @Test
@@ -133,7 +162,16 @@ class AutomationSessionServiceTest {
         );
 
         verify(browserSessionManager, never())
-                .closeSession(created.getSessionId());
+                .closeSession(
+                        created.getSessionId()
+                );
+
+        verify(statusEventPublisher)
+                .publish(
+                        cancelled.getSessionId(),
+                        WorkflowStatus.CANCELLED,
+                        "자동화 세션이 취소되었습니다."
+                );
     }
 
     @Test
@@ -171,7 +209,16 @@ class AutomationSessionServiceTest {
         );
 
         verify(browserSessionManager, times(1))
-                .closeSession(created.getSessionId());
+                .closeSession(
+                        created.getSessionId()
+                );
+
+        verify(statusEventPublisher, times(1))
+                .publish(
+                        created.getSessionId(),
+                        WorkflowStatus.CANCELLED,
+                        "자동화 세션이 취소되었습니다."
+                );
     }
 
     @Test
