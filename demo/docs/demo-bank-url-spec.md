@@ -18,7 +18,7 @@
 | `/deposit/products` | `DEPOSIT_PRODUCT_LIST` | 예금 상품 후보 목록 | 허용 | 예 | D3 |
 | `/deposit/products/:productId` | `DEPOSIT_PRODUCT_DETAIL` | 선택한 예금 상품 상세 | 유효한 `productId`에 한해 허용 | 아니오 | D6 이후 |
 | `/deposit/conditions` | `DEPOSIT_CONDITIONS` | 가입 금액과 기간 설정의 개념 경로 | D7 구현은 유효한 `productId` 필요 | 아니오 | D7 |
-| `/deposit/terms` | `DEPOSIT_TERMS` | 필수·선택 약관 개별 선택 | 불가: 가입 조건 필요 | 아니오 | D6 이후 |
+| `/deposit/terms` | `DEPOSIT_TERMS` | 필수·선택 약관 개별 선택의 개념 경로 | D8 구현은 유효한 `productId` 필요 | 아니오 | D8 |
 | `/deposit/secure/password` | `DEPOSIT_PASSWORD` | 예금 가입용 계좌 비밀번호 직접 입력 | 불가: 약관 동의 필요 | 아니오 | D6 이후 |
 | `/deposit/confirmation` | `DEPOSIT_CONFIRMATION` | 예금 가입 내용 최종 확인 | 불가: 보안 입력 완료 필요 | 아니오 | D6 이후 |
 | `/deposit/completed` | `DEPOSIT_COMPLETED` | 예금 가입 시연 완료 | 불가: 최종 승인 결과 필요 | 아니오 | D6 이후 |
@@ -63,3 +63,19 @@ D1의 `/deposit/conditions`는 예금 가입 조건 입력 단계를 나타내�
 `sessionStorage`도 사용하지 않는다. 알려진 Mock 상품 ID에 한해서만 금액
 입력 화면을 표시하며 `/deposit/conditions`, 잘못된 상품 ID와 예상하지
 않은 추가 segment는 NotFound 화면으로 처리한다.
+
+## 6. D8 예금 약관 경로 구체화
+
+D1의 `/deposit/terms`는 예금 약관 선택 단계를 나타내는 개념 경로로
+유지한다. D8 구현에서는 공개 Mock 상품 식별자만 pathname에 추가한다.
+
+- `/deposit/terms/deposit-12m`
+- `/deposit/terms/deposit-preferred`
+- 구현 형식: `/deposit/terms/:productId`
+
+가입 금액은 URL에 포함하지 않으며 query parameter, `localStorage`와
+`sessionStorage`도 사용하지 않는다. 알려진 Mock 상품 ID의 약관 URL은
+직접 접근할 수 있지만 모든 약관은 미선택 상태로 시작한다. 직접 접근한
+화면은 앞 단계 금액 입력이 완료되었다고 표시하지 않으며 금액을 표시하지
+않는다. `/deposit/terms`, 잘못된 상품 ID와 예상하지 않은 추가 segment는
+NotFound 화면으로 처리한다.

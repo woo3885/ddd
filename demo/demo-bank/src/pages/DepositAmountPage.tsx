@@ -4,7 +4,8 @@ import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
   createDepositConditionsPath,
-  createDepositProductDetailPath
+  createDepositProductDetailPath,
+  createDepositTermsPath
 } from '../constants/routes';
 import {
   formatWon,
@@ -29,6 +30,7 @@ export default function DepositAmountPage({
   );
   const isValid = validation.state === 'VALID';
   const isInvalid = validation.state !== 'EMPTY' && !isValid;
+  const isAmountConfirmed = confirmedMessage !== null;
 
   const handleAmountChange = (
     event: ChangeEvent<HTMLInputElement>
@@ -45,6 +47,14 @@ export default function DepositAmountPage({
     setConfirmedMessage(
       `${validation.formattedAmount}을 가입 금액으로 확인했습니다. 실제 가입은 진행하지 않았습니다.`
     );
+  };
+
+  const handleTermsStart = () => {
+    if (!isAmountConfirmed) {
+      return;
+    }
+
+    window.location.assign(createDepositTermsPath(product.id));
   };
 
   return (
@@ -159,6 +169,15 @@ export default function DepositAmountPage({
             onClick={handleConfirm}
           >
             입력 금액 확인
+          </button>
+          <button
+            {...elementIdentity(ELEMENT_IDS.BUTTON_DEPOSIT_TERMS_START)}
+            type="button"
+            className="primary-button"
+            disabled={!isAmountConfirmed}
+            onClick={handleTermsStart}
+          >
+            약관 확인으로 이동
           </button>
         </div>
       </section>
