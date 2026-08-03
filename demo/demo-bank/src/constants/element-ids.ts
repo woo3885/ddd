@@ -34,6 +34,21 @@ export const ELEMENT_IDS = {
   BUTTON_DEPOSIT_AMOUNT_CONFIRM: 'btn-deposit-amount-confirm',
   BUTTON_DEPOSIT_PRODUCT_DETAIL_BACK:
     'btn-deposit-product-detail-back',
+  BUTTON_DEPOSIT_TERMS_START: 'btn-deposit-terms-start',
+  PAGE_DEPOSIT_TERMS: 'page-deposit-terms',
+  SUMMARY_DEPOSIT_TERMS_PRODUCT_NAME:
+    'summary-deposit-terms-product-name',
+  TERM_SERVICE_REQUIRED: 'term-service-required',
+  CHECKBOX_TERM_SERVICE_REQUIRED: 'checkbox-term-service-required',
+  TERM_PRIVACY_REQUIRED: 'term-privacy-required',
+  CHECKBOX_TERM_PRIVACY_REQUIRED: 'checkbox-term-privacy-required',
+  TERM_MARKETING_OPTIONAL: 'term-marketing-optional',
+  CHECKBOX_TERM_MARKETING_OPTIONAL: 'checkbox-term-marketing-optional',
+  STATUS_DEPOSIT_TERMS_SELECTION: 'status-deposit-terms-selection',
+  STATUS_DEPOSIT_TERMS_CONFIRMATION:
+    'status-deposit-terms-confirmation',
+  BUTTON_DEPOSIT_TERMS_CONFIRM: 'btn-deposit-terms-confirm',
+  BUTTON_DEPOSIT_AMOUNT_BACK: 'btn-deposit-amount-back',
   ACCOUNT_LIVING_EXPENSE: 'account-living-expense',
   ACCOUNT_SAVINGS: 'account-savings',
   BUTTON_SELECT_ACCOUNT_LIVING_EXPENSE:

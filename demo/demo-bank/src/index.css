@@ -534,6 +534,161 @@ input:focus-visible {
   margin-top: 0;
 }
 
+.deposit-terms-card {
+  max-width: 900px;
+  margin-top: 36px;
+  padding: 32px;
+  border: 2px solid #98a2b3;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(16 24 40 / 8%);
+}
+
+.deposit-terms-product-summary {
+  display: grid;
+  padding: 20px;
+  border: 2px solid #d0d5dd;
+  border-radius: 12px;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  gap: 10px 18px;
+  background: #f8fafc;
+}
+
+.deposit-terms-product-summary span {
+  color: #475467;
+  font-weight: 700;
+}
+
+.deposit-terms-product-summary strong {
+  color: #101828;
+  font-size: 18px;
+}
+
+.deposit-terms-fieldset {
+  min-width: 0;
+  margin: 28px 0 0;
+  padding: 24px;
+  border: 2px solid #667085;
+  border-radius: 14px;
+}
+
+.deposit-terms-fieldset legend {
+  padding: 0 10px;
+  color: #101828;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.deposit-terms-instruction {
+  margin: 0;
+  color: #344054;
+  font-size: 17px;
+}
+
+.deposit-terms-list {
+  display: grid;
+  margin-top: 20px;
+  gap: 14px;
+}
+
+.deposit-term-item {
+  border: 2px solid #98a2b3;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.deposit-term-item:has(input:checked) {
+  border-color: #175cd3;
+  background: #eff8ff;
+}
+
+.deposit-term-label {
+  display: flex;
+  min-height: 72px;
+  padding: 18px;
+  align-items: flex-start;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.deposit-term-label input {
+  width: 24px;
+  height: 24px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: #175cd3;
+}
+
+.deposit-term-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deposit-term-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #101828;
+  font-size: 18px;
+}
+
+.deposit-term-badge {
+  display: inline-flex;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 2px solid currentcolor;
+  border-radius: 999px;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.deposit-term-badge-required {
+  color: #b42318;
+}
+
+.deposit-term-badge-optional {
+  color: #175cd3;
+}
+
+.deposit-term-summary {
+  color: #475467;
+  font-size: 16px;
+}
+
+.deposit-terms-status,
+.deposit-terms-confirmation {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border: 2px solid #1570ef;
+  border-radius: 10px;
+  background: #eff8ff;
+  color: #0b4a8f;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.deposit-terms-confirmation {
+  border-color: #667085;
+  background: #f8fafc;
+  color: #344054;
+}
+
+.deposit-terms-actions {
+  display: flex;
+  margin-top: 28px;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.deposit-terms-actions .primary-button {
+  width: auto;
+  margin-top: 0;
+}
+
 .detail-list {
   margin: 0;
 }
@@ -624,6 +779,10 @@ input:focus-visible {
   .deposit-amount-summary {
     grid-template-columns: 1fr;
   }
+
+  .deposit-terms-product-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -648,6 +807,7 @@ input:focus-visible {
   .information-card,
   .deposit-detail-card,
   .deposit-amount-card,
+  .deposit-terms-card,
   .demo-rate-notice,
   .warning-box,
   .not-found-panel {
@@ -659,13 +819,16 @@ input:focus-visible {
   }
 
   .detail-action-row,
-  .deposit-amount-actions {
+  .deposit-amount-actions,
+  .deposit-terms-actions {
     flex-direction: column;
   }
 
   .detail-action-row .primary-button,
   .deposit-amount-actions .primary-button,
-  .deposit-amount-actions .secondary-button {
+  .deposit-amount-actions .secondary-button,
+  .deposit-terms-actions .primary-button,
+  .deposit-terms-actions .secondary-button {
     width: 100%;
   }
 

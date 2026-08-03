@@ -2,6 +2,7 @@ export const ROUTES = {
   HOME: '/',
   DEPOSIT_PRODUCTS: '/deposit/products',
   DEPOSIT_CONDITIONS: '/deposit/conditions',
+  DEPOSIT_TERMS: '/deposit/terms',
   TRANSFER_ACCOUNTS: '/transfer/accounts'
 } as const;
 
@@ -13,6 +14,10 @@ export function createDepositProductDetailPath(productId: string): string {
 
 export function createDepositConditionsPath(productId: string): string {
   return `${ROUTES.DEPOSIT_CONDITIONS}/${encodeURIComponent(productId)}`;
+}
+
+export function createDepositTermsPath(productId: string): string {
+  return `${ROUTES.DEPOSIT_TERMS}/${encodeURIComponent(productId)}`;
 }
 
 export function normalizePathname(pathname: string): string {
