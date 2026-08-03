@@ -15,6 +15,7 @@ import {
  * 다음 행동을 선택하는 LLM 프롬프트를 생성합니다.
  */
 export function createNextActionPrompt(
+  requestId: string,
   goal: ActionGoalInput,
   dom: DomModelInput,
 ): string {
@@ -25,6 +26,10 @@ export function createNextActionPrompt(
 
 사용자의 목표와 현재 화면 정보를 분석하여
 다음에 수행할 행동 하나만 선택해야 합니다.
+
+## 요청 정보
+
+- 요청 ID: ${requestId}
 
 ## 사용자 목표
 
@@ -55,28 +60,33 @@ ${domText}
 4. NONE
 - 안전하거나 적절한 행동을 결정할 수 없을 때 사용합니다.
 
-## 행동 선택 원칙
-
-- 한 번에 하나의 행동만 선택합니다.
-- 현재 화면에 없는 요소를 만들어내지 않습니다.
-- actionable이 false인 요소는 선택하지 않습니다.
-- 사용자의 목표와 가장 직접적으로 관련된 요소를 선택합니다.
-- 가입, 송금, 결제, 제출 등 중요한 행동은 직접 실행하지 말고
-  사용자 확인이 필요하다는 점을 reason에 표시합니다.
-- 비밀번호, 보안카드, 주민등록번호 등 민감정보를 대신 입력하지 않습니다.
-- 적절한 요소를 찾지 못하면 SCROLL을 선택합니다.
-
 ## 출력 형식
 
-반드시 다음 JSON 형식만 반환합니다.
+반드시 아래 JSON 구조만 반환합니다.
+JSON 이외의 설명이나 코드 블록을 추가하지 않습니다.
 
 {
+  "requestId": "${requestId}",
+  "status": "AI_EXECUTING",
   "action": "CLICK | TYPE | SCROLL | NONE",
-  "targetId": "요소 ID 또는 생략",
-  "value": "입력 문자열 또는 생략",
-  "direction": "UP | DOWN 또는 생략",
+  "targetElementId": "요소 ID 또는 null",
+  "inputValue": "입력값 또는 null",
+  "message": "사용자에게 보여줄 행동 설명",
   "confidence": 0.0,
-  "reason": "판단 근거"
+  "requiresUserAction": false,
+  "decisionType": null,
+  "secureInputType": null,
+  "riskType": null,
+  "options": null,
+  "confirmationId": null,
+  "summary": null
 }
+
+## 행동별 필드 규칙
+
+- CLICK: targetElementId는 문자열, inputValue는 null
+- TYPE: targetElementId는 문자열, inputValue는 문자열 또는 숫자
+- SCROLL: targetElementId와 inputValue는 null
+- NONE: targetElementId와 inputValue는 null
 `.trim();
 }
