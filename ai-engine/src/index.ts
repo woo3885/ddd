@@ -7,6 +7,7 @@ import { evaluateActionPolicy } from "./policy/actionPolicy.js";
 import { detectSensitiveData } from "./policy/safetyPolicy.js";
 import { selectNextAction } from "./actions/nextAction.selector.js";
 import { createNextActionPrompt } from "./prompts/nextActionPrompt.js";
+import { mapDecisionToAIResponse, stringifyAIResponse } from "./output/aiResponse.mapper.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -226,6 +227,21 @@ const nextAction = selectNextAction(
   modelInput,
 );
 
+const requestId = "req-test-001";
+
+const nextActionPrompt = createNextActionPrompt(
+  requestId,
+  actionGoal,
+  modelInput,
+);
+
+const aiResponse = mapDecisionToAIResponse(
+  nextAction,
+  {
+    requestId,
+  },
+);
+
 console.log("[사용자 목표]");
 console.log(actionGoal.rawMessage);
 
@@ -243,10 +259,30 @@ console.log(
 console.log(`신뢰도: ${nextAction.confidence}`);
 console.log(`판단 근거: ${nextAction.reason}`);
 
-const nextActionPrompt = createNextActionPrompt(
-  actionGoal,
-  modelInput,
-);
-
 console.log("\n[다음 행동 선택 프롬프트]");
 console.log(nextActionPrompt);
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - Structured AIResponse 테스트");
+console.log("========================================\n");
+
+const aiResponseJson = stringifyAIResponse(aiResponse);
+
+console.log("[AIResponse 고정 JSON 출력]");
+console.log(aiResponseJson);
+
+const parsedAIResponse = JSON.parse(aiResponseJson);
+
+console.log("\n[AIResponse 파싱 확인]");
+console.log(`requestId: ${parsedAIResponse.requestId}`);
+console.log(`action: ${parsedAIResponse.action}`);
+console.log(
+  `targetElementId: ${
+    parsedAIResponse.targetElementId ?? "없음"
+  }`,
+);
+console.log(
+  `inputValue: ${
+    parsedAIResponse.inputValue ?? "없음"
+  }`,
+);
