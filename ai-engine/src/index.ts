@@ -8,6 +8,7 @@ import { detectSensitiveData } from "./policy/safetyPolicy.js";
 import { selectNextAction } from "./actions/nextAction.selector.js";
 import { createNextActionPrompt } from "./prompts/nextActionPrompt.js";
 import { mapDecisionToAIResponse, stringifyAIResponse } from "./output/aiResponse.mapper.js";
+import { validateNavigationUrl } from "./security/urlValidator.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -286,3 +287,41 @@ console.log(
     parsedAIResponse.inputValue ?? "없음"
   }`,
 );
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - URL 보안 정책 테스트");
+console.log("========================================\n");
+
+const urlTestCases = [
+  "https://demo-bank.example.com/deposit",
+  "https://financial-guide.example.com/menu",
+  "https://sub.financial-guide.example.com/help",
+  "http://demo-bank.example.com/deposit",
+  "https://evil.example.com/phishing",
+  "https://localhost/admin",
+  "https://127.0.0.1:8080/admin",
+  "https://10.0.0.15/internal",
+  "https://192.168.0.10/router",
+  "https://169.254.169.254/latest/meta-data",
+  "file:///etc/passwd",
+  "javascript:alert(1)",
+  "https://user:password@demo-bank.example.com",
+  "not-a-valid-url",
+];
+
+for (const url of urlTestCases) {
+  const result = validateNavigationUrl(url);
+
+  console.log(`[입력 URL] ${url}`);
+  console.log(`[접속 허용] ${result.allowed}`);
+  console.log(`[판단 코드] ${result.code}`);
+  console.log(`[판단 근거] ${result.reason}`);
+
+  if (result.normalizedUrl) {
+    console.log(
+      `[정규화 URL] ${result.normalizedUrl}`,
+    );
+  }
+
+  console.log();
+}
