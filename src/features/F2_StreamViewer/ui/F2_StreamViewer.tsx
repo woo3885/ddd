@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react';
 
+import { useCanvasDisplaySize } from '@/features/F2_StreamViewer/hooks/useCanvasDisplaySize';
+import type { ViewerSize } from '@/features/F2_StreamViewer/model/coordinate-transform';
 import {
   VIEWER_FRAME_ASPECT_RATIO,
   VIEWER_FRAME_HEIGHT,
@@ -15,6 +23,11 @@ import { Text } from '@/shared/ui/Text';
 
 export interface F2StreamViewerProps {
   frame?: ViewerFrame;
+  renderOverlay?: (context: ViewerOverlayRenderContext) => ReactNode;
+}
+
+export interface ViewerOverlayRenderContext {
+  displaySize: ViewerSize;
 }
 
 const STATUS_LABELS: Record<ViewerFrameStatus, string> = {
@@ -31,13 +44,28 @@ const STATUS_VARIANTS: Record<ViewerFrameStatus, StatusBadgeVariant> = {
   ERROR: 'danger'
 };
 
-export default function F2_StreamViewer({ frame }: F2StreamViewerProps) {
+export default function F2_StreamViewer({
+  frame,
+  renderOverlay
+}: F2StreamViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [canvasElement, setCanvasElement] =
+    useState<HTMLCanvasElement | null>(null);
+  const displaySize = useCanvasDisplaySize(canvasElement);
   const [frameStatus, setFrameStatus] = useState<ViewerFrameStatus>(
     frame ? 'LOADING' : 'EMPTY'
   );
   const [statusMessage, setStatusMessage] = useState(
     frame ? STATUS_LABELS.LOADING : STATUS_LABELS.EMPTY
+  );
+  const setCanvasReference = useCallback(
+    (element: HTMLCanvasElement | null) => {
+      canvasRef.current = element;
+      setCanvasElement((currentElement) =>
+        currentElement === element ? currentElement : element
+      );
+    },
+    []
   );
 
   useEffect(() => {
@@ -132,18 +160,21 @@ export default function F2_StreamViewer({ frame }: F2StreamViewerProps) {
         className="w-full overflow-hidden rounded-xl border-2 border-border bg-slate-950"
         style={{ aspectRatio: VIEWER_FRAME_ASPECT_RATIO }}
       >
-        <canvas
-          ref={canvasRef}
-          id="canvas-remote-screen"
-          data-testid="canvas-remote-screen"
-          width={VIEWER_FRAME_WIDTH}
-          height={VIEWER_FRAME_HEIGHT}
-          className="block h-auto w-full"
-          role="img"
-          aria-label="1280 × 720 원격 브라우저 화면"
-        >
-          Canvas를 지원하지 않는 환경에서는 원격 화면을 표시할 수 없습니다.
-        </canvas>
+        <div className="relative h-full w-full">
+          <canvas
+            ref={setCanvasReference}
+            id="canvas-remote-screen"
+            data-testid="canvas-remote-screen"
+            width={VIEWER_FRAME_WIDTH}
+            height={VIEWER_FRAME_HEIGHT}
+            className="block h-auto w-full"
+            role="img"
+            aria-label="1280 × 720 원격 브라우저 화면"
+          >
+            Canvas를 지원하지 않는 환경에서는 원격 화면을 표시할 수 없습니다.
+          </canvas>
+          {renderOverlay?.({ displaySize })}
+        </div>
       </div>
 
       <div
