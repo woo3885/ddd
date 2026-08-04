@@ -9,6 +9,7 @@ import type {
 
 export interface AIResponseMapperOptions {
   requestId: string;
+  message?: string;
 }
 
 function mapActionType(
@@ -78,7 +79,9 @@ export function mapDecisionToAIResponse(
         ? decision.value ?? null
         : null,
 
-    message: decision.reason.trim(),
+    message:
+      options.message?.trim() ||
+      "다음 작업을 확인하고 있어요.",
 
     confidence: Math.max(
       0,

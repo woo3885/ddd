@@ -8,7 +8,7 @@ import { detectSensitiveData } from "./policy/safetyPolicy.js";
 import { selectNextAction } from "./actions/nextAction.selector.js";
 import { createNextActionPrompt } from "./prompts/nextActionPrompt.js";
 import { mapDecisionToAIResponse, stringifyAIResponse } from "./output/aiResponse.mapper.js";
-import { validateNavigationUrl } from "./security/urlValidator.js";
+import { generateGuidanceMessage } from "./messages/guidanceMessage.generator.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -236,10 +236,24 @@ const nextActionPrompt = createNextActionPrompt(
   modelInput,
 );
 
+const selectedElement = modelInput.elements.find(
+  (element) =>
+    element.id === nextAction.targetId,
+);
+
+const guidanceMessage =
+  generateGuidanceMessage({
+    action: nextAction.action,
+    targetLabel: selectedElement?.label,
+    inputValue: nextAction.value,
+    requiresConfirmation: false,
+  });
+
 const aiResponse = mapDecisionToAIResponse(
   nextAction,
   {
     requestId,
+    message: guidanceMessage.message,
   },
 );
 
@@ -289,39 +303,63 @@ console.log(
 );
 
 console.log("\n========================================");
-console.log("금융길잡이 AI Engine - URL 보안 정책 테스트");
+console.log("금융길잡이 AI Engine - 쉬운 안내 문장 테스트");
 console.log("========================================\n");
 
-const urlTestCases = [
-  "https://demo-bank.example.com/deposit",
-  "https://financial-guide.example.com/menu",
-  "https://sub.financial-guide.example.com/help",
-  "http://demo-bank.example.com/deposit",
-  "https://evil.example.com/phishing",
-  "https://localhost/admin",
-  "https://127.0.0.1:8080/admin",
-  "https://10.0.0.15/internal",
-  "https://192.168.0.10/router",
-  "https://169.254.169.254/latest/meta-data",
-  "file:///etc/passwd",
-  "javascript:alert(1)",
-  "https://user:password@demo-bank.example.com",
-  "not-a-valid-url",
+const guidanceTestCases = [
+  {
+    title: "검색어 입력",
+    input: {
+      action: "TYPE" as const,
+      targetLabel: "상품명 입력칸",
+      inputValue: "예금 금리가 높은",
+    },
+  },
+  {
+    title: "조회 버튼 클릭",
+    input: {
+      action: "CLICK" as const,
+      targetLabel: "상품 검색",
+    },
+  },
+  {
+    title: "화면 추가 탐색",
+    input: {
+      action: "SCROLL" as const,
+    },
+  },
+  {
+    title: "사용자 확인 필요",
+    input: {
+      action: "CLICK" as const,
+      targetLabel: "정기예금 가입",
+      requiresConfirmation: true,
+    },
+  },
+  {
+    title: "민감정보 직접 입력",
+    input: {
+      action: "TYPE" as const,
+      targetLabel: "계좌 비밀번호 입력칸",
+      blocked: true,
+    },
+  },
+  {
+    title: "행동을 찾지 못함",
+    input: {
+      action: "NONE" as const,
+    },
+  },
 ];
 
-for (const url of urlTestCases) {
-  const result = validateNavigationUrl(url);
+for (const testCase of guidanceTestCases) {
+  const result =
+    generateGuidanceMessage(testCase.input);
 
-  console.log(`[입력 URL] ${url}`);
-  console.log(`[접속 허용] ${result.allowed}`);
-  console.log(`[판단 코드] ${result.code}`);
-  console.log(`[판단 근거] ${result.reason}`);
-
-  if (result.normalizedUrl) {
-    console.log(
-      `[정규화 URL] ${result.normalizedUrl}`,
-    );
-  }
-
+  console.log(`[상황] ${testCase.title}`);
+  console.log(`[안내 문장] ${result.message}`);
+  console.log(`[문장 종류] ${result.tone}`);
+  console.log(`[TTS 사용 가능] ${result.ttsReady}`);
+  console.log(`[글자 수] ${result.characterCount}`);
   console.log();
 }
