@@ -349,4 +349,108 @@ describe('F2_StreamViewer', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
   });
+
+  it('renderOverlay에 EMPTY frameStatus와 빈 imageSrc를 전달한다', () => {
+    render(
+      <F2_StreamViewer
+        renderOverlay={({ frameStatus, imageSrc }) => (
+          <output data-testid="test-overlay-frame-context">
+            {frameStatus}:{imageSrc ?? 'none'}
+          </output>
+        )}
+      />
+    );
+
+    expect(screen.getByTestId('test-overlay-frame-context')).toHaveTextContent(
+      'EMPTY:none'
+    );
+  });
+
+  it('renderOverlay에 현재 imageSrc와 LOADING 상태를 전달한다', () => {
+    render(
+      <F2_StreamViewer
+        frame={createFrame('/loading-frame.png')}
+        renderOverlay={({ frameStatus, imageSrc }) => (
+          <output data-testid="test-overlay-frame-context">
+            {frameStatus}:{imageSrc}
+          </output>
+        )}
+      />
+    );
+
+    expect(screen.getByTestId('test-overlay-frame-context')).toHaveTextContent(
+      'LOADING:/loading-frame.png'
+    );
+  });
+
+  it('Image load 완료 후 renderOverlay에 READY 상태를 전달한다', () => {
+    render(
+      <F2_StreamViewer
+        frame={createFrame('/ready-frame.png')}
+        renderOverlay={({ frameStatus }) => (
+          <output data-testid="test-overlay-frame-status">{frameStatus}</output>
+        )}
+      />
+    );
+
+    completeImageLoad();
+
+    expect(screen.getByTestId('test-overlay-frame-status')).toHaveTextContent(
+      'READY'
+    );
+  });
+
+  it('Image load 실패 후 renderOverlay에 ERROR 상태를 전달한다', () => {
+    render(
+      <F2_StreamViewer
+        frame={createFrame('/error-frame.png')}
+        renderOverlay={({ frameStatus }) => (
+          <output data-testid="test-overlay-frame-status">{frameStatus}</output>
+        )}
+      />
+    );
+
+    act(() => {
+      MockImage.instances[0].onerror?.(new Event('error'));
+    });
+
+    expect(screen.getByTestId('test-overlay-frame-status')).toHaveTextContent(
+      'ERROR'
+    );
+  });
+
+  it('frame 교체 시 이전 READY 대신 새 frame의 LOADING을 즉시 전달한다', () => {
+    const firstFrame = createFrame('/first-frame.png');
+    const nextFrame = createFrame('/next-frame.png');
+    const { rerender } = render(
+      <F2_StreamViewer
+        frame={firstFrame}
+        renderOverlay={({ frameStatus, imageSrc }) => (
+          <output data-testid="test-overlay-frame-context">
+            {frameStatus}:{imageSrc}
+          </output>
+        )}
+      />
+    );
+    completeImageLoad();
+
+    expect(screen.getByTestId('test-overlay-frame-context')).toHaveTextContent(
+      'READY:/first-frame.png'
+    );
+
+    rerender(
+      <F2_StreamViewer
+        frame={nextFrame}
+        renderOverlay={({ frameStatus, imageSrc }) => (
+          <output data-testid="test-overlay-frame-context">
+            {frameStatus}:{imageSrc}
+          </output>
+        )}
+      />
+    );
+
+    expect(screen.getByTestId('test-overlay-frame-context')).toHaveTextContent(
+      'LOADING:/next-frame.png'
+    );
+  });
 });

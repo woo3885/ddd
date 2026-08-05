@@ -13,6 +13,11 @@ const TARGET = {
   width: 180,
   height: 60
 };
+const FOCUS_EFFECT_PROPS = {
+  focusEffectsEnabled: true,
+  frameStatus: 'READY' as const,
+  magnifierImageSrc: '/mock-frame.svg'
+};
 
 function renderOverlay(
   overrides: Partial<ComponentProps<typeof F3_SmartOverlay>> = {}
@@ -295,5 +300,178 @@ describe('F3_SmartOverlay', () => {
 
     expect(setTimeoutSpy).not.toHaveBeenCalled();
     setTimeoutSpy.mockRestore();
+  });
+
+  it('READY Target에서 네 개의 dim panel을 표시한다', () => {
+    renderOverlay(FOCUS_EFFECT_PROPS);
+
+    [
+      'dim-target-highlight-top',
+      'dim-target-highlight-bottom',
+      'dim-target-highlight-left',
+      'dim-target-highlight-right'
+    ].forEach((selector) => {
+      expect(screen.getByTestId(selector)).toHaveAttribute('id', selector);
+    });
+  });
+
+  it('dim panel 좌표가 Target 내부를 비워 둔다', () => {
+    renderOverlay(FOCUS_EFFECT_PROPS);
+
+    expect(screen.getByTestId('dim-target-highlight-top')).toHaveStyle({
+      left: '0px',
+      top: '0px',
+      width: '1280px',
+      height: '310px'
+    });
+    expect(screen.getByTestId('dim-target-highlight-bottom')).toHaveStyle({
+      left: '0px',
+      top: '370px',
+      width: '1280px',
+      height: '350px'
+    });
+    expect(screen.getByTestId('dim-target-highlight-left')).toHaveStyle({
+      left: '0px',
+      top: '310px',
+      width: '420px',
+      height: '60px'
+    });
+    expect(screen.getByTestId('dim-target-highlight-right')).toHaveStyle({
+      left: '600px',
+      top: '310px',
+      width: '680px',
+      height: '60px'
+    });
+  });
+
+  it('dim panel은 장식 요소이며 입력을 가로채지 않는다', () => {
+    renderOverlay(FOCUS_EFFECT_PROPS);
+
+    const panel = screen.getByTestId('dim-target-highlight-top');
+    expect(panel).toHaveAttribute('aria-hidden', 'true');
+    expect(panel).toHaveStyle({ pointerEvents: 'none' });
+    expect(panel).toHaveClass('focus-dim-panel');
+  });
+
+  it('현재 imageSrc를 사용하는 magnifier를 표시한다', () => {
+    renderOverlay(FOCUS_EFFECT_PROPS);
+
+    const magnifier = screen.getByTestId('magnifier-target-highlight');
+    expect(magnifier).toHaveAttribute('id', 'magnifier-target-highlight');
+    expect(magnifier).toHaveAttribute('data-placement', 'right');
+    expect(magnifier.style.backgroundImage).toContain('/mock-frame.svg');
+    expect(magnifier).toHaveStyle({
+      left: '616px',
+      top: '283.75px',
+      width: '180px',
+      height: '112.5px',
+      backgroundSize: '2560px 1440px',
+      backgroundPosition: '-930px -623.75px',
+      backgroundRepeat: 'no-repeat',
+      pointerEvents: 'none'
+    });
+  });
+
+  it('magnifier는 Target과 겹치지 않는다', () => {
+    renderOverlay(FOCUS_EFFECT_PROPS);
+
+    const magnifier = screen.getByTestId('magnifier-target-highlight');
+    const left = Number.parseFloat(magnifier.style.left);
+    const top = Number.parseFloat(magnifier.style.top);
+    const width = Number.parseFloat(magnifier.style.width);
+    const height = Number.parseFloat(magnifier.style.height);
+    const overlaps =
+      left < TARGET.x + TARGET.width &&
+      left + width > TARGET.x &&
+      top < TARGET.y + TARGET.height &&
+      top + height > TARGET.y;
+
+    expect(overlaps).toBe(false);
+  });
+
+  it('안전한 공간이 없으면 magnifier만 숨긴다', () => {
+    renderOverlay({
+      ...FOCUS_EFFECT_PROPS,
+      displaySize: { width: 320, height: 180 }
+    });
+
+    expect(
+      screen.queryByTestId('magnifier-target-highlight')
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('dim-target-highlight-top')).toBeInTheDocument();
+    expect(screen.getByTestId('border-target-highlight')).toBeInTheDocument();
+    expect(screen.getByTestId('pointer-target-highlight')).toBeInTheDocument();
+  });
+
+  it('focus effect가 비활성화되면 기존 D9 요소만 표시한다', () => {
+    renderOverlay({
+      focusEffectsEnabled: false,
+      frameStatus: 'READY',
+      magnifierImageSrc: '/mock-frame.svg'
+    });
+
+    expect(
+      screen.queryByTestId('dim-target-highlight-top')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('magnifier-target-highlight')
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('border-target-highlight')).toBeInTheDocument();
+    expect(screen.getByTestId('pointer-target-highlight')).toBeInTheDocument();
+  });
+
+  it('imageSrc가 없으면 dim은 유지하고 magnifier만 숨긴다', () => {
+    renderOverlay({
+      focusEffectsEnabled: true,
+      frameStatus: 'READY'
+    });
+
+    expect(screen.getByTestId('dim-target-highlight-top')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('magnifier-target-highlight')
+    ).not.toBeInTheDocument();
+  });
+
+  it('READY 전에는 focus effect를 표시하지 않고 D9 요소를 유지한다', () => {
+    renderOverlay({
+      ...FOCUS_EFFECT_PROPS,
+      frameStatus: 'LOADING'
+    });
+
+    expect(
+      screen.queryByTestId('dim-target-highlight-top')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('magnifier-target-highlight')
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('border-target-highlight')).toBeInTheDocument();
+    expect(screen.getByTestId('pointer-target-highlight')).toBeInTheDocument();
+  });
+
+  it('신규 시각 요소는 접근성 트리와 키보드 포커스에서 제외한다', () => {
+    renderOverlay(FOCUS_EFFECT_PROPS);
+
+    const magnifier = screen.getByTestId('magnifier-target-highlight');
+    expect(magnifier).toHaveAttribute('aria-hidden', 'true');
+    expect(magnifier).not.toHaveAttribute('tabindex');
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  it('target 제거 시 dim과 magnifier를 포함한 overlay 전체를 제거한다', () => {
+    const { rerender } = renderOverlay(FOCUS_EFFECT_PROPS);
+
+    rerender(
+      <F3_SmartOverlay
+        target={null}
+        serverSize={SERVER_SIZE}
+        displaySize={DISPLAY_SIZE}
+        message=""
+        {...FOCUS_EFFECT_PROPS}
+      />
+    );
+
+    expect(
+      screen.queryByTestId('overlay-target-highlight')
+    ).not.toBeInTheDocument();
   });
 });

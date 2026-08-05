@@ -56,6 +56,14 @@ function notifyResize() {
   });
 }
 
+function completeImageLoad(
+  image = MockImage.instances[MockImage.instances.length - 1]
+) {
+  act(() => {
+    image?.onload?.(new Event('load'));
+  });
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   clearRect.mockClear();
@@ -105,12 +113,12 @@ describe('F2_StreamViewerTargetPreview', () => {
     );
   });
 
-  it('실제 WebSocket이 아닌 D9 Mock Preview임을 안내한다', () => {
+  it('실제 WebSocket이 아닌 D10 Mock Preview임을 안내한다', () => {
     render(<F2_StreamViewerTargetPreview />);
 
-    expect(screen.getByText('D9 Target Highlight Mock Preview')).toBeInTheDocument();
+    expect(screen.getByText('D10 Target 집중 안내 Mock Preview')).toBeInTheDocument();
     expect(
-      screen.getByText(/실제 WebSocket 연결 없이 Mock 프레임과 Target 좌표/)
+      screen.getByText(/실제 WebSocket 연결 없이 Target 외부 암전·블러와 확대 화면/)
     ).toBeInTheDocument();
   });
 
@@ -225,5 +233,75 @@ describe('F2_StreamViewerTargetPreview', () => {
       'aria-live',
       'polite'
     );
+  });
+
+  it('READY 상태에서 dim panel과 magnifier를 표시한다', () => {
+    render(<F2_StreamViewerTargetPreview />);
+
+    expect(
+      screen.queryByTestId('dim-target-highlight-top')
+    ).not.toBeInTheDocument();
+
+    completeImageLoad();
+
+    expect(screen.getByTestId('dim-target-highlight-top')).toBeInTheDocument();
+    expect(screen.getByTestId('dim-target-highlight-right')).toBeInTheDocument();
+    expect(screen.getByTestId('magnifier-target-highlight')).toBeInTheDocument();
+    expect(screen.getByTestId('border-target-highlight')).toBeInTheDocument();
+    expect(screen.getByTestId('pointer-target-highlight')).toBeInTheDocument();
+  });
+
+  it('frame 교체 시 focus effect를 제거하고 새 frame READY 후 복원한다', () => {
+    render(<F2_StreamViewerTargetPreview />);
+    completeImageLoad(MockImage.instances[0]);
+
+    expect(
+      screen.getByTestId('magnifier-target-highlight').style.backgroundImage
+    ).toContain(DEMO_VIEWER_FRAMES[0].imageSrc);
+
+    act(() => {
+      vi.advanceTimersByTime(MOCK_VIEWER_FRAME_INTERVAL_MS);
+    });
+
+    expect(
+      screen.queryByTestId('dim-target-highlight-top')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('magnifier-target-highlight')
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('border-target-highlight')).toBeInTheDocument();
+
+    completeImageLoad(MockImage.instances[1]);
+
+    const magnifier = screen.getByTestId('magnifier-target-highlight');
+    expect(magnifier.style.backgroundImage).toContain(
+      DEMO_VIEWER_FRAMES[1].imageSrc
+    );
+    expect(magnifier.style.backgroundImage).not.toContain(
+      DEMO_VIEWER_FRAMES[0].imageSrc
+    );
+  });
+
+  it('Canvas resize 후 dim panel과 magnifier를 다시 계산한다', () => {
+    render(<F2_StreamViewerTargetPreview />);
+    completeImageLoad();
+
+    canvasDisplaySize = { width: 960, height: 540 };
+    notifyResize();
+
+    expect(screen.getByTestId('dim-target-highlight-top')).toHaveStyle({
+      width: '960px',
+      height: '232.5px'
+    });
+    expect(screen.getByTestId('dim-target-highlight-right')).toHaveStyle({
+      left: '450px',
+      width: '510px'
+    });
+    expect(screen.getByTestId('magnifier-target-highlight')).toHaveStyle({
+      left: '466px',
+      top: '198.75px',
+      backgroundSize: '1920px 1080px',
+      backgroundPosition: '-675px -453.75px'
+    });
   });
 });

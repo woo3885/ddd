@@ -41,25 +41,28 @@ export default function F2_StreamViewerTargetPreview() {
       id="viewer-target-highlight-preview"
       data-testid="viewer-target-highlight-preview"
       className="space-y-4"
-      aria-label="D9 Target Highlight Mock Preview"
+      aria-label="D10 Target 집중 안내 Mock Preview"
     >
       <NoticeBox
         variant="info"
-        title="D9 Target Highlight Mock Preview"
+        title="D10 Target 집중 안내 Mock Preview"
         announce="off"
         role="note"
       >
-        실제 WebSocket 연결 없이 Mock 프레임과 Target 좌표를 표시합니다.
+        실제 WebSocket 연결 없이 Target 외부 암전·블러와 확대 화면을 표시합니다.
       </NoticeBox>
 
       <F2_StreamViewer
         frame={currentFrame}
-        renderOverlay={({ displaySize }) => (
+        renderOverlay={({ displaySize, frameStatus, imageSrc }) => (
           <F3_SmartOverlay
             target={MOCK_TARGET}
             serverSize={MOCK_SERVER_SIZE}
             displaySize={displaySize}
             message={MOCK_TARGET_MESSAGE}
+            focusEffectsEnabled={frameStatus === 'READY'}
+            magnifierImageSrc={imageSrc}
+            frameStatus={frameStatus}
           />
         )}
       />
