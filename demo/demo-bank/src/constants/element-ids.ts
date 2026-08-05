@@ -69,7 +69,24 @@ export const ELEMENT_IDS = {
     'status-confirmed-transfer-recipient',
   BUTTON_TRANSFER_RECIPIENT_CONFIRM:
     'btn-transfer-recipient-confirm',
+  BUTTON_TRANSFER_AMOUNT_START: 'btn-transfer-amount-start',
   BUTTON_TRANSFER_ACCOUNT_BACK: 'btn-transfer-account-back',
+  PAGE_TRANSFER_AMOUNT: 'page-transfer-amount',
+  SUMMARY_TRANSFER_AMOUNT_SOURCE_ACCOUNT:
+    'summary-transfer-amount-source-account',
+  SUMMARY_TRANSFER_AMOUNT_BALANCE:
+    'summary-transfer-amount-balance',
+  SUMMARY_TRANSFER_AMOUNT_RECIPIENT:
+    'summary-transfer-amount-recipient',
+  INPUT_TRANSFER_AMOUNT: 'input-transfer-amount',
+  SUMMARY_TRANSFER_AMOUNT_FORMATTED:
+    'summary-transfer-amount-formatted',
+  STATUS_TRANSFER_AMOUNT_VALIDATION:
+    'status-transfer-amount-validation',
+  STATUS_CONFIRMED_TRANSFER_AMOUNT:
+    'status-confirmed-transfer-amount',
+  BUTTON_TRANSFER_AMOUNT_CONFIRM: 'btn-transfer-amount-confirm',
+  BUTTON_TRANSFER_RECIPIENT_BACK: 'btn-transfer-recipient-back',
   STATUS_HOME_STATIC: 'status-home-static',
   STATUS_DEPOSIT_STATIC: 'status-deposit-static',
   STATUS_TRANSFER_STATIC: 'status-transfer-static',

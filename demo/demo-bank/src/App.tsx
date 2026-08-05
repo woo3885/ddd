@@ -2,11 +2,13 @@ import {
   createDepositConditionsPath,
   createDepositProductDetailPath,
   createDepositTermsPath,
+  createTransferAmountPath,
   createTransferRecipientsPath,
   normalizePathname,
   ROUTES
 } from './constants/routes';
 import { demoAccounts, depositProducts } from './data/demo-data';
+import { transferRecipients } from './data/transfer-recipients';
 import DepositAmountPage from './pages/DepositAmountPage';
 import DepositProductDetailPage from './pages/DepositProductDetailPage';
 import DepositProductsPage from './pages/DepositProductsPage';
@@ -14,6 +16,7 @@ import DepositTermsPage from './pages/DepositTermsPage';
 import HomePage from './pages/HomePage';
 import NotFoundPage from './pages/NotFoundPage';
 import TransferAccountsPage from './pages/TransferAccountsPage';
+import TransferAmountPage from './pages/TransferAmountPage';
 import TransferRecipientsPage from './pages/TransferRecipientsPage';
 
 export default function App() {
@@ -33,6 +36,23 @@ export default function App() {
     (account) =>
       createTransferRecipientsPath(account.id) === currentPath
   );
+  const transferAmountContext = demoAccounts
+    .flatMap((account) =>
+      transferRecipients.map((recipient) => ({ account, recipient }))
+    )
+    .find(
+      ({ account, recipient }) =>
+        createTransferAmountPath(account.id, recipient.id) === currentPath
+    );
+
+  if (transferAmountContext) {
+    return (
+      <TransferAmountPage
+        account={transferAmountContext.account}
+        recipient={transferAmountContext.recipient}
+      />
+    );
+  }
 
   if (transferAccount) {
     return <TransferRecipientsPage account={transferAccount} />;

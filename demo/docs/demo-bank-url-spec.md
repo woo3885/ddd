@@ -24,7 +24,7 @@
 | `/deposit/completed` | `DEPOSIT_COMPLETED` | 예금 가입 시연 완료 | 불가: 최종 승인 결과 필요 | 아니오 | D6 이후 |
 | `/transfer/accounts` | `TRANSFER_ACCOUNT_SELECTION` | 출금 계좌 후보 선택 | 허용 | 예 | D3 |
 | `/transfer/recipients` | `TRANSFER_RECIPIENT_SELECTION` | 수취인 후보 선택의 개념 경로 | D9 구현은 유효한 Mock `accountId` 필요 | 아니오 | D9 |
-| `/transfer/amount` | `TRANSFER_AMOUNT` | 송금 금액 입력 | 불가: 수취인 선택 필요 | 아니오 | D6 이후 |
+| `/transfer/amount` | `TRANSFER_AMOUNT` | 송금 금액 입력의 개념 경로 | D10 구현은 유효한 Mock `accountId`와 `recipientId` 필요 | 아니오 | D10 |
 | `/transfer/secure/password` | `TRANSFER_PASSWORD` | 이체용 계좌 비밀번호 직접 입력 | 불가: 송금 정보 필요 | 아니오 | D6 이후 |
 | `/transfer/secure/otp` | `TRANSFER_OTP` | OTP 직접 입력 | 불가: 비밀번호 입력 완료 필요 | 아니오 | D6 이후 |
 | `/transfer/confirmation` | `TRANSFER_CONFIRMATION` | 송금 내용 최종 확인 | 불가: OTP 입력 완료 필요 | 아니오 | D6 이후 |
@@ -96,3 +96,25 @@ D1의 `/transfer/recipients`는 수취인 후보 선택을 나타내는 개념 �
 표시하지 않는다. `/transfer/recipients`, 잘못된 accountId와 예상하지 않은
 추가 segment는 NotFound 화면으로 처리한다. 정상 URL의 trailing slash는
 기존 pathname 정규화 규칙으로 허용한다.
+
+## 8. D10 이체 금액 경로 구체화
+
+D1의 `/transfer/amount`는 이체 금액 입력 단계를 나타내는 개념 경로로
+유지한다. D10 구현에서는 전역 상태나 브라우저 저장소 없이 출금 계좌와
+수취인 문맥을 복원하기 위해 공개 Mock ID 두 개를 pathname에 추가한다.
+
+- 구현 형식: `/transfer/amount/:accountId/:recipientId`
+- `/transfer/amount/living-expense/hong-gildong`
+- `/transfer/amount/living-expense/demo-saved`
+- `/transfer/amount/savings/hong-gildong`
+- `/transfer/amount/savings/demo-saved`
+
+pathname에는 공개 Mock accountId와 recipientId만 포함한다. 이체 금액,
+잔액, 전체 또는 마스킹 계좌번호와 수취인 금융정보는 포함하지 않는다.
+query parameter, `localStorage`와 `sessionStorage`도 사용하지 않는다.
+
+알려진 두 ID의 조합은 직접 접근할 수 있지만, 화면은 URL에서 Mock 문맥을
+확인했다고만 표시하고 이전 화면에서 사용자가 선택·확인을 완료했다고
+주장하지 않는다. base 경로만 있는 경우, ID가 누락되거나 알려지지 않은
+경우, 추가 segment와 canonical 경로가 아닌 encoding은 NotFound로
+처리한다. 정상 URL의 trailing slash는 기존 pathname 정규화로 허용한다.

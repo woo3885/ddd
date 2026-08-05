@@ -119,14 +119,30 @@ stateDiagram-v2
 | `DEPOSIT_CONFIRMATION` | 예금 최종 확인 | 가입 내용 검토와 최종 승인 | 상품, 기간, 금액, 약관 결과 | 최종 승인 체크 | 이전, 수정, 최종 승인, 취소 | `DEPOSIT_PASSWORD`, 수정 대상 화면, `DEPOSIT_COMPLETED`, `HOME` | 승인 전 가입 완료 금지 |
 | `DEPOSIT_COMPLETED` | 예금 가입 완료 | 시연 결과 확인 | 처리 결과 요약 | 없음 | 처음으로 | `HOME` | 비밀번호와 계좌번호 원문 표시 금지 |
 | `TRANSFER_ACCOUNT_SELECTION` | 출금 계좌 선택 | 출금 계좌 후보 확인 | 계좌 별칭, 마스킹 번호, 잔액 예시 | 계좌 직접 선택 | 계좌 선택, 선택 후 다음, 이전, 취소 | `TRANSFER_RECIPIENT_SELECTION`, `HOME` | 계좌번호는 마스킹된 값만 표시 |
-| `TRANSFER_RECIPIENT_SELECTION` | 수취인 선택 | 송금 대상 확인 | Mock 수취인 이름, 관계, 은행, 마스킹 정보 | 수취인 직접 단일 선택 | 이전, 선택 확인, 취소 | `TRANSFER_ACCOUNT_SELECTION`, 후속 `TRANSFER_AMOUNT`, `HOME` | AI 자동 선택 및 실제 고객정보 사용 금지 |
-| `TRANSFER_AMOUNT` | 송금 금액 | 송금 금액 입력과 검토 | 출금 계좌 별칭, 수취인, 금액 안내 | 송금 금액 | 이전, 다음, 취소 | `TRANSFER_RECIPIENT_SELECTION`, `TRANSFER_PASSWORD`, `HOME` | 금액 오류와 한도 안내 필요 |
+| `TRANSFER_RECIPIENT_SELECTION` | 수취인 선택 | 송금 대상 확인 | Mock 수취인 이름, 관계, 은행, 마스킹 정보 | 수취인 직접 단일 선택 | 이전, 선택 확인, 금액 입력 시작, 취소 | `TRANSFER_ACCOUNT_SELECTION`, `TRANSFER_AMOUNT`, `HOME` | AI 자동 선택 및 실제 고객정보 사용 금지 |
+| `TRANSFER_AMOUNT` | 송금 금액 | 송금 금액 입력과 로컬 검토 | 출금 계좌 별칭, 수취인, Mock 잔액, 금액 안내 | 송금 금액 | 이전, 금액 확인, 취소 | `TRANSFER_RECIPIENT_SELECTION`, 후속 `TRANSFER_PASSWORD`, `HOME` | D10은 잔액 초과만 검증하며 실제 송금 금지 |
 | `TRANSFER_PASSWORD` | 이체 비밀번호 입력 | 사용자 본인 확인 입력 | 보호 모드, AI·캡처 중단 상태 | 계좌 비밀번호 직접 입력 | 이전, 입력 완료, 취소 | `TRANSFER_AMOUNT`, `TRANSFER_OTP`, `HOME` | 실제 값의 상태·DOM 속성·로그 복사 금지 |
 | `TRANSFER_OTP` | OTP 입력 | 추가 본인 확인 입력 | 보호 모드, AI·캡처 중단 상태 | OTP 직접 입력 | 이전, 입력 완료, 취소 | `TRANSFER_PASSWORD`, `TRANSFER_CONFIRMATION`, `HOME` | OTP 원문 저장·출력 금지 |
 | `TRANSFER_CONFIRMATION` | 송금 최종 확인 | 송금 내용 검토와 최종 승인 | 거래 유형, 계좌 별칭, 수취인, 금액 | 최종 승인 체크 | 이전, 수정, 최종 승인, 취소 | `TRANSFER_OTP`, 수정 대상 화면, `TRANSFER_COMPLETED`, `HOME` | 승인 전 송금 완료 금지 |
 | `TRANSFER_COMPLETED` | 송금 완료 | 시연 결과 확인 | 처리 결과 요약 | 없음 | 처음으로 | `HOME` | OTP와 계좌번호 원문 표시 금지 |
 
-## 8. D1 완료 체크리스트
+## 8. D10 이체 금액 Mock 경계
+
+D10은 `TRANSFER_RECIPIENT_SELECTION`에서 수취인을 선택한 뒤 기존 확인
+버튼으로 로컬 확인을 완료해야 별도 금액 입력 시작 버튼이 활성화되는
+Gate를 구현한다. 수취인을 바꾸면 확인 상태와 Gate를 함께 초기화한다.
+
+`TRANSFER_AMOUNT`에서는 URL로 확인한 공개 Mock 계좌·수취인 문맥과 계좌별
+Mock 잔액을 표시한다. 사용자가 금액을 직접 입력하며 형식, 0 이하,
+JavaScript 안전 정수와 잔액 초과를 검증한다. 수수료, 일일 한도와 1회
+한도는 임의로 만들지 않는다.
+
+유효한 금액의 확인은 로컬 안내만 갱신한다. 금액은 pathname, query,
+브라우저 저장소, API와 WebSocket에 전달하지 않으며 잔액 차감이나 실제
+송금을 실행하지 않는다. `TRANSFER_PASSWORD`, `TRANSFER_OTP`, 최종 승인과
+완료는 후속 범위다.
+
+## 9. D1 완료 체크리스트
 
 - [x] 예금 전체 화면 흐름 존재
 - [x] 계좌이체 전체 화면 흐름 존재

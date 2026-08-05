@@ -3,6 +3,7 @@ import { useState } from 'react';
 import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
+  createTransferAmountPath,
   createTransferRecipientsPath,
   ROUTES
 } from '../constants/routes';
@@ -22,9 +23,15 @@ export default function TransferRecipientsPage({
   const [confirmationMessage, setConfirmationMessage] = useState<
     string | null
   >(null);
+  const [confirmedRecipientId, setConfirmedRecipientId] = useState<
+    string | null
+  >(null);
   const selectedRecipient = transferRecipients.find(
     (recipient) => recipient.id === selectedRecipientId
   );
+  const isRecipientConfirmed =
+    selectedRecipientId !== null &&
+    confirmedRecipientId === selectedRecipientId;
 
   const handleRecipientSelect = (recipientId: string) => {
     if (recipientId === selectedRecipientId) {
@@ -33,6 +40,7 @@ export default function TransferRecipientsPage({
 
     setSelectedRecipientId(recipientId);
     setConfirmationMessage(null);
+    setConfirmedRecipientId(null);
   };
 
   const handleConfirm = () => {
@@ -40,8 +48,19 @@ export default function TransferRecipientsPage({
       return;
     }
 
+    setConfirmedRecipientId(selectedRecipient.id);
     setConfirmationMessage(
       `${selectedRecipient.displayName} 수취인 선택을 확인했습니다. 실제 송금은 진행되지 않으며 이체 금액 입력은 후속 단계입니다.`
+    );
+  };
+
+  const handleAmountStart = () => {
+    if (!isRecipientConfirmed || !confirmedRecipientId) {
+      return;
+    }
+
+    window.location.assign(
+      createTransferAmountPath(account.id, confirmedRecipientId)
     );
   };
 
@@ -172,6 +191,18 @@ export default function TransferRecipientsPage({
           onClick={handleConfirm}
         >
           수취인 선택 확인
+        </button>
+        <button
+          {...elementIdentity(ELEMENT_IDS.BUTTON_TRANSFER_AMOUNT_START)}
+          type="button"
+          className="primary-button"
+          disabled={!isRecipientConfirmed}
+          aria-describedby={
+            ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_RECIPIENT
+          }
+          onClick={handleAmountStart}
+        >
+          이체 금액 입력하기
         </button>
       </div>
 
