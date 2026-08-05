@@ -28,6 +28,29 @@ class MockImage {
   }
 }
 
+interface MockResizeObserverRecord {
+  callback: ResizeObserverCallback;
+  observe: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
+}
+
+const resizeObserverRecords: MockResizeObserverRecord[] = [];
+let canvasDisplaySize = { width: 640, height: 360 };
+
+class MockResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+
+  constructor(callback: ResizeObserverCallback) {
+    resizeObserverRecords.push({
+      callback,
+      observe: this.observe,
+      disconnect: this.disconnect
+    });
+  }
+}
+
 function createFrame(
   imageSrc = '/frame-one.png',
   width = VIEWER_FRAME_WIDTH,
@@ -57,9 +80,29 @@ beforeEach(() => {
   clearRect.mockClear();
   drawImage.mockClear();
   MockImage.instances = [];
+  resizeObserverRecords.length = 0;
+  canvasDisplaySize = { width: 640, height: 360 };
   vi.stubGlobal('Image', MockImage);
+  vi.stubGlobal('ResizeObserver', MockResizeObserver);
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
     canvasContext
+  );
+  vi.spyOn(
+    HTMLCanvasElement.prototype,
+    'getBoundingClientRect'
+  ).mockImplementation(
+    () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: canvasDisplaySize.width,
+        bottom: canvasDisplaySize.height,
+        width: canvasDisplaySize.width,
+        height: canvasDisplaySize.height,
+        toJSON: () => undefined
+      }) as DOMRect
   );
 });
 
@@ -69,6 +112,86 @@ afterEach(() => {
 });
 
 describe('F2_StreamViewer', () => {
+  it('renderOverlay가 없으면 기존 Canvas만 렌더링한다', () => {
+    render(<F2_StreamViewer />);
+
+    expect(screen.getByTestId('canvas-remote-screen')).toBeInTheDocument();
+    expect(screen.queryByTestId('test-viewer-overlay')).not.toBeInTheDocument();
+  });
+
+  it('renderOverlay 결과를 Canvas와 같은 relative stage에 렌더링한다', () => {
+    render(
+      <F2_StreamViewer
+        renderOverlay={() => (
+          <div data-testid="test-viewer-overlay">overlay</div>
+        )}
+      />
+    );
+    const canvas = screen.getByTestId('canvas-remote-screen');
+    const overlay = screen.getByTestId('test-viewer-overlay');
+
+    expect(canvas.parentElement).toHaveClass('relative');
+    expect(canvas.parentElement).toContainElement(overlay);
+  });
+
+  it('Canvas 실제 표시 크기만 renderOverlay에 전달한다', () => {
+    render(
+      <F2_StreamViewer
+        renderOverlay={({ displaySize }) => (
+          <output data-testid="test-viewer-overlay-size">
+            {displaySize.width}×{displaySize.height}
+          </output>
+        )}
+      />
+    );
+
+    expect(screen.getByTestId('test-viewer-overlay-size')).toHaveTextContent(
+      '640×360'
+    );
+    expect(resizeObserverRecords[0].observe).toHaveBeenCalledWith(
+      screen.getByTestId('canvas-remote-screen')
+    );
+  });
+
+  it('Canvas resize 후 renderOverlay displaySize를 갱신한다', () => {
+    render(
+      <F2_StreamViewer
+        renderOverlay={({ displaySize }) => (
+          <output data-testid="test-viewer-overlay-size">
+            {displaySize.width}×{displaySize.height}
+          </output>
+        )}
+      />
+    );
+
+    canvasDisplaySize = { width: 960, height: 540 };
+    act(() => {
+      resizeObserverRecords[0].callback([], {} as ResizeObserver);
+    });
+
+    expect(screen.getByTestId('test-viewer-overlay-size')).toHaveTextContent(
+      '960×540'
+    );
+  });
+
+  it('Canvas가 0×0이면 renderOverlay에도 0×0을 전달한다', () => {
+    canvasDisplaySize = { width: 0, height: 0 };
+
+    render(
+      <F2_StreamViewer
+        renderOverlay={({ displaySize }) => (
+          <output data-testid="test-viewer-overlay-size">
+            {displaySize.width}×{displaySize.height}
+          </output>
+        )}
+      />
+    );
+
+    expect(screen.getByTestId('test-viewer-overlay-size')).toHaveTextContent(
+      '0×0'
+    );
+  });
+
   it('Canvas width를 기준 프레임 너비로 설정한다', () => {
     render(<F2_StreamViewer />);
 
