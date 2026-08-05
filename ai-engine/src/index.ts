@@ -9,6 +9,13 @@ import { selectNextAction } from "./actions/nextAction.selector.js";
 import { createNextActionPrompt } from "./prompts/nextActionPrompt.js";
 import { mapDecisionToAIResponse, stringifyAIResponse } from "./output/aiResponse.mapper.js";
 import { generateGuidanceMessage } from "./messages/guidanceMessage.generator.js";
+import {
+  completeCurrentStep,
+  completeWorkflowCondition,
+  createWorkflowContext,
+  serializeWorkflowContext,
+  startWorkflowStep,
+} from "./workflow/workflowContext.manager.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -363,3 +370,89 @@ for (const testCase of guidanceTestCases) {
   console.log(`[글자 수] ${result.characterCount}`);
   console.log();
 }
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - WorkflowContext 테스트");
+console.log("========================================\n");
+
+let workflowContext = createWorkflowContext({
+  workflowId: "workflow-test-001",
+  sessionId: "session-test-001",
+
+  originalGoal:
+    "금리가 높은 예금 상품을 찾고 싶어요",
+
+  currentGoal:
+    "상품명 입력칸에 검색어 입력",
+
+  completionConditionDescriptions: [
+    "예금 상품 목록이 화면에 표시됨",
+  ],
+});
+
+console.log("[1. 워크플로 생성]");
+console.log(serializeWorkflowContext(workflowContext));
+console.log();
+
+workflowContext = startWorkflowStep(
+  workflowContext,
+  {
+    stepId: "step-1",
+    description:
+      "상품명 입력칸에 검색어 입력",
+    action: "TYPE",
+    targetElementId: "el-2",
+  },
+);
+
+console.log("[2. 첫 번째 단계 시작]");
+console.log(serializeWorkflowContext(workflowContext));
+console.log();
+
+workflowContext = completeCurrentStep(
+  workflowContext,
+  "검색 버튼 누르기",
+);
+
+console.log("[3. 첫 번째 단계 완료]");
+console.log(serializeWorkflowContext(workflowContext));
+console.log();
+
+workflowContext = startWorkflowStep(
+  workflowContext,
+  {
+    stepId: "step-2",
+    description: "검색 버튼 누르기",
+    action: "CLICK",
+    targetElementId: "el-3",
+  },
+);
+
+console.log("[4. 두 번째 단계 시작]");
+console.log(serializeWorkflowContext(workflowContext));
+console.log();
+
+workflowContext = completeCurrentStep(
+  workflowContext,
+  "예금 상품 목록 확인",
+);
+
+workflowContext =
+  completeWorkflowCondition(
+    workflowContext,
+    "condition-1",
+  );
+
+console.log("[5. 완료 조건 충족]");
+console.log(serializeWorkflowContext(workflowContext));
+console.log();
+
+console.log(
+  `[최종 상태] ${workflowContext.status}`,
+);
+
+console.log(
+  `[완료한 단계 수] ${
+    workflowContext.stepHistory.length
+  }`,
+);
