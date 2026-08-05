@@ -28,6 +28,8 @@ export interface F2StreamViewerProps {
 
 export interface ViewerOverlayRenderContext {
   displaySize: ViewerSize;
+  frameStatus: ViewerFrameStatus;
+  imageSrc?: string;
 }
 
 const STATUS_LABELS: Record<ViewerFrameStatus, string> = {
@@ -55,6 +57,7 @@ export default function F2_StreamViewer({
   const [frameStatus, setFrameStatus] = useState<ViewerFrameStatus>(
     frame ? 'LOADING' : 'EMPTY'
   );
+  const [frameStatusSource, setFrameStatusSource] = useState(frame);
   const [statusMessage, setStatusMessage] = useState(
     frame ? STATUS_LABELS.LOADING : STATUS_LABELS.EMPTY
   );
@@ -71,6 +74,8 @@ export default function F2_StreamViewer({
   useEffect(() => {
     let cancelled = false;
     const canvas = canvasRef.current;
+
+    setFrameStatusSource(frame);
 
     if (!frame) {
       setFrameStatus('EMPTY');
@@ -149,6 +154,13 @@ export default function F2_StreamViewer({
     };
   }, [frame]);
 
+  const overlayFrameStatus: ViewerFrameStatus =
+    frameStatusSource === frame
+      ? frameStatus
+      : frame
+        ? 'LOADING'
+        : 'EMPTY';
+
   return (
     <Panel
       id="viewer-remote-screen"
@@ -173,7 +185,11 @@ export default function F2_StreamViewer({
           >
             Canvas를 지원하지 않는 환경에서는 원격 화면을 표시할 수 없습니다.
           </canvas>
-          {renderOverlay?.({ displaySize })}
+          {renderOverlay?.({
+            displaySize,
+            frameStatus: overlayFrameStatus,
+            imageSrc: frame?.imageSrc
+          })}
         </div>
       </div>
 
