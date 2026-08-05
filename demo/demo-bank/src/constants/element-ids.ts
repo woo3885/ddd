@@ -54,6 +54,22 @@ export const ELEMENT_IDS = {
   BUTTON_SELECT_ACCOUNT_LIVING_EXPENSE:
     'btn-select-account-living-expense',
   BUTTON_SELECT_ACCOUNT_SAVINGS: 'btn-select-account-savings',
+  BUTTON_TRANSFER_ACCOUNT_NEXT: 'btn-transfer-account-next',
+  PAGE_TRANSFER_RECIPIENTS: 'page-transfer-recipients',
+  SUMMARY_TRANSFER_SOURCE_ACCOUNT: 'summary-transfer-source-account',
+  RECIPIENT_HONG_GILDONG: 'recipient-hong-gildong',
+  BUTTON_SELECT_RECIPIENT_HONG_GILDONG:
+    'btn-select-recipient-hong-gildong',
+  RECIPIENT_DEMO_SAVED: 'recipient-demo-saved',
+  BUTTON_SELECT_RECIPIENT_DEMO_SAVED:
+    'btn-select-recipient-demo-saved',
+  STATUS_SELECTED_TRANSFER_RECIPIENT:
+    'status-selected-transfer-recipient',
+  STATUS_CONFIRMED_TRANSFER_RECIPIENT:
+    'status-confirmed-transfer-recipient',
+  BUTTON_TRANSFER_RECIPIENT_CONFIRM:
+    'btn-transfer-recipient-confirm',
+  BUTTON_TRANSFER_ACCOUNT_BACK: 'btn-transfer-account-back',
   STATUS_HOME_STATIC: 'status-home-static',
   STATUS_DEPOSIT_STATIC: 'status-deposit-static',
   STATUS_TRANSFER_STATIC: 'status-transfer-static',

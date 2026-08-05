@@ -23,7 +23,7 @@
 | `/deposit/confirmation` | `DEPOSIT_CONFIRMATION` | 예금 가입 내용 최종 확인 | 불가: 보안 입력 완료 필요 | 아니오 | D6 이후 |
 | `/deposit/completed` | `DEPOSIT_COMPLETED` | 예금 가입 시연 완료 | 불가: 최종 승인 결과 필요 | 아니오 | D6 이후 |
 | `/transfer/accounts` | `TRANSFER_ACCOUNT_SELECTION` | 출금 계좌 후보 선택 | 허용 | 예 | D3 |
-| `/transfer/recipients` | `TRANSFER_RECIPIENT_SELECTION` | 수취인 후보 선택 | 불가: 출금 계좌 선택 필요 | 아니오 | D6 이후 |
+| `/transfer/recipients` | `TRANSFER_RECIPIENT_SELECTION` | 수취인 후보 선택의 개념 경로 | D9 구현은 유효한 Mock `accountId` 필요 | 아니오 | D9 |
 | `/transfer/amount` | `TRANSFER_AMOUNT` | 송금 금액 입력 | 불가: 수취인 선택 필요 | 아니오 | D6 이후 |
 | `/transfer/secure/password` | `TRANSFER_PASSWORD` | 이체용 계좌 비밀번호 직접 입력 | 불가: 송금 정보 필요 | 아니오 | D6 이후 |
 | `/transfer/secure/otp` | `TRANSFER_OTP` | OTP 직접 입력 | 불가: 비밀번호 입력 완료 필요 | 아니오 | D6 이후 |
@@ -79,3 +79,20 @@ D1의 `/deposit/terms`는 예금 약관 선택 단계를 나타내는 개념 경
 화면은 앞 단계 금액 입력이 완료되었다고 표시하지 않으며 금액을 표시하지
 않는다. `/deposit/terms`, 잘못된 상품 ID와 예상하지 않은 추가 segment는
 NotFound 화면으로 처리한다.
+
+## 7. D9 수취인 선택 경로 구체화
+
+D1의 `/transfer/recipients`는 수취인 후보 선택을 나타내는 개념 경로로
+유지한다. D9 구현에서는 별도 전역 상태나 브라우저 저장소 없이 출금 계좌
+문맥을 전달하기 위해 공개 Mock accountId를 pathname에 추가한다.
+
+- `/transfer/recipients/living-expense`
+- `/transfer/recipients/savings`
+- 구현 형식: `/transfer/recipients/:accountId`
+
+전체 계좌번호와 마스킹 계좌번호도 URL에 포함하지 않는다. query parameter,
+`localStorage`, `sessionStorage`를 사용하지 않는다. 알려진 Mock accountId는
+직접 접근할 수 있지만 이전 계좌 화면에서 사용자가 실제로 선택을 완료했다고
+표시하지 않는다. `/transfer/recipients`, 잘못된 accountId와 예상하지 않은
+추가 segment는 NotFound 화면으로 처리한다. 정상 URL의 trailing slash는
+기존 pathname 정규화 규칙으로 허용한다.

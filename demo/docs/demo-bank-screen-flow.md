@@ -65,7 +65,7 @@ stateDiagram-v2
     HOME --> TRANSFER_ACCOUNT_SELECTION: 계좌이체 시작
     TRANSFER_ACCOUNT_SELECTION --> HOME: 이전 또는 취소
     TRANSFER_ACCOUNT_SELECTION --> TRANSFER_ACCOUNT_SELECTION: 출금 계좌 수정
-    TRANSFER_ACCOUNT_SELECTION --> TRANSFER_RECIPIENT_SELECTION: 계좌 직접 선택
+    TRANSFER_ACCOUNT_SELECTION --> TRANSFER_RECIPIENT_SELECTION: 계좌 직접 선택 후 다음
     TRANSFER_RECIPIENT_SELECTION --> TRANSFER_ACCOUNT_SELECTION: 이전 또는 계좌 수정
     TRANSFER_RECIPIENT_SELECTION --> TRANSFER_RECIPIENT_SELECTION: 수취인 수정
     TRANSFER_RECIPIENT_SELECTION --> HOME: 취소
@@ -118,8 +118,8 @@ stateDiagram-v2
 | `DEPOSIT_PASSWORD` | 예금 비밀번호 입력 | 사용자 본인 확인 입력 | 보호 모드, AI·캡처 중단 상태 | 계좌 비밀번호 직접 입력 | 이전, 입력 완료, 취소 | `DEPOSIT_TERMS`, `DEPOSIT_CONFIRMATION`, `HOME` | 실제 값의 상태·DOM 속성·로그 복사 금지 |
 | `DEPOSIT_CONFIRMATION` | 예금 최종 확인 | 가입 내용 검토와 최종 승인 | 상품, 기간, 금액, 약관 결과 | 최종 승인 체크 | 이전, 수정, 최종 승인, 취소 | `DEPOSIT_PASSWORD`, 수정 대상 화면, `DEPOSIT_COMPLETED`, `HOME` | 승인 전 가입 완료 금지 |
 | `DEPOSIT_COMPLETED` | 예금 가입 완료 | 시연 결과 확인 | 처리 결과 요약 | 없음 | 처음으로 | `HOME` | 비밀번호와 계좌번호 원문 표시 금지 |
-| `TRANSFER_ACCOUNT_SELECTION` | 출금 계좌 선택 | 출금 계좌 후보 확인 | 계좌 별칭, 마스킹 번호, 잔액 예시 | 계좌 직접 선택 | 계좌 선택, 이전, 취소 | `TRANSFER_RECIPIENT_SELECTION`, `HOME` | 계좌번호는 마스킹된 값만 표시 |
-| `TRANSFER_RECIPIENT_SELECTION` | 수취인 선택 | 송금 대상 확인 | 수취인 이름, 등록 정보 | 수취인 직접 선택 | 이전, 다음, 취소 | `TRANSFER_ACCOUNT_SELECTION`, `TRANSFER_AMOUNT`, `HOME` | AI 자동 선택 금지 |
+| `TRANSFER_ACCOUNT_SELECTION` | 출금 계좌 선택 | 출금 계좌 후보 확인 | 계좌 별칭, 마스킹 번호, 잔액 예시 | 계좌 직접 선택 | 계좌 선택, 선택 후 다음, 이전, 취소 | `TRANSFER_RECIPIENT_SELECTION`, `HOME` | 계좌번호는 마스킹된 값만 표시 |
+| `TRANSFER_RECIPIENT_SELECTION` | 수취인 선택 | 송금 대상 확인 | Mock 수취인 이름, 관계, 은행, 마스킹 정보 | 수취인 직접 단일 선택 | 이전, 선택 확인, 취소 | `TRANSFER_ACCOUNT_SELECTION`, 후속 `TRANSFER_AMOUNT`, `HOME` | AI 자동 선택 및 실제 고객정보 사용 금지 |
 | `TRANSFER_AMOUNT` | 송금 금액 | 송금 금액 입력과 검토 | 출금 계좌 별칭, 수취인, 금액 안내 | 송금 금액 | 이전, 다음, 취소 | `TRANSFER_RECIPIENT_SELECTION`, `TRANSFER_PASSWORD`, `HOME` | 금액 오류와 한도 안내 필요 |
 | `TRANSFER_PASSWORD` | 이체 비밀번호 입력 | 사용자 본인 확인 입력 | 보호 모드, AI·캡처 중단 상태 | 계좌 비밀번호 직접 입력 | 이전, 입력 완료, 취소 | `TRANSFER_AMOUNT`, `TRANSFER_OTP`, `HOME` | 실제 값의 상태·DOM 속성·로그 복사 금지 |
 | `TRANSFER_OTP` | OTP 입력 | 추가 본인 확인 입력 | 보호 모드, AI·캡처 중단 상태 | OTP 직접 입력 | 이전, 입력 완료, 취소 | `TRANSFER_PASSWORD`, `TRANSFER_CONFIRMATION`, `HOME` | OTP 원문 저장·출력 금지 |

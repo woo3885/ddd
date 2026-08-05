@@ -2,7 +2,10 @@ import { useState } from 'react';
 
 import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
-import { ROUTES } from '../constants/routes';
+import {
+  createTransferRecipientsPath,
+  ROUTES
+} from '../constants/routes';
 import { demoAccounts, formatWon } from '../data/demo-data';
 
 export default function TransferAccountsPage() {
@@ -12,6 +15,16 @@ export default function TransferAccountsPage() {
   const selectedAccount = demoAccounts.find(
     (account) => account.id === selectedAccountId
   );
+
+  const handleNext = () => {
+    if (!selectedAccountId) {
+      return;
+    }
+
+    window.location.assign(
+      createTransferRecipientsPath(selectedAccountId)
+    );
+  };
 
   return (
     <DemoBankLayout
@@ -91,9 +104,31 @@ export default function TransferAccountsPage() {
           : '선택된 출금 계좌가 없습니다.'}
       </p>
 
+      <div className="next-action-panel">
+        <p>
+          {selectedAccount
+            ? '선택한 출금 계좌로 수취인 후보를 확인할 수 있습니다.'
+            : '다음으로 이동하려면 출금 계좌를 먼저 선택해 주세요.'}
+        </p>
+        <button
+          {...elementIdentity(ELEMENT_IDS.BUTTON_TRANSFER_ACCOUNT_NEXT)}
+          type="button"
+          className="primary-button"
+          aria-describedby={
+            ELEMENT_IDS.STATUS_SELECTED_TRANSFER_ACCOUNT
+          }
+          disabled={!selectedAccount}
+          onClick={handleNext}
+        >
+          {selectedAccount
+            ? '수취인 선택으로 이동'
+            : '출금 계좌 선택 후 다음'}
+        </button>
+      </div>
+
       <p className="no-transaction-notice">
-        이체 전체 흐름은 D9 이후에 구현하며 현재는 출금 계좌 선택만
-        확인할 수 있습니다.
+        수취인 선택까지 확인할 수 있으며 실제 계좌이체는 진행되지
+        않습니다.
       </p>
     </DemoBankLayout>
   );
