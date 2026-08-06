@@ -4,6 +4,7 @@ import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
   createTransferAmountPath,
+  createTransferPasswordPath,
   createTransferRecipientsPath
 } from '../constants/routes';
 import { formatWon, type DemoAccount } from '../data/demo-data';
@@ -23,15 +24,23 @@ export default function TransferAmountPage({
   const [confirmedMessage, setConfirmedMessage] = useState<
     string | null
   >(null);
+  const [confirmedAmount, setConfirmedAmount] = useState<number | null>(
+    null
+  );
   const validation = validateTransferAmount(rawAmount, account.balance);
   const isValid = validation.state === 'VALID';
   const isInvalid = validation.state !== 'EMPTY' && !isValid;
+  const isAmountConfirmed =
+    isValid &&
+    validation.parsedAmount !== null &&
+    confirmedAmount === validation.parsedAmount;
 
   const handleAmountChange = (
     event: ChangeEvent<HTMLInputElement>
   ) => {
     setRawAmount(event.target.value);
     setConfirmedMessage(null);
+    setConfirmedAmount(null);
   };
 
   const handleConfirm = () => {
@@ -40,7 +49,18 @@ export default function TransferAmountPage({
     }
 
     setConfirmedMessage(
-      `${formatWon(validation.parsedAmount)}을 데모 이체 금액으로 확인했습니다. 실제 송금은 진행되지 않았습니다. 비밀번호·OTP·최종 승인은 후속 단계입니다.`
+      `${formatWon(validation.parsedAmount)}을 데모 이체 금액으로 확인했습니다. 실제 송금은 진행되지 않았습니다. 비밀번호 입력은 별도 시작 버튼으로 이동합니다.`
+    );
+    setConfirmedAmount(validation.parsedAmount);
+  };
+
+  const handlePasswordStart = () => {
+    if (!isAmountConfirmed) {
+      return;
+    }
+
+    window.location.assign(
+      createTransferPasswordPath(account.id, recipient.id)
     );
   };
 
@@ -175,6 +195,20 @@ export default function TransferAmountPage({
             onClick={handleConfirm}
           >
             이체 금액 확인
+          </button>
+          <button
+            {...elementIdentity(
+              ELEMENT_IDS.BUTTON_TRANSFER_PASSWORD_START
+            )}
+            type="button"
+            className="primary-button"
+            disabled={!isAmountConfirmed}
+            aria-describedby={
+              ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_AMOUNT
+            }
+            onClick={handlePasswordStart}
+          >
+            비밀번호 입력 시작
           </button>
         </div>
       </section>
