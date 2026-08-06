@@ -7,7 +7,10 @@ import { evaluateActionPolicy } from "./policy/actionPolicy.js";
 import { detectSensitiveData } from "./policy/safetyPolicy.js";
 import { selectNextAction } from "./actions/nextAction.selector.js";
 import { createNextActionPrompt } from "./prompts/nextActionPrompt.js";
-import { mapDecisionToAIResponse, stringifyAIResponse } from "./output/aiResponse.mapper.js";
+import {
+  mapDecisionToAIResponse,
+  stringifyAIResponse,
+} from "./output/aiResponse.mapper.js";
 import { generateGuidanceMessage } from "./messages/guidanceMessage.generator.js";
 import {
   completeCurrentStep,
@@ -16,6 +19,11 @@ import {
   serializeWorkflowContext,
   startWorkflowStep,
 } from "./workflow/workflowContext.manager.js";
+import { detectTerms } from "./terms/termsAgreement.detector.js";
+import {
+  createTermsAgreementResult,
+  stringifyTermsAgreementResult,
+} from "./terms/termsAgreement.mapper.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -454,5 +462,97 @@ console.log(
 console.log(
   `[완료한 단계 수] ${
     workflowContext.stepHistory.length
+  }`,
+);
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - 약관 탐지 테스트");
+console.log("========================================\n");
+
+const termsTestElements = [
+  {
+    elementId: "terms-1",
+    text: "[필수] 서비스 이용약관 동의",
+    checked: true,
+  },
+  {
+    elementId: "terms-2",
+    text: "[필수] 개인정보 수집 및 이용 동의",
+    checked: false,
+  },
+  {
+    elementId: "terms-3",
+    text: "[선택] 마케팅 및 금융상품 안내 동의",
+    checked: false,
+  },
+  {
+    elementId: "terms-4",
+    text: "개인정보 제3자 제공 동의",
+    checked: false,
+  },
+  {
+    elementId: "button-1",
+    text: "다음 단계로 이동",
+    checked: false,
+  },
+];
+
+const detectedTerms =
+  detectTerms(termsTestElements);
+
+for (const term of detectedTerms) {
+  console.log(`[약관 ID] ${term.termId}`);
+  console.log(`[요소 ID] ${term.elementId}`);
+  console.log(`[제목] ${term.title}`);
+  console.log(`[필수 여부] ${term.requirement}`);
+  console.log(`[분류] ${term.category}`);
+  console.log(`[동의 상태] ${term.checked}`);
+  console.log(`[쉬운 설명] ${term.easySummary}`);
+  console.log();
+}
+
+const termsAgreementResult =
+  createTermsAgreementResult(detectedTerms);
+
+console.log("[TERMS_AGREEMENT 결과]");
+console.log(
+  stringifyTermsAgreementResult(
+    termsAgreementResult,
+  ),
+);
+
+console.log();
+
+console.log(
+  `[약관 탐지] ${termsAgreementResult.detected}`,
+);
+
+console.log(
+  `[필수 약관 수] ${
+    termsAgreementResult.requiredTerms.length
+  }`,
+);
+
+console.log(
+  `[선택 약관 수] ${
+    termsAgreementResult.optionalTerms.length
+  }`,
+);
+
+console.log(
+  `[구분 불명확 약관 수] ${
+    termsAgreementResult.unknownTerms.length
+  }`,
+);
+
+console.log(
+  `[필수 약관 전체 동의] ${
+    termsAgreementResult.allRequiredAgreed
+  }`,
+);
+
+console.log(
+  `[사용자 확인 필요] ${
+    termsAgreementResult.requiresUserAction
   }`,
 );
