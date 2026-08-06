@@ -96,6 +96,25 @@
 
 `btn-secure-input-complete`는 동시에 렌더링되지 않는 개별 보안 입력 페이지에서 공통 의미로 사용할 수 있다. 한 페이지에 여러 보안 입력 완료 버튼을 만들지 않는다.
 
+### D11 이체 비밀번호 보안 입력
+
+| ID | 대상 |
+| --- | --- |
+| `btn-transfer-password-start` | 확인된 이체 금액에서 비밀번호 화면으로 이동하는 Gate |
+| `page-transfer-password` | 이체 계좌 비밀번호 페이지 루트 |
+| `summary-transfer-password-source-account` | URL로 확인한 Mock 출금 계좌 별칭 |
+| `summary-transfer-password-recipient` | URL로 확인한 Mock 수취인 이름 |
+| `input-account-password` | D1 계좌 비밀번호 직접 입력 요소 |
+| `status-transfer-password-input` | 비밀번호 입력 유무 상태 live region |
+| `status-confirmed-transfer-password` | 데모 입력 완료 상태 live region |
+| `btn-secure-input-complete` | D1 보안 입력 완료 버튼 |
+| `btn-transfer-amount-back` | 동일 Mock 계좌·수취인의 금액 화면 복귀 |
+| `notice-transfer-secure-input` | 사용자 직접 입력과 자동화 중단 보안 안내 |
+
+`input-account-password`는 `type="password"`와
+`data-ddd-policy="secure-input"`을 사용한다. 비밀번호 원문, 길이, 금액,
+계좌번호와 인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
+
 ### 최종 승인
 
 | ID | 대상 |

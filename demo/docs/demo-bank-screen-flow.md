@@ -142,7 +142,29 @@ JavaScript 안전 정수와 잔액 초과를 검증한다. 수수료, 일일 한
 송금을 실행하지 않는다. `TRANSFER_PASSWORD`, `TRANSFER_OTP`, 최종 승인과
 완료는 후속 범위다.
 
-## 9. D1 완료 체크리스트
+## 9. D11 이체 비밀번호 보안 입력 Mock 경계
+
+`TRANSFER_AMOUNT`에서 유효한 현재 금액을 사용자가 직접 확인해야 별도
+비밀번호 입력 시작 버튼이 활성화된다. 금액을 변경하면 확인된 금액 상태와
+Gate를 함께 초기화한다. 확인된 금액은 컴포넌트 로컬 상태에만 있고 비밀번호
+URL이나 화면에는 전달하지 않는다.
+
+`TRANSFER_PASSWORD`는 `/transfer/secure/password/:accountId/:recipientId`
+형식으로 공개 Mock 계좌·수취인 문맥만 복원한다. 실제 계좌번호, 잔액, 이체
+금액과 수취인 금융정보는 다시 표시하지 않는다. 정상 직접 URL 접근은 보안
+화면 계약 확인용 Mock 예외이며 앞 단계 완료를 주장하지 않는다.
+
+계좌 비밀번호는 사용자가 uncontrolled native password input에 직접 입력한다.
+원문은 React 상태, URL, storage, 로그, callback, API와 WebSocket에 복사하지
+않는다. React에는 `EMPTY`, `ENTERED` 상태와 로컬 완료 boolean만 저장하며
+D1에 없는 자릿수·숫자 형식을 추가하지 않는다. 입력 완료 시 DOM 값을 즉시
+제거하고 실제 인증·OTP 이동·송금 없이 데모 완료 안내만 표시한다.
+
+데모페이지는 `type="password"`와 `data-ddd-policy="secure-input"` DOM 신호를
+제공한다. `SECURE_INPUT_REQUIRED` 생성, 캡처·AI DOM 전달 중단과 입력 완료 후
+자동화 재개는 개발자 B 및 후속 통합 책임이다.
+
+## 10. D1 완료 체크리스트
 
 - [x] 예금 전체 화면 흐름 존재
 - [x] 계좌이체 전체 화면 흐름 존재
