@@ -24,6 +24,11 @@ import {
   createTermsAgreementResult,
   stringifyTermsAgreementResult,
 } from "./terms/termsAgreement.mapper.js";
+import { detectSecureInput } from "./secureInput/secureInput.detector.js";
+import {
+  createSecureInputResult,
+  stringifySecureInputResult,
+} from "./secureInput/secureInput.mapper.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -556,3 +561,90 @@ console.log(
     termsAgreementResult.requiresUserAction
   }`,
 );
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - SECURE_INPUT 테스트");
+console.log("========================================\n");
+
+const secureInputTestCases = [
+  {
+    elementId: "secure-1",
+    text: "계좌 비밀번호를 입력하세요",
+    elementType: "password",
+  },
+  {
+    elementId: "secure-2",
+    text: "OTP 번호를 입력해 주세요",
+    elementType: "input",
+  },
+  {
+    elementId: "secure-3",
+    text: "문자로 받은 6자리 인증번호를 입력하세요",
+    elementType: "input",
+  },
+  {
+    elementId: "secure-4",
+    text: "보안카드 번호를 입력하세요",
+    elementType: "input",
+  },
+  {
+    elementId: "secure-5",
+    text: "공동인증서 비밀번호를 입력하세요",
+    elementType: "password",
+  },
+  {
+    elementId: "normal-1",
+    text: "예금 상품명을 입력하세요",
+    elementType: "input",
+  },
+];
+
+for (const testCase of secureInputTestCases) {
+  const detection =
+    detectSecureInput(testCase);
+
+  console.log(
+    `[화면 문구] ${testCase.text}`,
+  );
+
+  console.log(
+    `[민감 입력 탐지] ${detection.detected}`,
+  );
+
+  console.log(
+    `[민감정보 종류] ${
+      detection.secureInputType ?? "없음"
+    }`,
+  );
+
+  console.log(
+    `[대상 요소] ${
+      detection.targetElementId ?? "없음"
+    }`,
+  );
+
+  console.log(
+    `[신뢰도] ${detection.confidence}`,
+  );
+
+  console.log(
+    `[판단 근거] ${detection.reason}`,
+  );
+
+  const secureResult =
+    createSecureInputResult(detection);
+
+  if (secureResult) {
+    console.log(
+      "[SECURE_INPUT 결과]",
+    );
+
+    console.log(
+      stringifySecureInputResult(
+        secureResult,
+      ),
+    );
+  }
+
+  console.log();
+}
