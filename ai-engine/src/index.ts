@@ -29,6 +29,11 @@ import {
   createSecureInputResult,
   stringifySecureInputResult,
 } from "./secureInput/secureInput.mapper.js";
+import { detectFinalAction } from "./finalAction/finalAction.detector.js";
+import {
+  createFinalConfirmationResult,
+  stringifyFinalConfirmationResult,
+} from "./finalAction/finalConfirmation.mapper.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -642,6 +647,107 @@ for (const testCase of secureInputTestCases) {
     console.log(
       stringifySecureInputResult(
         secureResult,
+      ),
+    );
+  }
+
+  console.log();
+}
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - FINAL_CONFIRMATION 테스트");
+console.log("========================================\n");
+
+const finalActionTestCases = [
+  {
+    elementId: "final-1",
+    text: "10만 원 이체하기",
+    elementType: "button",
+  },
+  {
+    elementId: "final-2",
+    text: "정기예금 가입하기",
+    elementType: "button",
+  },
+  {
+    elementId: "final-3",
+    text: "적금 해지하기",
+    elementType: "button",
+  },
+  {
+    elementId: "final-4",
+    text: "이체 한도 변경",
+    elementType: "button",
+  },
+  {
+    elementId: "final-5",
+    text: "결제하기",
+    elementType: "button",
+  },
+
+  // 최종 거래로 잘못 판단하면 안 되는 케이스
+  {
+    elementId: "normal-1",
+    text: "이체 내역 조회",
+    elementType: "button",
+  },
+  {
+    elementId: "normal-2",
+    text: "예금 가입 방법 안내",
+    elementType: "link",
+  },
+  {
+    elementId: "normal-3",
+    text: "적금 해지 방법",
+    elementType: "link",
+  },
+];
+
+for (const testCase of finalActionTestCases) {
+  const detection =
+    detectFinalAction(testCase);
+
+  console.log(
+    `[화면 문구] ${testCase.text}`,
+  );
+
+  console.log(
+    `[최종 거래 탐지] ${detection.detected}`,
+  );
+
+  console.log(
+    `[거래 종류] ${
+      detection.finalActionType ?? "없음"
+    }`,
+  );
+
+  console.log(
+    `[대상 요소] ${
+      detection.targetElementId ?? "없음"
+    }`,
+  );
+
+  console.log(
+    `[신뢰도] ${detection.confidence}`,
+  );
+
+  console.log(
+    `[판단 근거] ${detection.reason}`,
+  );
+
+  const confirmationResult =
+    createFinalConfirmationResult(
+      detection,
+    );
+
+  if (confirmationResult) {
+    console.log(
+      "[FINAL_CONFIRMATION 결과]",
+    );
+
+    console.log(
+      stringifyFinalConfirmationResult(
+        confirmationResult,
       ),
     );
   }
