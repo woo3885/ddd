@@ -986,10 +986,15 @@ input:focus-visible {
   color: #344054;
 }
 
+.transfer-password-completion-status:empty {
+  display: none;
+}
+
 .transfer-password-actions {
   display: flex;
   margin-top: 28px;
   align-items: stretch;
+  flex-wrap: wrap;
   gap: 16px;
 }
 

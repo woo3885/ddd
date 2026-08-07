@@ -4,6 +4,7 @@ import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
   createTransferAmountPath,
+  createTransferOtpPath,
   createTransferPasswordPath
 } from '../constants/routes';
 import type { DemoAccount } from '../data/demo-data';
@@ -140,7 +141,7 @@ export default function TransferPasswordPage({
             aria-live="polite"
           >
             {passwordInputCompleted
-              ? '데모 비밀번호 입력이 완료되었습니다. 실제 인증과 송금은 진행되지 않았으며 OTP는 후속 단계입니다.'
+              ? '데모 비밀번호 입력이 완료되었습니다. 실제 인증과 송금은 진행하지 않습니다. OTP 입력 시작 버튼을 직접 눌러 주세요.'
               : '아직 완료된 데모 비밀번호 입력이 없습니다.'}
           </p>
         </div>
@@ -168,12 +169,29 @@ export default function TransferPasswordPage({
           >
             입력 완료
           </button>
+          <button
+            {...elementIdentity(ELEMENT_IDS.BUTTON_TRANSFER_OTP_START)}
+            type="button"
+            className="primary-button"
+            disabled={!passwordInputCompleted}
+            aria-describedby={
+              ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_PASSWORD
+            }
+            onClick={() =>
+              window.location.assign(
+                createTransferOtpPath(account.id, recipient.id)
+              )
+            }
+          >
+            OTP 입력 시작
+          </button>
         </div>
       </section>
 
       <p className="no-transaction-notice">
         입력값은 API, WebSocket, URL 또는 저장소로 전송하지 않습니다. 실제
-        인증, OTP 이동, 잔액 차감과 송금은 발생하지 않습니다.
+        인증, 잔액 차감과 송금은 발생하지 않으며 OTP 화면 이동은 별도
+        버튼으로만 진행합니다.
       </p>
     </DemoBankLayout>
   );

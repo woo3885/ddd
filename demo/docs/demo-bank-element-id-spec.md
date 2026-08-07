@@ -115,6 +115,26 @@
 `data-ddd-policy="secure-input"`을 사용한다. 비밀번호 원문, 길이, 금액,
 계좌번호와 인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
 
+### D12 이체 OTP 보안 입력
+
+| ID | 대상 |
+| --- | --- |
+| `btn-transfer-otp-start` | 데모 비밀번호 입력 완료 후 OTP 화면으로 이동하는 Gate |
+| `page-transfer-otp` | 이체 OTP 페이지 루트 |
+| `summary-transfer-otp-source-account` | URL로 확인한 Mock 출금 계좌 별칭 |
+| `summary-transfer-otp-recipient` | URL로 확인한 Mock 수취인 이름 |
+| `input-otp` | D1 OTP 직접 입력 요소 |
+| `status-transfer-otp-input` | OTP 입력 유무 상태 live region |
+| `status-confirmed-transfer-otp` | 로컬 데모 입력 완료 상태 live region |
+| `btn-secure-input-complete` | D1 보안 입력 완료 버튼 |
+| `btn-transfer-password-back` | 동일 Mock 계좌·수취인의 비밀번호 화면 복귀 |
+| `notice-transfer-otp-secure-input` | 사용자 직접 입력과 자동화 중단 보안 안내 |
+
+`input-otp`는 uncontrolled native `type="password"`, `autocomplete="off"`와
+`data-ddd-policy="secure-input"`을 사용한다. OTP 원문, 길이, 일부 값,
+계좌번호와 인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
+`btn-secure-input-complete`는 각 보안 페이지의 page root 아래에서 조회한다.
+
 ### 최종 승인
 
 | ID | 대상 |

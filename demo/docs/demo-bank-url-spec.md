@@ -26,7 +26,7 @@
 | `/transfer/recipients` | `TRANSFER_RECIPIENT_SELECTION` | 수취인 후보 선택의 개념 경로 | D9 구현은 유효한 Mock `accountId` 필요 | 아니오 | D9 |
 | `/transfer/amount` | `TRANSFER_AMOUNT` | 송금 금액 입력의 개념 경로 | D10 구현은 유효한 Mock `accountId`와 `recipientId` 필요 | 아니오 | D10 |
 | `/transfer/secure/password` | `TRANSFER_PASSWORD` | 이체용 계좌 비밀번호 직접 입력 | D11 구현은 화면 계약 확인용 직접 접근 허용 | 아니오 | D11 |
-| `/transfer/secure/otp` | `TRANSFER_OTP` | OTP 직접 입력 | 불가: 비밀번호 입력 완료 필요 | 아니오 | D6 이후 |
+| `/transfer/secure/otp` | `TRANSFER_OTP` | OTP 직접 입력의 개념 경로 | D12 구현은 화면·DOM 계약 확인용 직접 접근 허용 | 아니오 | D12 |
 | `/transfer/confirmation` | `TRANSFER_CONFIRMATION` | 송금 내용 최종 확인 | 불가: OTP 입력 완료 필요 | 아니오 | D6 이후 |
 | `/transfer/completed` | `TRANSFER_COMPLETED` | 송금 시연 완료 | 불가: 최종 승인 결과 필요 | 아니오 | D6 이후 |
 
@@ -143,3 +143,28 @@ query와 hash에 포함하지 않는다.
 예외로 허용한다. 직접 접근 시 이전 금액 입력·확인, 사용자 인증 또는
 자동화 중단이 완료됐다고 표시하지 않는다. 누락 segment, 알려지지 않은 ID,
 추가 segment와 canonical path에 맞지 않는 encoding은 NotFound로 처리한다.
+
+## 10. D12 이체 OTP 경로 구체화
+
+D1 개념 경로 `/transfer/secure/otp`를 유지하면서 공개 Mock 계좌와 수취인
+문맥만 복원하기 위해 다음 형식으로 구체화한다.
+
+```text
+/transfer/secure/otp/:accountId/:recipientId
+```
+
+정상 URL은 다음 네 조합과 각 trailing slash다.
+
+- `/transfer/secure/otp/living-expense/hong-gildong`
+- `/transfer/secure/otp/living-expense/demo-saved`
+- `/transfer/secure/otp/savings/hong-gildong`
+- `/transfer/secure/otp/savings/demo-saved`
+
+pathname에는 공개 Mock accountId와 recipientId만 포함한다. 이체 금액,
+비밀번호, OTP, 계좌번호, 잔액, 완료·인증 상태와 실제 고객정보는 pathname,
+query와 hash에 포함하지 않는다.
+
+알려진 조합의 직접 접근은 D12 화면과 보안 DOM 계약을 확인하기 위한 Mock
+예외다. 직접 접근 시 이전 비밀번호 입력 완료나 실제 인증 완료를 주장하지
+않는다. 누락 segment, 알려지지 않은 ID, 추가 segment와 canonical path에
+맞지 않는 encoding은 NotFound로 처리한다.

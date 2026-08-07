@@ -164,7 +164,29 @@ D1에 없는 자릿수·숫자 형식을 추가하지 않는다. 입력 완료 �
 제공한다. `SECURE_INPUT_REQUIRED` 생성, 캡처·AI DOM 전달 중단과 입력 완료 후
 자동화 재개는 개발자 B 및 후속 통합 책임이다.
 
-## 10. D1 완료 체크리스트
+## 10. D12 이체 OTP 보안 입력 Mock 경계
+
+`TRANSFER_PASSWORD`에서 데모 비밀번호 입력 완료 버튼을 누르면 원문을 DOM에서
+즉시 제거하고 로컬 완료 상태만 저장한다. 이 상태에서만 별도 OTP 시작 버튼이
+활성화되며, 사용자가 직접 눌러
+`/transfer/secure/otp/:accountId/:recipientId`로 이동한다. 비밀번호 완료와
+화면 이동의 책임은 결합하지 않는다.
+
+`TRANSFER_OTP`는 공개 Mock accountId와 recipientId로 계좌 별칭과 수취인
+이름만 복원한다. 정상 직접 URL 접근은 화면·DOM 계약 확인용 예외이며 이전
+비밀번호 입력이나 인증 완료를 보장하지 않는다.
+
+OTP는 uncontrolled native `type="password"` input에서 사용자가 직접 입력한다.
+React에는 `EMPTY`, `ENTERED` 상태와 로컬 데모 완료 boolean만 저장한다. D1에
+자릿수, 숫자 형식, 정답, 만료와 재전송 규격이 없으므로 이를 추가하지 않는다.
+완료 시 DOM 값을 즉시 제거하며 실제 인증, 최종 확인 이동과 송금은 수행하지
+않는다.
+
+데모페이지는 `data-ddd-policy="secure-input"` 신호를 제공한다. 보안 입력
+탐지, `SECURE_INPUT_REQUIRED` 전환, 자동화·AI·캡처 중단과 안전한 재개는
+개발자 B의 후속 통합 책임이다.
+
+## 11. D1 완료 체크리스트
 
 - [x] 예금 전체 화면 흐름 존재
 - [x] 계좌이체 전체 화면 흐름 존재
