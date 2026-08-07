@@ -12,6 +12,14 @@ import {
   type SpeechRecognitionResultLike,
   type SpeechRecognitionResultListLike
 } from '@/features/F4_VoiceController/model/speech-recognition';
+import {
+  TTS_PREVIEW_SELECTORS,
+  type SpeechSynthesisAdapter,
+  type SpeechSynthesisErrorEventLike,
+  type SpeechSynthesisFactory,
+  type SpeechSynthesisUtteranceLike,
+  type SpeechSynthesisVoiceLike
+} from '@/features/F4_VoiceController/model/speech-synthesis';
 import { Button } from '@/shared/ui/Button';
 import { NoticeBox } from '@/shared/ui/NoticeBox';
 import { Panel } from '@/shared/ui/Panel';
@@ -19,6 +27,9 @@ import { Text } from '@/shared/ui/Text';
 import type { SttEvent } from '@/types/stt-events';
 
 import F4_VoiceController from './F4_VoiceController';
+
+const PREVIEW_TTS_MESSAGE =
+  '현재 화면에서 필요한 항목을 직접 선택해 주세요.';
 
 interface PreviewResult {
   text: string;
@@ -77,15 +88,110 @@ class PreviewRecognitionHarness {
   };
 }
 
+class PreviewSpeechSynthesisUtterance
+  implements SpeechSynthesisUtteranceLike
+{
+  lang = '';
+  rate = 1;
+  voice: SpeechSynthesisVoiceLike | null = null;
+  onstart: (() => void) | null = null;
+  onend: (() => void) | null = null;
+  onerror: ((event: SpeechSynthesisErrorEventLike) => void) | null = null;
+
+  constructor(public text: string) {}
+}
+
+class PreviewSynthesisHarness implements SpeechSynthesisAdapter {
+  voices: SpeechSynthesisVoiceLike[] = [
+    { name: 'preview-korean', lang: 'ko-KR' }
+  ];
+  utterances: PreviewSpeechSynthesisUtterance[] = [];
+  current: PreviewSpeechSynthesisUtterance | null = null;
+  speakCount = 0;
+  cancelCount = 0;
+  voiceListener: (() => void) | null = null;
+
+  constructor(private readonly onAction: (message: string) => void) {}
+
+  readonly factory: SpeechSynthesisFactory = () => this;
+
+  createUtterance(text: string) {
+    const utterance = new PreviewSpeechSynthesisUtterance(text);
+    this.utterances.push(utterance);
+    this.current = utterance;
+    this.onAction(`Mock utterance 생성 ${this.utterances.length}회`);
+    return utterance;
+  }
+
+  speak(utterance: SpeechSynthesisUtteranceLike) {
+    this.current = utterance as PreviewSpeechSynthesisUtterance;
+    this.speakCount += 1;
+    this.onAction(
+      `Mock speak ${this.speakCount}회 · ${utterance.lang} · ${utterance.rate} · ${utterance.voice?.name ?? 'browser-default'} · ${utterance.text}`
+    );
+  }
+
+  cancel() {
+    this.cancelCount += 1;
+    this.onAction(`Mock cancel ${this.cancelCount}회`);
+  }
+
+  getVoices() {
+    return this.voices;
+  }
+
+  addEventListener(_type: 'voiceschanged', listener: () => void) {
+    this.voiceListener = listener;
+  }
+
+  removeEventListener(_type: 'voiceschanged', listener: () => void) {
+    if (this.voiceListener === listener) {
+      this.voiceListener = null;
+    }
+  }
+
+  emitStart() {
+    this.onAction('Mock onstart 발생');
+    this.current?.onstart?.();
+  }
+
+  emitEnd() {
+    this.onAction('Mock onend 발생');
+    this.current?.onend?.();
+  }
+
+  emitError() {
+    this.onAction('Mock onerror 발생');
+    this.current?.onerror?.({ error: 'network' });
+  }
+
+  emitVoicesChanged() {
+    this.voices = [{ name: 'preview-late-korean', lang: 'ko-KR' }];
+    this.voiceListener?.();
+    this.onAction('Mock voiceschanged 발생 · 자동 재생 없음');
+  }
+}
+
 function elementIdentity(id: string) {
   return { id, 'data-testid': id };
 }
 
 export default function F4_VoiceControllerPreview() {
-  const harness = useMemo(() => new PreviewRecognitionHarness(), []);
+  const [lastTtsAction, setLastTtsAction] = useState(
+    '아직 요청된 Mock TTS 동작이 없습니다.'
+  );
+  const recognitionHarness = useMemo(
+    () => new PreviewRecognitionHarness(),
+    []
+  );
+  const synthesisHarness = useMemo(
+    () => new PreviewSynthesisHarness(setLastTtsAction),
+    []
+  );
   const [lastEvent, setLastEvent] = useState<SttEvent | null>(null);
   const [isSecureInput, setIsSecureInput] = useState(false);
   const [isUnsupported, setIsUnsupported] = useState(false);
+  const [isDisabled, setIsDisabled] = useState(false);
 
   return (
     <main
@@ -94,19 +200,19 @@ export default function F4_VoiceControllerPreview() {
     >
       <Text variant="title">Web Speech STT 개발 Preview</Text>
       <NoticeBox variant="warning" title="개발 전용 Mock" announce="off">
-        실제 마이크를 사용하지 않으며 인식 문장을 실제 AI 또는 서버로
-        전송하지 않습니다.
+        실제 마이크를 사용하지 않으며 실제 음성 출력도 발생하지 않습니다.
+        인식 문장은 실제 AI 또는 서버로 전송하지 않습니다.
       </NoticeBox>
 
       <Panel
         title="Mock 제어"
-        description="먼저 음성 입력 시작을 누른 뒤 원하는 Mock 결과를 실행하세요."
+        description="실제 브라우저 음성 API 없이 STT와 TTS callback 상태를 확인하세요."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Button
             variant="secondary"
             onClick={() =>
-              harness.current?.emitResult({
+              recognitionHarness.current?.emitResult({
                 text: partialResultMock.text,
                 isFinal: false,
                 confidence: partialResultMock.confidence
@@ -118,7 +224,7 @@ export default function F4_VoiceControllerPreview() {
           <Button
             variant="secondary"
             onClick={() =>
-              harness.current?.emitResult({
+              recognitionHarness.current?.emitResult({
                 text: finalResultMock.text,
                 isFinal: true,
                 confidence: finalResultMock.confidence
@@ -129,9 +235,33 @@ export default function F4_VoiceControllerPreview() {
           </Button>
           <Button
             variant="danger"
-            onClick={() => harness.current?.emitError('no-speech')}
+            onClick={() => recognitionHarness.current?.emitError('no-speech')}
           >
             Mock 오류
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => synthesisHarness.emitStart()}
+          >
+            Mock TTS 시작
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => synthesisHarness.emitEnd()}
+          >
+            Mock TTS 종료
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => synthesisHarness.emitError()}
+          >
+            Mock TTS 오류
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => synthesisHarness.emitVoicesChanged()}
+          >
+            Mock 음성 목록 갱신
           </Button>
           <Button
             variant="secondary"
@@ -145,13 +275,22 @@ export default function F4_VoiceControllerPreview() {
           >
             미지원 상태 {isUnsupported ? '해제' : '확인'}
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setIsDisabled((current) => !current)}
+          >
+            전체 제어 {isDisabled ? '활성화' : '비활성화'}
+          </Button>
         </div>
       </Panel>
 
       <F4_VoiceController
         sessionId="preview-stt-session"
+        message={PREVIEW_TTS_MESSAGE}
+        disabled={isDisabled}
         isSecureInput={isSecureInput}
-        recognitionFactory={isUnsupported ? null : harness.factory}
+        recognitionFactory={isUnsupported ? null : recognitionHarness.factory}
+        synthesisFactory={isUnsupported ? null : synthesisHarness.factory}
         onSttEvent={setLastEvent}
       />
 
@@ -165,6 +304,17 @@ export default function F4_VoiceControllerPreview() {
           {lastEvent
             ? `${lastEvent.type}: ${'text' in lastEvent ? lastEvent.text : '이벤트가 생성되었습니다.'}`
             : '아직 생성된 이벤트가 없습니다.'}
+        </p>
+      </Panel>
+
+      <Panel title="마지막 Mock TTS 동작">
+        <p
+          {...elementIdentity(TTS_PREVIEW_SELECTORS.actionStatus)}
+          role="status"
+          aria-live="polite"
+          className="break-words text-base leading-relaxed"
+        >
+          {lastTtsAction}
         </p>
       </Panel>
     </main>

@@ -12,6 +12,14 @@ import {
   type SpeechRecognitionResultLike,
   type SpeechRecognitionResultListLike
 } from '@/features/F4_VoiceController/model/speech-recognition';
+import {
+  TTS_CONTROLLER_SELECTORS,
+  type SpeechSynthesisAdapter,
+  type SpeechSynthesisErrorEventLike,
+  type SpeechSynthesisFactory,
+  type SpeechSynthesisUtteranceLike,
+  type SpeechSynthesisVoiceLike
+} from '@/features/F4_VoiceController/model/speech-synthesis';
 import type { SttEvent } from '@/types/stt-events';
 
 import F4_VoiceController from './F4_VoiceController';
@@ -81,6 +89,55 @@ function createHarness() {
   return { factory, instances };
 }
 
+class MockTtsUtterance implements SpeechSynthesisUtteranceLike {
+  text: string;
+  lang = '';
+  rate = 1;
+  voice: SpeechSynthesisVoiceLike | null = null;
+  onstart: (() => void) | null = null;
+  onend: (() => void) | null = null;
+  onerror: ((event: SpeechSynthesisErrorEventLike) => void) | null = null;
+
+  constructor(text: string) {
+    this.text = text;
+  }
+
+  emitStart() {
+    this.onstart?.();
+  }
+
+  emitEnd() {
+    this.onend?.();
+  }
+
+  emitError(error: string) {
+    this.onerror?.({ error });
+  }
+}
+
+class MockTtsHarness implements SpeechSynthesisAdapter {
+  voices: SpeechSynthesisVoiceLike[] = [
+    { name: 'mock-korean', lang: 'ko-KR' }
+  ];
+  utterances: MockTtsUtterance[] = [];
+  voiceListener: (() => void) | null = null;
+  createUtterance = vi.fn((text: string) => {
+    const utterance = new MockTtsUtterance(text);
+    this.utterances.push(utterance);
+    return utterance;
+  });
+  speak = vi.fn();
+  cancel = vi.fn();
+  getVoices = vi.fn(() => this.voices);
+  addEventListener = vi.fn(
+    (_type: 'voiceschanged', listener: () => void) => {
+      this.voiceListener = listener;
+    }
+  );
+  removeEventListener = vi.fn();
+  factory: SpeechSynthesisFactory = vi.fn(() => this);
+}
+
 describe('F4_VoiceController', () => {
   it('고정 selector와 접근 가능한 대형 실제 버튼을 초기 상태에 맞게 표시한다', () => {
     const harness = createHarness();
@@ -131,7 +188,7 @@ describe('F4_VoiceController', () => {
     await user.click(screen.getByRole('button', { name: '음성 입력 시작' }));
     const recognition = harness.instances[0];
     expect(recognition.start).toHaveBeenCalledOnce();
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByTestId(VOICE_CONTROLLER_SELECTORS.status)).toHaveTextContent(
       '마이크 연결을 준비하고 있습니다.'
     );
     expect(screen.getByRole('region', { name: '음성 입력' })).toHaveAttribute(
@@ -144,7 +201,7 @@ describe('F4_VoiceController', () => {
     );
 
     act(() => recognition.emitStart());
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByTestId(VOICE_CONTROLLER_SELECTORS.status)).toHaveTextContent(
       '음성을 듣고 있습니다. 말씀해 주세요.'
     );
     expect(onSttEvent).toHaveBeenCalledWith(
@@ -156,7 +213,7 @@ describe('F4_VoiceController', () => {
 
     await user.click(screen.getByRole('button', { name: '음성 입력 중지' }));
     expect(recognition.stop).toHaveBeenCalledOnce();
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByTestId(VOICE_CONTROLLER_SELECTORS.status)).toHaveTextContent(
       '음성 입력을 마치는 중입니다.'
     );
   });
@@ -199,7 +256,7 @@ describe('F4_VoiceController', () => {
     );
     expect(final).toHaveTextContent('예금 상품을 찾아 주세요');
     expect(final).toHaveAttribute('aria-live', 'polite');
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByTestId(VOICE_CONTROLLER_SELECTORS.status)).toHaveTextContent(
       '음성 인식이 완료되었습니다.'
     );
     expect(onSttEvent).toHaveBeenCalledWith(
@@ -231,9 +288,9 @@ describe('F4_VoiceController', () => {
     await user.click(screen.getByRole('button', { name: '음성 입력 시작' }));
     act(() => harness.instances[0].emitError('network'));
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      '음성 인식 서비스에 연결할 수 없습니다.'
-    );
+    expect(
+      screen.getByText('음성 인식 서비스에 연결할 수 없습니다.')
+    ).toBeInTheDocument();
     expect(screen.queryByText('provider-private-message')).not.toBeInTheDocument();
     const retry = screen.getByRole('button', { name: '다시 시도' });
     expect(retry).toBeEnabled();
@@ -253,9 +310,9 @@ describe('F4_VoiceController', () => {
     );
     await user.click(screen.getByRole('button', { name: '음성 입력 시작' }));
     act(() => harness.instances[0].emitError('not-allowed'));
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      '마이크 사용 권한을 확인해 주세요.'
-    );
+    expect(
+      screen.getByText('마이크 사용 권한을 확인해 주세요.')
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '다시 시도' })).toBeDisabled();
 
     unmount();
@@ -344,5 +401,182 @@ describe('F4_VoiceController', () => {
     expect(webSocketMock).not.toHaveBeenCalled();
     expect(speakMock).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+
+  it('TTS section과 고정 selector, 화면 문장, 기본 속도를 접근 가능하게 표시한다', () => {
+    const recognition = createHarness();
+    const tts = new MockTtsHarness();
+    render(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message="현재 화면에서 필요한 항목을 선택해 주세요."
+        recognitionFactory={recognition.factory}
+        synthesisFactory={tts.factory}
+      />
+    );
+
+    const controller = screen.getByRole('region', { name: '음성 안내' });
+    expect(controller).toHaveAttribute('id', TTS_CONTROLLER_SELECTORS.root);
+    expect(controller.id).toBe(controller.getAttribute('data-testid'));
+    expect(
+      screen.getByText('현재 화면에서 필요한 항목을 선택해 주세요.')
+    ).toBeInTheDocument();
+
+    const play = screen.getByRole('button', { name: '안내 듣기' });
+    const replay = screen.getByRole('button', { name: '다시 듣기' });
+    const stop = screen.getByRole('button', { name: '음성 중지' });
+    for (const button of [play, replay, stop]) {
+      expect(button).toHaveAttribute('type', 'button');
+      expect(button.className).toContain('min-h-14');
+      expect(button.id).toBe(button.getAttribute('data-testid'));
+      expect(button).not.toHaveAttribute('aria-pressed');
+    }
+    expect(play).toBeEnabled();
+    expect(replay).toBeDisabled();
+    expect(stop).toBeDisabled();
+
+    const rate = screen.getByRole('combobox', { name: '안내 속도' });
+    expect(rate).toHaveValue('1');
+    expect(rate.id).toBe(rate.getAttribute('data-testid'));
+    expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.rateStatus))
+      .toHaveTextContent('현재 속도는 보통입니다.');
+    expect(tts.factory).not.toHaveBeenCalled();
+  });
+
+  it('TTS play·replay·stop과 STARTING·SPEAKING·COMPLETED 상태를 표시한다', async () => {
+    const user = userEvent.setup();
+    const tts = new MockTtsHarness();
+    render(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message="현재 화면에서 필요한 항목을 선택해 주세요."
+        recognitionFactory={null}
+        synthesisFactory={tts.factory}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: '안내 듣기' }));
+    expect(tts.speak).toHaveBeenCalledOnce();
+    expect(tts.utterances[0]).toMatchObject({
+      lang: 'ko-KR',
+      rate: 1,
+      voice: { name: 'mock-korean' }
+    });
+    expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.playbackStatus))
+      .toHaveTextContent('음성 안내 시작을 요청했습니다.');
+
+    act(() => tts.utterances[0].emitStart());
+    expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.playbackStatus))
+      .toHaveTextContent('음성 안내를 재생하고 있습니다.');
+    act(() => tts.utterances[0].emitEnd());
+    expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.playbackStatus))
+      .toHaveTextContent('음성 안내 재생이 끝났습니다.');
+
+    await user.click(screen.getByRole('button', { name: '다시 듣기' }));
+    expect(tts.cancel).toHaveBeenCalledOnce();
+    expect(tts.utterances).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: '음성 중지' }));
+    expect(tts.cancel).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.playbackStatus))
+      .toHaveTextContent('안내 듣기 버튼으로 음성 안내를 시작할 수 있습니다.');
+  });
+
+  it('TTS 속도 변경은 다음 재생에 적용하고 오류는 alert로 안내한다', async () => {
+    const user = userEvent.setup();
+    const tts = new MockTtsHarness();
+    render(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message="현재 화면에서 필요한 항목을 선택해 주세요."
+        recognitionFactory={null}
+        synthesisFactory={tts.factory}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: '안내 듣기' }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '안내 속도' }),
+      '0.8'
+    );
+    expect(tts.speak).toHaveBeenCalledOnce();
+    expect(tts.utterances[0].rate).toBe(1);
+    expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.rateStatus))
+      .toHaveTextContent('현재 속도는 느리게입니다.');
+
+    await user.click(screen.getByRole('button', { name: '다시 듣기' }));
+    expect(tts.utterances[1].rate).toBe(0.8);
+    act(() => tts.utterances[1].emitError('network'));
+    expect(
+      screen.getByText('음성 안내 서비스에 연결할 수 없습니다.')
+    ).toBeInTheDocument();
+  });
+
+  it('빈 문장·unsupported·secure·disabled에서 TTS control을 차단한다', async () => {
+    const user = userEvent.setup();
+    const tts = new MockTtsHarness();
+    const { rerender } = render(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message=""
+        recognitionFactory={null}
+        synthesisFactory={tts.factory}
+      />
+    );
+    expect(screen.getByRole('button', { name: '안내 듣기' })).toBeDisabled();
+
+    rerender(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message="안전한 안내 문장입니다."
+        recognitionFactory={null}
+        synthesisFactory={null}
+      />
+    );
+    expect(
+      screen.getByTestId(TTS_CONTROLLER_SELECTORS.unsupportedNotice)
+    ).toBeInTheDocument();
+
+    rerender(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message="안전한 안내 문장입니다."
+        recognitionFactory={null}
+        synthesisFactory={tts.factory}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: '안내 듣기' }));
+    rerender(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message="안전한 안내 문장입니다."
+        recognitionFactory={null}
+        synthesisFactory={tts.factory}
+        isSecureInput
+      />
+    );
+    expect(tts.cancel).toHaveBeenCalledOnce();
+    expect(
+      screen.getByTestId(TTS_CONTROLLER_SELECTORS.secureNotice)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('안전한 안내 문장입니다.')).not.toBeInTheDocument();
+    for (const control of [
+      screen.getByRole('button', { name: '안내 듣기' }),
+      screen.getByRole('button', { name: '다시 듣기' }),
+      screen.getByRole('button', { name: '음성 중지' }),
+      screen.getByRole('combobox', { name: '안내 속도' })
+    ]) {
+      expect(control).toBeDisabled();
+    }
+
+    rerender(
+      <F4_VoiceController
+        sessionId="session-ui-test"
+        message="안전한 안내 문장입니다."
+        recognitionFactory={null}
+        synthesisFactory={tts.factory}
+        disabled
+      />
+    );
+    expect(screen.getByRole('button', { name: '안내 듣기' })).toBeDisabled();
+    expect(tts.speak).toHaveBeenCalledOnce();
   });
 });
