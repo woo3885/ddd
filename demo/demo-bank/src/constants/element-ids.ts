@@ -87,6 +87,7 @@ export const ELEMENT_IDS = {
     'status-confirmed-transfer-amount',
   BUTTON_TRANSFER_AMOUNT_CONFIRM: 'btn-transfer-amount-confirm',
   BUTTON_TRANSFER_PASSWORD_START: 'btn-transfer-password-start',
+  BUTTON_TRANSFER_OTP_START: 'btn-transfer-otp-start',
   BUTTON_TRANSFER_RECIPIENT_BACK: 'btn-transfer-recipient-back',
   PAGE_TRANSFER_PASSWORD: 'page-transfer-password',
   SUMMARY_TRANSFER_PASSWORD_SOURCE_ACCOUNT:
@@ -101,6 +102,16 @@ export const ELEMENT_IDS = {
   BUTTON_SECURE_INPUT_COMPLETE: 'btn-secure-input-complete',
   BUTTON_TRANSFER_AMOUNT_BACK: 'btn-transfer-amount-back',
   NOTICE_TRANSFER_SECURE_INPUT: 'notice-transfer-secure-input',
+  PAGE_TRANSFER_OTP: 'page-transfer-otp',
+  SUMMARY_TRANSFER_OTP_SOURCE_ACCOUNT:
+    'summary-transfer-otp-source-account',
+  SUMMARY_TRANSFER_OTP_RECIPIENT: 'summary-transfer-otp-recipient',
+  INPUT_OTP: 'input-otp',
+  STATUS_TRANSFER_OTP_INPUT: 'status-transfer-otp-input',
+  STATUS_CONFIRMED_TRANSFER_OTP: 'status-confirmed-transfer-otp',
+  BUTTON_TRANSFER_PASSWORD_BACK: 'btn-transfer-password-back',
+  NOTICE_TRANSFER_OTP_SECURE_INPUT:
+    'notice-transfer-otp-secure-input',
   STATUS_HOME_STATIC: 'status-home-static',
   STATUS_DEPOSIT_STATIC: 'status-deposit-static',
   STATUS_TRANSFER_STATIC: 'status-transfer-static',

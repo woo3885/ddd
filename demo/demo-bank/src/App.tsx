@@ -3,6 +3,7 @@ import {
   createDepositProductDetailPath,
   createDepositTermsPath,
   createTransferAmountPath,
+  createTransferOtpPath,
   createTransferPasswordPath,
   createTransferRecipientsPath,
   normalizePathname,
@@ -18,6 +19,7 @@ import HomePage from './pages/HomePage';
 import NotFoundPage from './pages/NotFoundPage';
 import TransferAccountsPage from './pages/TransferAccountsPage';
 import TransferAmountPage from './pages/TransferAmountPage';
+import TransferOtpPage from './pages/TransferOtpPage';
 import TransferPasswordPage from './pages/TransferPasswordPage';
 import TransferRecipientsPage from './pages/TransferRecipientsPage';
 
@@ -54,6 +56,23 @@ export default function App() {
       ({ account, recipient }) =>
         createTransferPasswordPath(account.id, recipient.id) === currentPath
     );
+  const transferOtpContext = demoAccounts
+    .flatMap((account) =>
+      transferRecipients.map((recipient) => ({ account, recipient }))
+    )
+    .find(
+      ({ account, recipient }) =>
+        createTransferOtpPath(account.id, recipient.id) === currentPath
+    );
+
+  if (transferOtpContext) {
+    return (
+      <TransferOtpPage
+        account={transferOtpContext.account}
+        recipient={transferOtpContext.recipient}
+      />
+    );
+  }
 
   if (transferPasswordContext) {
     return (

@@ -6,7 +6,8 @@ export const ROUTES = {
   TRANSFER_ACCOUNTS: '/transfer/accounts',
   TRANSFER_RECIPIENTS: '/transfer/recipients',
   TRANSFER_AMOUNT: '/transfer/amount',
-  TRANSFER_SECURE_PASSWORD: '/transfer/secure/password'
+  TRANSFER_SECURE_PASSWORD: '/transfer/secure/password',
+  TRANSFER_SECURE_OTP: '/transfer/secure/otp'
 } as const;
 
 export type DemoBankRoute = (typeof ROUTES)[keyof typeof ROUTES];
@@ -39,6 +40,13 @@ export function createTransferPasswordPath(
   recipientId: string
 ): string {
   return `${ROUTES.TRANSFER_SECURE_PASSWORD}/${encodeURIComponent(accountId)}/${encodeURIComponent(recipientId)}`;
+}
+
+export function createTransferOtpPath(
+  accountId: string,
+  recipientId: string
+): string {
+  return `${ROUTES.TRANSFER_SECURE_OTP}/${encodeURIComponent(accountId)}/${encodeURIComponent(recipientId)}`;
 }
 
 export function normalizePathname(pathname: string): string {
