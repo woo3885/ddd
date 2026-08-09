@@ -233,6 +233,53 @@ D12는 데모 비밀번호 입력을 로컬에서 완료한 뒤 별도 버튼으
 개발자 B의 selector, 자동화 금지 항목과 수동 검증 절차는
 `../docs/demo-bank-d12-playwright-handoff.md`에 있다.
 
+## D13 이체 최종 확인
+
+D13은 OTP 원문을 제거하고 로컬 입력 완료 상태가 된 뒤 별도 버튼으로
+최종 확인 Mock 화면에 이동하는 흐름을 제공한다.
+
+- 구현 URL은 `/transfer/confirmation/:accountId/:recipientId`다.
+- pathname에는 공개 Mock accountId와 recipientId만 포함한다.
+- D10 입력 금액은 저장·전달되지 않으므로 숫자를 임의 생성하지 않고
+  `전달되지 않음`으로 표시한다.
+- 화면은 실제 거래 요약이 아니라 D1 selector와 사용자 직접 승인 Gate를
+  확인하기 위한 Mock이다.
+- 최종 승인 checkbox는 초기 미선택이고 승인 버튼은 실제 disabled다.
+- 사용자가 checkbox를 선택해야 `btn-final-approve`가 활성화된다.
+- 승인 버튼은 `data-ddd-policy="final-confirmation"`을 제공하고 로컬 안내만
+  갱신한다.
+- 수정 버튼은 동일 Mock 문맥의 금액 입력 화면으로 이동하지만 이전 금액을
+  복원하지 않는다.
+- 취소 버튼은 로컬 선택과 승인 상태만 초기화하며 거래 취소 API를 호출하지
+  않는다.
+- 실제 인증, 승인 API, 송금, 잔액 변경, API와 WebSocket은 없다.
+- 직접 URL 접근은 이전 금액 입력, 비밀번호·OTP 인증 또는 승인 완료를
+  증명하지 않는다.
+
+개발자 B의 selector, 자동화 중단 계약과 수동 승인 검증 절차는
+`../docs/demo-bank-d13-playwright-handoff.md`에 있다.
+
+## D14 이체 데모 완료
+
+D14는 D13에서 사용자가 checkbox와 승인 버튼을 직접 조작해 로컬 승인
+상태가 된 뒤, 별도 버튼으로 이동하는 데모 안내 흐름 결과 화면이다.
+
+- 구현 URL은 `/transfer/completed/:accountId/:recipientId`다.
+- pathname에는 공개 Mock accountId와 recipientId만 포함한다.
+- checkbox 선택만으로는 완료 화면 버튼이 활성화되지 않는다.
+- 사용자가 `btn-final-approve`를 직접 클릭한 뒤에만
+  `btn-transfer-completion-start`가 활성화된다.
+- 완료 화면은 데모 흐름과 사용자 승인 UI 절차를 확인했다는 의미다.
+- 실제 송금, 잔액 변경, 인증 결과, 거래번호와 영수증은 없다.
+- D10 금액은 완료 화면에 전달하거나 임의 생성하지 않는다.
+- 정상 직접 접근은 화면·DOM 계약 확인용이며 이전 사용자 승인을 증명하지
+  않는다.
+- `btn-transfer-home`은 같은 탭에서 데모 메인으로 돌아간다.
+- 같은 거래 재실행, API, WebSocket과 실제 금융 Action은 제공하지 않는다.
+
+개발자 B의 selector, 직접 접근 경계와 수동 검증 절차는
+`../docs/demo-bank-d14-playwright-handoff.md`에 있다.
+
 ## D3 Mock 데이터
 
 - 예금 상품: 12개월 정기예금, 우대금리 정기예금
@@ -248,8 +295,9 @@ Mock 데이터는 `src/data/demo-data.ts`에서 관리한다.
 
 ## 현재 구현 범위
 
-D12는 세 기본 화면, 메인 업무 이동, 상품·출금 계좌의 로컬 단일 선택,
+D14는 세 기본 화면, 메인 업무 이동, 상품·출금 계좌의 로컬 단일 선택,
 예금 상품 상세, 가입 금액 로컬 검증, 예금 약관 개별 선택과 수취인 로컬
 선택·확인, 이체 금액 로컬 검증, 계좌 비밀번호와 OTP 보안 입력 Mock까지
-제공한다. 실제 예금 가입, 송금, 잔액 차감, 인증, API, WebSocket과 외부
+제공하며 이체 최종 확인 DOM, 사용자 승인 Gate와 별도 데모 완료 화면을
+추가한다. 실제 예금 가입, 송금, 잔액 차감, 인증, API, WebSocket과 외부
 금융사이트 연결은 구현하지 않는다.

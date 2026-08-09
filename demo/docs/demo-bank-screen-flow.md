@@ -81,13 +81,13 @@ stateDiagram-v2
     TRANSFER_OTP --> TRANSFER_PASSWORD: 이전
     TRANSFER_OTP --> TRANSFER_OTP: OTP 직접 수정
     TRANSFER_OTP --> HOME: 취소
-    TRANSFER_OTP --> TRANSFER_CONFIRMATION: OTP 입력 완료
+    TRANSFER_OTP --> TRANSFER_CONFIRMATION: OTP 로컬 입력 완료 후 별도 시작
     TRANSFER_CONFIRMATION --> TRANSFER_OTP: 이전
     TRANSFER_CONFIRMATION --> TRANSFER_ACCOUNT_SELECTION: 출금 계좌 수정
     TRANSFER_CONFIRMATION --> TRANSFER_RECIPIENT_SELECTION: 수취인 수정
     TRANSFER_CONFIRMATION --> TRANSFER_AMOUNT: 송금 금액 수정
     TRANSFER_CONFIRMATION --> HOME: 취소
-    TRANSFER_CONFIRMATION --> TRANSFER_COMPLETED: 사용자가 최종 승인
+    TRANSFER_CONFIRMATION --> TRANSFER_COMPLETED: 로컬 승인 후 별도 완료 화면 이동
     TRANSFER_COMPLETED --> HOME: 처음으로
 ```
 
@@ -186,7 +186,41 @@ React에는 `EMPTY`, `ENTERED` 상태와 로컬 데모 완료 boolean만 저장�
 탐지, `SECURE_INPUT_REQUIRED` 전환, 자동화·AI·캡처 중단과 안전한 재개는
 개발자 B의 후속 통합 책임이다.
 
-## 11. D1 완료 체크리스트
+## 11. D13 이체 최종 확인 Mock 경계
+
+`TRANSFER_OTP`에서 사용자가 입력 완료 버튼을 누르면 OTP 원문을 DOM에서
+제거하고 로컬 완료 상태만 저장한다. 그 뒤 별도 최종 확인 시작 버튼을
+사용자가 직접 눌러 `/transfer/confirmation/:accountId/:recipientId`로
+이동한다. OTP 원문과 완료 상태는 다음 화면으로 전달하지 않는다.
+
+`TRANSFER_CONFIRMATION`은 공개 Mock 계좌·수취인 문맥과 D1 최종 승인 DOM
+Gate를 확인하는 화면이다. D10 입력 금액은 화면 이동 후 소멸하므로 임의
+금액을 만들지 않고 `전달되지 않음`으로 표시한다. 따라서 이 화면은 실제
+거래 요약이나 송금 준비 완료를 의미하지 않는다.
+
+최종 승인 checkbox는 초기 미선택이며 사용자가 직접 선택한 뒤에만 승인
+버튼이 활성화된다. 승인 버튼은 `data-ddd-policy="final-confirmation"`을
+제공하며 클릭 시 로컬 확인 안내만 표시한다. API, WebSocket, 실제 송금과
+잔액 변경은 수행하지 않는다. 직접 URL 접근도 앞 단계 완료를 증명하지
+않는다.
+
+## 12. D14 이체 데모 완료 Mock 경계
+
+`TRANSFER_CONFIRMATION`에서 checkbox를 직접 선택하는 것만으로는 완료 화면
+Gate가 열리지 않는다. 사용자가 `btn-final-approve`를 직접 눌러 로컬 승인
+상태가 된 뒤에만 별도 완료 화면 이동 버튼이 활성화된다. checkbox 변경이나
+취소는 로컬 승인과 Gate를 초기화한다.
+
+`TRANSFER_COMPLETED`는 `/transfer/completed/:accountId/:recipientId`에서 공개
+Mock 계좌·수취인 문맥만 표시한다. 사용자 승인 UI 절차와 데모 안내 흐름을
+확인했다는 의미이며 실제 송금 성공, 인증 결과, 잔액 변경이나 거래 영수증을
+의미하지 않는다. 금액도 전달되지 않으며 임의 값을 만들지 않는다.
+
+정상 직접 URL 접근은 화면·DOM 계약 확인용 예외다. URL 자체는 앞 단계
+checkbox 선택과 승인을 증명하지 않는다. 메인 복귀만 제공하며 같은 거래를
+다시 실행하는 버튼, API, WebSocket과 실제 금융 Action은 제공하지 않는다.
+
+## 13. D1 완료 체크리스트
 
 - [x] 예금 전체 화면 흐름 존재
 - [x] 계좌이체 전체 화면 흐름 존재
