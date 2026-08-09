@@ -27,7 +27,7 @@
 | `/transfer/amount` | `TRANSFER_AMOUNT` | 송금 금액 입력의 개념 경로 | D10 구현은 유효한 Mock `accountId`와 `recipientId` 필요 | 아니오 | D10 |
 | `/transfer/secure/password` | `TRANSFER_PASSWORD` | 이체용 계좌 비밀번호 직접 입력 | D11 구현은 화면 계약 확인용 직접 접근 허용 | 아니오 | D11 |
 | `/transfer/secure/otp` | `TRANSFER_OTP` | OTP 직접 입력의 개념 경로 | D12 구현은 화면·DOM 계약 확인용 직접 접근 허용 | 아니오 | D12 |
-| `/transfer/confirmation` | `TRANSFER_CONFIRMATION` | 송금 내용 최종 확인 | 불가: OTP 입력 완료 필요 | 아니오 | D6 이후 |
+| `/transfer/confirmation` | `TRANSFER_CONFIRMATION` | 송금 내용 최종 확인 | D13 구현은 화면·DOM 계약 확인용 직접 접근 허용 | 아니오 | D13 |
 | `/transfer/completed` | `TRANSFER_COMPLETED` | 송금 시연 완료 | 불가: 최종 승인 결과 필요 | 아니오 | D6 이후 |
 
 ## 3. D3 구현 URL
@@ -168,3 +168,28 @@ query와 hash에 포함하지 않는다.
 예외다. 직접 접근 시 이전 비밀번호 입력 완료나 실제 인증 완료를 주장하지
 않는다. 누락 segment, 알려지지 않은 ID, 추가 segment와 canonical path에
 맞지 않는 encoding은 NotFound로 처리한다.
+
+## 11. D13 이체 최종 확인 경로 구체화
+
+D1 개념 경로 `/transfer/confirmation`을 유지하면서 공개 Mock 계좌와 수취인
+문맥만 복원하기 위해 다음 형식으로 구체화한다.
+
+```text
+/transfer/confirmation/:accountId/:recipientId
+```
+
+정상 URL은 다음 네 조합과 각 trailing slash다.
+
+- `/transfer/confirmation/living-expense/hong-gildong`
+- `/transfer/confirmation/living-expense/demo-saved`
+- `/transfer/confirmation/savings/hong-gildong`
+- `/transfer/confirmation/savings/demo-saved`
+
+pathname에는 공개 Mock accountId와 recipientId만 포함한다. 이체 금액,
+비밀번호, OTP, 계좌번호, 잔액, 인증·입력 완료 상태, 사용자 승인 상태와
+거래 결과는 pathname, query와 hash에 포함하지 않는다.
+
+알려진 조합의 직접 접근은 D13 최종 확인 화면과 DOM Gate를 확인하기 위한
+Mock 예외다. 직접 접근은 앞 단계 입력·인증·승인 완료를 증명하지 않는다.
+누락 segment, 알려지지 않은 ID, 추가 segment와 canonical path에 맞지 않는
+encoding은 NotFound로 처리한다.

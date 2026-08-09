@@ -1003,6 +1003,155 @@ input:focus-visible {
   margin-top: 0;
 }
 
+.transfer-confirmation-notice {
+  max-width: 900px;
+  margin-top: 28px;
+  padding: 22px;
+  border: 3px solid #b54708;
+  border-radius: 14px;
+  background: #fffaeb;
+  color: #7a2e0e;
+}
+
+.transfer-confirmation-notice h2,
+.transfer-confirmation-notice p {
+  margin: 0;
+}
+
+.transfer-confirmation-notice h2 {
+  color: #7a2e0e;
+}
+
+.transfer-confirmation-notice p {
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.transfer-confirmation-card {
+  max-width: 900px;
+  margin-top: 28px;
+  padding: 32px;
+  border: 2px solid #98a2b3;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(16 24 40 / 8%);
+}
+
+.transfer-confirmation-card > h2 {
+  margin: 0;
+}
+
+.transfer-confirmation-summary {
+  display: grid;
+  margin: 24px 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.transfer-confirmation-summary > div {
+  min-width: 0;
+  padding: 20px;
+  border: 2px solid #d0d5dd;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.transfer-confirmation-summary dt {
+  color: #475467;
+  font-weight: 700;
+}
+
+.transfer-confirmation-summary dd {
+  display: flex;
+  margin: 8px 0 0;
+  flex-direction: column;
+  gap: 5px;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.transfer-confirmation-summary .masked-account-number {
+  margin-top: 0;
+}
+
+.transfer-confirmation-amount-status,
+.transfer-final-approval-status {
+  min-height: 62px;
+  margin: 20px 0 0;
+  padding: 16px 18px;
+  border: 2px solid #b54708;
+  border-radius: 12px;
+  background: #fffaeb;
+  color: #7a2e0e;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.transfer-final-confirmation-fieldset {
+  min-width: 0;
+  margin: 24px 0 0;
+  padding: 22px;
+  border: 2px solid #667085;
+  border-radius: 14px;
+}
+
+.transfer-final-confirmation-fieldset legend {
+  padding: 0 10px;
+  color: #101828;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.transfer-final-confirmation-fieldset > p {
+  margin: 14px 0 0;
+  color: #475467;
+  font-size: 16px;
+}
+
+.transfer-final-confirmation-label {
+  display: flex;
+  min-height: 56px;
+  align-items: flex-start;
+  gap: 14px;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.transfer-final-confirmation-label input {
+  width: 26px;
+  height: 26px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: #175cd3;
+}
+
+.transfer-final-approval-status {
+  border-color: #667085;
+  background: #f8fafc;
+  color: #344054;
+}
+
+.transfer-final-approval-status:empty {
+  display: none;
+}
+
+.transfer-confirmation-actions {
+  display: flex;
+  margin-top: 28px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.transfer-confirmation-actions .primary-button {
+  width: auto;
+  margin-top: 0;
+}
+
 @media (max-width: 820px) {
   .header-content {
     align-items: stretch;
@@ -1042,7 +1191,8 @@ input:focus-visible {
   .transfer-source-summary,
   .recipient-list,
   .transfer-amount-context-grid,
-  .transfer-password-context-grid {
+  .transfer-password-context-grid,
+  .transfer-confirmation-summary {
     grid-template-columns: 1fr;
   }
 }
@@ -1072,6 +1222,8 @@ input:focus-visible {
   .deposit-terms-card,
   .transfer-amount-card,
   .transfer-password-card,
+  .transfer-confirmation-card,
+  .transfer-confirmation-notice,
   .demo-rate-notice,
   .warning-box,
   .not-found-panel {
@@ -1086,7 +1238,8 @@ input:focus-visible {
   .deposit-amount-actions,
   .deposit-terms-actions,
   .transfer-recipient-actions,
-  .transfer-password-actions {
+  .transfer-password-actions,
+  .transfer-confirmation-actions {
     flex-direction: column;
   }
 
@@ -1100,7 +1253,9 @@ input:focus-visible {
   .transfer-amount-actions .primary-button,
   .transfer-amount-actions .secondary-button,
   .transfer-password-actions .primary-button,
-  .transfer-password-actions .secondary-button {
+  .transfer-password-actions .secondary-button,
+  .transfer-confirmation-actions .primary-button,
+  .transfer-confirmation-actions .secondary-button {
     width: 100%;
   }
 

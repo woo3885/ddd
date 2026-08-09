@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
+  createTransferConfirmationPath,
   createTransferOtpPath,
   createTransferPasswordPath
 } from '../constants/routes';
@@ -167,12 +168,32 @@ export default function TransferOtpPage({
           >
             입력 완료
           </button>
+          <button
+            {...elementIdentity(
+              ELEMENT_IDS.BUTTON_TRANSFER_CONFIRMATION_START
+            )}
+            type="button"
+            className="primary-button"
+            disabled={!otpInputCompleted}
+            aria-describedby={ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_OTP}
+            onClick={() =>
+              window.location.assign(
+                createTransferConfirmationPath(
+                  account.id,
+                  recipient.id
+                )
+              )
+            }
+          >
+            최종 확인 화면으로 이동
+          </button>
         </div>
       </section>
 
       <p className="no-transaction-notice">
         OTP 입력은 로컬 데모 절차이며 실제 인증, 거래 최종 확인, 잔액 차감과
-        송금은 발생하지 않습니다.
+        송금은 발생하지 않습니다. 입력 완료 후에도 사용자가 별도 버튼을
+        직접 눌러야 최종 확인 Mock으로 이동합니다.
       </p>
     </DemoBankLayout>
   );

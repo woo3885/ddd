@@ -112,6 +112,23 @@ export const ELEMENT_IDS = {
   BUTTON_TRANSFER_PASSWORD_BACK: 'btn-transfer-password-back',
   NOTICE_TRANSFER_OTP_SECURE_INPUT:
     'notice-transfer-otp-secure-input',
+  BUTTON_TRANSFER_CONFIRMATION_START:
+    'btn-transfer-confirmation-start',
+  PAGE_TRANSFER_CONFIRMATION: 'page-transfer-confirmation',
+  SUMMARY_TRANSACTION_TYPE: 'summary-transaction-type',
+  SUMMARY_TRANSFER_CONFIRMATION_SOURCE_ACCOUNT:
+    'summary-transfer-confirmation-source-account',
+  SUMMARY_RECIPIENT: 'summary-recipient',
+  SUMMARY_AMOUNT: 'summary-amount',
+  STATUS_TRANSFER_CONFIRMATION_AMOUNT:
+    'status-transfer-confirmation-amount',
+  NOTICE_TRANSFER_CONFIRMATION: 'notice-transfer-confirmation',
+  CHECKBOX_FINAL_CONFIRMATION: 'checkbox-final-confirmation',
+  BUTTON_FINAL_APPROVE: 'btn-final-approve',
+  BUTTON_FINAL_EDIT: 'btn-final-edit',
+  BUTTON_FINAL_CANCEL: 'btn-final-cancel',
+  STATUS_TRANSFER_FINAL_APPROVAL: 'status-transfer-final-approval',
+  BUTTON_TRANSFER_OTP_BACK: 'btn-transfer-otp-back',
   STATUS_HOME_STATIC: 'status-home-static',
   STATUS_DEPOSIT_STATIC: 'status-deposit-static',
   STATUS_TRANSFER_STATIC: 'status-transfer-static',
