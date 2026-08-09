@@ -34,6 +34,11 @@ import {
   createFinalConfirmationResult,
   stringifyFinalConfirmationResult,
 } from "./finalAction/finalConfirmation.mapper.js";
+import { detectRisk } from "./risk/riskDetector.js";
+import {
+  createRiskWarningResult,
+  stringifyRiskWarningResult,
+} from "./risk/riskWarning.mapper.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -748,6 +753,113 @@ for (const testCase of finalActionTestCases) {
     console.log(
       stringifyFinalConfirmationResult(
         confirmationResult,
+      ),
+    );
+  }
+
+  console.log();
+}
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - RISK_WARNING 테스트");
+console.log("========================================\n");
+
+const riskTestCases = [
+  {
+    text: "돈을 안전계좌로 보내야 보호할 수 있다고 합니다.",
+    sourceType: "USER_MESSAGE" as const,
+  },
+
+  {
+    text: "금융감독원입니다. 지금 안전계좌로 송금하세요.",
+    sourceType: "USER_MESSAGE" as const,
+  },
+
+  {
+    text: "지금 당장 송금하지 않으면 문제가 생긴다고 합니다.",
+    sourceType: "USER_MESSAGE" as const,
+  },
+
+  {
+    text: "검찰입니다. 고객님의 계좌가 범죄에 이용되었습니다.",
+    sourceType: "USER_MESSAGE" as const,
+  },
+
+  {
+    text: "상담을 위해 원격제어 앱을 설치해 주세요.",
+    sourceType: "PAGE_TEXT" as const,
+  },
+
+  {
+    text: "대출을 받으려면 먼저 입금해야 합니다.",
+    sourceType: "USER_MESSAGE" as const,
+  },
+
+  // 정상 문장
+  {
+    text: "금리가 높은 예금 상품을 찾아주세요.",
+    sourceType: "USER_MESSAGE" as const,
+  },
+
+  {
+    text: "내 계좌 잔액을 확인하고 싶어요.",
+    sourceType: "USER_MESSAGE" as const,
+  },
+];
+
+for (const testCase of riskTestCases) {
+  const detection =
+    detectRisk(testCase);
+
+  console.log(
+    `[입력 문장] ${testCase.text}`,
+  );
+
+  console.log(
+    `[위험 탐지] ${detection.detected}`,
+  );
+
+  console.log(
+    `[위험 종류] ${
+      detection.riskType ?? "없음"
+    }`,
+  );
+
+  console.log(
+    `[위험 수준] ${
+      detection.riskLevel ?? "없음"
+    }`,
+  );
+
+  console.log(
+    `[신뢰도] ${detection.confidence}`,
+  );
+
+  console.log(
+    `[감지 키워드] ${
+      detection.matchedKeywords.length > 0
+        ? detection.matchedKeywords.join(", ")
+        : "없음"
+    }`,
+  );
+
+  console.log(
+    `[판단 근거] ${detection.reason}`,
+  );
+
+  const warningResult =
+    createRiskWarningResult(
+      detection,
+    );
+
+  if (warningResult) {
+    console.log(
+      "[RISK_WARNING 결과]",
+    );
+
+    console.log(
+      stringifyRiskWarningResult(
+        warningResult,
       ),
     );
   }
