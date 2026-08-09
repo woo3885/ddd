@@ -4,6 +4,7 @@ import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
   createTransferAmountPath,
+  createTransferCompletedPath,
   createTransferConfirmationPath,
   createTransferOtpPath
 } from '../constants/routes';
@@ -209,6 +210,22 @@ export default function TransferConfirmationPage({
             onClick={handleLocalApproval}
           >
             데모 최종 승인
+          </button>
+          <button
+            {...elementIdentity(
+              ELEMENT_IDS.BUTTON_TRANSFER_COMPLETION_START
+            )}
+            type="button"
+            className="primary-button"
+            disabled={!isLocallyApproved}
+            aria-describedby={ELEMENT_IDS.STATUS_TRANSFER_FINAL_APPROVAL}
+            onClick={() =>
+              window.location.assign(
+                createTransferCompletedPath(account.id, recipient.id)
+              )
+            }
+          >
+            데모 완료 화면으로 이동
           </button>
         </div>
       </section>

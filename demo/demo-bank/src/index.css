@@ -1152,6 +1152,100 @@ input:focus-visible {
   margin-top: 0;
 }
 
+.transfer-completion-notice {
+  max-width: 900px;
+  margin-top: 28px;
+  padding: 22px;
+  border: 3px solid #175cd3;
+  border-radius: 14px;
+  background: #eff8ff;
+  color: #0b4a8f;
+}
+
+.transfer-completion-notice h2,
+.transfer-completion-notice p {
+  margin: 0;
+}
+
+.transfer-completion-notice h2 {
+  color: #0b4a8f;
+}
+
+.transfer-completion-notice p {
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.transfer-completion-card {
+  max-width: 900px;
+  margin-top: 28px;
+  padding: 32px;
+  border: 2px solid #98a2b3;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(16 24 40 / 8%);
+}
+
+.transfer-completion-card > h2 {
+  margin: 0;
+}
+
+.transfer-completion-summary {
+  display: grid;
+  margin: 24px 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.transfer-completion-summary > div {
+  min-width: 0;
+  padding: 20px;
+  border: 2px solid #d0d5dd;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.transfer-completion-summary dt {
+  color: #475467;
+  font-weight: 700;
+}
+
+.transfer-completion-summary dd {
+  display: flex;
+  margin: 8px 0 0;
+  flex-direction: column;
+  gap: 5px;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.transfer-completion-summary .masked-account-number {
+  margin-top: 0;
+}
+
+.transfer-demo-completion-status {
+  margin: 24px 0 0;
+  padding: 18px;
+  border: 2px solid #067647;
+  border-radius: 12px;
+  background: #ecfdf3;
+  color: #05603a;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.transfer-completion-actions {
+  display: flex;
+  margin-top: 28px;
+}
+
+.transfer-completion-actions .primary-button {
+  width: auto;
+  margin-top: 0;
+}
+
 @media (max-width: 820px) {
   .header-content {
     align-items: stretch;
@@ -1192,7 +1286,8 @@ input:focus-visible {
   .recipient-list,
   .transfer-amount-context-grid,
   .transfer-password-context-grid,
-  .transfer-confirmation-summary {
+  .transfer-confirmation-summary,
+  .transfer-completion-summary {
     grid-template-columns: 1fr;
   }
 }
@@ -1224,6 +1319,8 @@ input:focus-visible {
   .transfer-password-card,
   .transfer-confirmation-card,
   .transfer-confirmation-notice,
+  .transfer-completion-card,
+  .transfer-completion-notice,
   .demo-rate-notice,
   .warning-box,
   .not-found-panel {
@@ -1239,7 +1336,8 @@ input:focus-visible {
   .deposit-terms-actions,
   .transfer-recipient-actions,
   .transfer-password-actions,
-  .transfer-confirmation-actions {
+  .transfer-confirmation-actions,
+  .transfer-completion-actions {
     flex-direction: column;
   }
 
@@ -1255,7 +1353,8 @@ input:focus-visible {
   .transfer-password-actions .primary-button,
   .transfer-password-actions .secondary-button,
   .transfer-confirmation-actions .primary-button,
-  .transfer-confirmation-actions .secondary-button {
+  .transfer-confirmation-actions .secondary-button,
+  .transfer-completion-actions .primary-button {
     width: 100%;
   }
 

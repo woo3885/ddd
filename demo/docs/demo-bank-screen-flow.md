@@ -87,7 +87,7 @@ stateDiagram-v2
     TRANSFER_CONFIRMATION --> TRANSFER_RECIPIENT_SELECTION: 수취인 수정
     TRANSFER_CONFIRMATION --> TRANSFER_AMOUNT: 송금 금액 수정
     TRANSFER_CONFIRMATION --> HOME: 취소
-    TRANSFER_CONFIRMATION --> TRANSFER_COMPLETED: 사용자가 최종 승인
+    TRANSFER_CONFIRMATION --> TRANSFER_COMPLETED: 로컬 승인 후 별도 완료 화면 이동
     TRANSFER_COMPLETED --> HOME: 처음으로
 ```
 
@@ -204,7 +204,23 @@ Gate를 확인하는 화면이다. D10 입력 금액은 화면 이동 후 소멸
 잔액 변경은 수행하지 않는다. 직접 URL 접근도 앞 단계 완료를 증명하지
 않는다.
 
-## 12. D1 완료 체크리스트
+## 12. D14 이체 데모 완료 Mock 경계
+
+`TRANSFER_CONFIRMATION`에서 checkbox를 직접 선택하는 것만으로는 완료 화면
+Gate가 열리지 않는다. 사용자가 `btn-final-approve`를 직접 눌러 로컬 승인
+상태가 된 뒤에만 별도 완료 화면 이동 버튼이 활성화된다. checkbox 변경이나
+취소는 로컬 승인과 Gate를 초기화한다.
+
+`TRANSFER_COMPLETED`는 `/transfer/completed/:accountId/:recipientId`에서 공개
+Mock 계좌·수취인 문맥만 표시한다. 사용자 승인 UI 절차와 데모 안내 흐름을
+확인했다는 의미이며 실제 송금 성공, 인증 결과, 잔액 변경이나 거래 영수증을
+의미하지 않는다. 금액도 전달되지 않으며 임의 값을 만들지 않는다.
+
+정상 직접 URL 접근은 화면·DOM 계약 확인용 예외다. URL 자체는 앞 단계
+checkbox 선택과 승인을 증명하지 않는다. 메인 복귀만 제공하며 같은 거래를
+다시 실행하는 버튼, API, WebSocket과 실제 금융 Action은 제공하지 않는다.
+
+## 13. D1 완료 체크리스트
 
 - [x] 예금 전체 화면 흐름 존재
 - [x] 계좌이체 전체 화면 흐름 존재

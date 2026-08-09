@@ -129,6 +129,15 @@ export const ELEMENT_IDS = {
   BUTTON_FINAL_CANCEL: 'btn-final-cancel',
   STATUS_TRANSFER_FINAL_APPROVAL: 'status-transfer-final-approval',
   BUTTON_TRANSFER_OTP_BACK: 'btn-transfer-otp-back',
+  BUTTON_TRANSFER_COMPLETION_START: 'btn-transfer-completion-start',
+  PAGE_TRANSFER_COMPLETION: 'page-transfer-completion',
+  SUMMARY_TRANSFER_COMPLETION_SOURCE_ACCOUNT:
+    'summary-transfer-completion-source-account',
+  SUMMARY_TRANSFER_COMPLETION_RECIPIENT:
+    'summary-transfer-completion-recipient',
+  STATUS_TRANSFER_DEMO_COMPLETION: 'status-transfer-demo-completion',
+  NOTICE_TRANSFER_NO_TRANSACTION: 'notice-transfer-no-transaction',
+  BUTTON_TRANSFER_HOME: 'btn-transfer-home',
   STATUS_HOME_STATIC: 'status-home-static',
   STATUS_DEPOSIT_STATIC: 'status-deposit-static',
   STATUS_TRANSFER_STATIC: 'status-transfer-static',
