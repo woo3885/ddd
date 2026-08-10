@@ -39,6 +39,11 @@ import {
   createRiskWarningResult,
   stringifyRiskWarningResult,
 } from "./risk/riskWarning.mapper.js";
+import { evaluateConfidence } from "./confidence/confidencePolicy.js";
+import {
+  createFallbackResult,
+  stringifyFallbackResult,
+} from "./confidence/fallback.mapper.js";
 
 const TEST_MESSAGES = [
   "금리가 높은 예금 상품을 찾고 싶어요",
@@ -861,6 +866,112 @@ for (const testCase of riskTestCases) {
       stringifyRiskWarningResult(
         warningResult,
       ),
+    );
+  }
+
+  console.log();
+}
+
+console.log("\n========================================");
+console.log("금융길잡이 AI Engine - Confidence / Fallback 테스트");
+console.log("========================================\n");
+
+const confidenceTestCases = [
+  {
+    name: "높은 신뢰도",
+    confidence: 0.9,
+    source: "NEXT_ACTION" as const,
+  },
+
+  {
+    name: "중간 신뢰도",
+    confidence: 0.65,
+    source: "INTENT" as const,
+  },
+
+  {
+    name: "낮은 신뢰도",
+    confidence: 0.4,
+    source: "INTENT" as const,
+  },
+
+  {
+    name: "판단 불가",
+    confidence: 0,
+    source: "INTENT" as const,
+  },
+
+  {
+    name: "신뢰도는 높지만 요청이 불명확",
+    confidence: 0.9,
+    source: "USER_GOAL" as const,
+    ambiguous: true,
+  },
+
+  {
+    name: "경계값 0.8",
+    confidence: 0.8,
+    source: "NEXT_ACTION" as const,
+  },
+
+  {
+    name: "경계값 0.5",
+    confidence: 0.5,
+    source: "INTENT" as const,
+  },
+];
+
+for (
+  const testCase
+  of confidenceTestCases
+) {
+  const decision =
+    evaluateConfidence(
+      testCase,
+    );
+
+  console.log(
+    `[테스트] ${testCase.name}`,
+  );
+
+  console.log(
+    `[입력 신뢰도] ${testCase.confidence}`,
+  );
+
+  console.log(
+    `[신뢰도 수준] ${decision.level}`,
+  );
+
+  console.log(
+    `[처리 방식] ${decision.action}`,
+  );
+
+  console.log(
+    `[사용자 확인 필요] ${decision.requiresUserAction}`,
+  );
+
+  console.log(
+    `[판단 근거] ${decision.reason}`,
+  );
+
+  const fallback =
+    createFallbackResult(
+      decision,
+    );
+
+  if (fallback) {
+    console.log(
+      "[Fallback 결과]",
+    );
+
+    console.log(
+      stringifyFallbackResult(
+        fallback,
+      ),
+    );
+  } else {
+    console.log(
+      "[Fallback 없음] 기존 AI 판단을 계속 진행합니다.",
     );
   }
 
