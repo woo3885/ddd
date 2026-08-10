@@ -135,6 +135,28 @@
 계좌번호와 인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
 `btn-secure-input-complete`는 각 보안 페이지의 page root 아래에서 조회한다.
 
+### D15 예금 비밀번호 보안 입력
+
+| ID | 대상 |
+| --- | --- |
+| `btn-deposit-terms-next` | 약관 확인 완료 후 예금 비밀번호 화면으로 이동하는 Gate |
+| `page-deposit-password` | 예금 계좌 비밀번호 페이지 루트 |
+| `summary-deposit-password-product-name` | URL로 확인한 공개 Mock 상품명 |
+| `summary-deposit-password-product-period` | URL로 확인한 공개 Mock 상품 기간 |
+| `input-account-password` | D1 계좌 비밀번호 직접 입력 요소 |
+| `status-deposit-password-input` | 비밀번호 입력 유무 상태 live region |
+| `status-confirmed-deposit-password` | 로컬 데모 입력 완료 상태 live region |
+| `btn-secure-input-complete` | D1 보안 입력 완료 버튼 |
+| `btn-deposit-terms-back` | 같은 Mock 상품의 약관 화면 복귀 |
+| `btn-deposit-password-cancel` | 실제 거래 취소가 아닌 데모 흐름 나가기 |
+| `notice-deposit-secure-input` | 사용자 직접 입력과 자동화 중단 보안 안내 |
+
+`input-account-password`는 uncontrolled native `type="password"`,
+`autocomplete="off"`와 `data-ddd-policy="secure-input"`을 사용한다. 원문,
+길이, 가입 금액, 약관·인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
+`btn-secure-input-complete`는 `page-deposit-password` 아래에서 조회하며 이체
+보안 입력 화면과 동시에 렌더링되지 않는다.
+
 ### 최종 승인
 
 | ID | 대상 |

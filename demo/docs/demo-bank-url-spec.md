@@ -218,3 +218,27 @@ pathname, query와 hash에 포함하지 않는다.
 이전 checkbox 선택, 사용자 승인, 실제 인증과 송금을 증명하지 않는다.
 누락 segment, 알려지지 않은 ID, 추가 segment와 canonical path에 맞지 않는
 encoding은 NotFound로 처리한다.
+
+## 13. D15 예금 비밀번호 경로 구체화
+
+D1 개념 경로 `/deposit/secure/password`를 유지하면서 공개 Mock 상품 문맥만
+복원하기 위해 다음 형식으로 구체화한다.
+
+```text
+/deposit/secure/password/:productId
+```
+
+정상 URL은 다음 두 경로와 각 trailing slash다.
+
+- `/deposit/secure/password/deposit-12m`
+- `/deposit/secure/password/deposit-preferred`
+
+pathname에는 공개 Mock `productId`만 포함한다. 가입 금액, 약관 선택·확인
+상태, 비밀번호, 인증 상태, 계좌번호와 실제 고객정보는 pathname, query,
+hash 또는 브라우저 저장소에 포함하지 않는다.
+
+알려진 상품의 직접 접근은 D15 화면과 보안 DOM 계약 확인용 Mock 예외다.
+URL은 이전 약관 확인이나 실제 인증·가입을 증명하지 않는다. `productId`
+누락, 알려지지 않은 상품, 추가 segment와 canonical path에 맞지 않는 encoding은
+NotFound로 처리한다. 기존 pathname 정규화 정책에 따라 정상 trailing slash는
+허용한다.

@@ -280,6 +280,29 @@ D14는 D13에서 사용자가 checkbox와 승인 버튼을 직접 조작해 로�
 개발자 B의 selector, 직접 접근 경계와 수동 검증 절차는
 `../docs/demo-bank-d14-playwright-handoff.md`에 있다.
 
+## D15 예금 비밀번호 보안 입력
+
+D15는 예금 약관을 로컬로 확인한 뒤 별도 다음 버튼으로 예금 비밀번호 보안
+입력 화면에 진입하는 Mock 흐름이다.
+
+- 구현 URL은 `/deposit/secure/password/:productId`다.
+- 지원 URL은 `/deposit/secure/password/deposit-12m`과
+  `/deposit/secure/password/deposit-preferred`다.
+- pathname에는 공개 Mock `productId`만 포함한다.
+- 약관 확인 버튼과 `btn-deposit-terms-next` 이동 Gate를 분리한다.
+- 약관을 변경하면 확인 결과와 이동 Gate를 함께 초기화한다.
+- 정상 직접 접근은 화면·DOM 계약 확인용이며 이전 약관 확인이나 실제 인증을
+  증명하지 않는다.
+- 비밀번호는 uncontrolled native input에서 사용자가 직접 입력한다.
+- React에는 `EMPTY | ENTERED`와 로컬 완료 boolean만 저장한다.
+- 입력 완료 시 DOM 값을 즉시 제거하고 실제 인증·가입·잔액 변경은 수행하지
+  않는다.
+- `data-ddd-policy="secure-input"` 탐지 이후 자동화·AI·캡처 중단과 안전한
+  재개는 개발자 B의 후속 통합 책임이다.
+
+Playwright DOM 계약, 자동화 금지 사항과 수동 검증 절차는
+`../docs/demo-bank-d15-playwright-handoff.md`에 있다.
+
 ## D3 Mock 데이터
 
 - 예금 상품: 12개월 정기예금, 우대금리 정기예금
@@ -295,9 +318,10 @@ Mock 데이터는 `src/data/demo-data.ts`에서 관리한다.
 
 ## 현재 구현 범위
 
-D14는 세 기본 화면, 메인 업무 이동, 상품·출금 계좌의 로컬 단일 선택,
+D15는 세 기본 화면, 메인 업무 이동, 상품·출금 계좌의 로컬 단일 선택,
 예금 상품 상세, 가입 금액 로컬 검증, 예금 약관 개별 선택과 수취인 로컬
 선택·확인, 이체 금액 로컬 검증, 계좌 비밀번호와 OTP 보안 입력 Mock까지
 제공하며 이체 최종 확인 DOM, 사용자 승인 Gate와 별도 데모 완료 화면을
-추가한다. 실제 예금 가입, 송금, 잔액 차감, 인증, API, WebSocket과 외부
+제공한다. 예금 약관 확인 뒤 별도 Gate와 예금 비밀번호 보안 입력 Mock도
+포함한다. 실제 예금 가입, 송금, 잔액 차감, 인증, API, WebSocket과 외부
 금융사이트 연결은 구현하지 않는다.

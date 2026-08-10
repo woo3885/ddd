@@ -220,7 +220,28 @@ Mock 계좌·수취인 문맥만 표시한다. 사용자 승인 UI 절차와 데
 checkbox 선택과 승인을 증명하지 않는다. 메인 복귀만 제공하며 같은 거래를
 다시 실행하는 버튼, API, WebSocket과 실제 금융 Action은 제공하지 않는다.
 
-## 13. D1 완료 체크리스트
+## 13. D15 예금 비밀번호 보안 입력 Mock 경계
+
+`DEPOSIT_TERMS`에서 필수 약관을 모두 직접 선택한 뒤 기존 확인 버튼을
+눌러야 `btn-deposit-terms-next`가 활성화된다. 약관 확인과 화면 이동은 서로
+다른 사용자 행동이며, 약관 선택을 바꾸면 확인 결과와 다음 Gate를 함께
+초기화한다.
+
+`DEPOSIT_PASSWORD`는 `/deposit/secure/password/:productId`에서 공개 Mock
+상품명과 기간만 복원한다. 정상 직접 URL 접근은 화면과 보안 DOM 계약을
+확인하기 위한 예외이며 이전 약관 확인, 실제 인증 또는 가입 진행을
+증명하지 않는다.
+
+비밀번호는 uncontrolled native `type="password"` input에서 사용자가 직접
+입력한다. React에는 `EMPTY`, `ENTERED` 상태와 로컬 완료 boolean만 저장하며
+원문이나 길이는 저장하지 않는다. 입력 완료 시 DOM 값을 즉시 제거하고
+실제 인증, 예금 가입, 잔액 변경과 최종 확인 화면 이동은 수행하지 않는다.
+
+데모페이지는 `data-ddd-policy="secure-input"` 신호를 제공한다. 보안 입력
+탐지 후 자동화·AI·DOM·프레임·screenshot·trace·video 수집 중단과 안전한
+재개는 개발자 B의 후속 통합 책임이다.
+
+## 14. D1 완료 체크리스트
 
 - [x] 예금 전체 화면 흐름 존재
 - [x] 계좌이체 전체 화면 흐름 존재

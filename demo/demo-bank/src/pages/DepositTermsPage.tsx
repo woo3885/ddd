@@ -4,6 +4,7 @@ import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
   createDepositConditionsPath,
+  createDepositPasswordPath,
   createDepositTermsPath
 } from '../constants/routes';
 import type { DepositProduct } from '../data/demo-data';
@@ -26,6 +27,8 @@ export default function DepositTermsPage({
   const [confirmationMessage, setConfirmationMessage] = useState<
     string | null
   >(null);
+  const [termsSelectionConfirmed, setTermsSelectionConfirmed] =
+    useState(false);
   const selectionSummary = getDepositTermsSelectionSummary(
     depositTerms,
     selectedTermIds
@@ -36,6 +39,7 @@ export default function DepositTermsPage({
       toggleDepositTermSelection(previousTermIds, termId)
     );
     setConfirmationMessage(null);
+    setTermsSelectionConfirmed(false);
   };
 
   const handleConfirm = () => {
@@ -49,8 +53,20 @@ export default function DepositTermsPage({
         : '선택 약관은 선택하지 않았습니다.';
 
     setConfirmationMessage(
-      `필수 약관 선택을 확인했습니다. ${optionalSelectionMessage} 실제 예금 가입은 진행되지 않았으며 보안 입력 단계는 아직 연결되지 않았습니다.`
+      `필수 약관 선택을 확인했습니다. ${optionalSelectionMessage} 실제 예금 가입은 진행되지 않았습니다. 보안 입력 화면으로 이동하려면 다음 버튼을 눌러 주세요.`
     );
+    setTermsSelectionConfirmed(true);
+  };
+
+  const handlePasswordStart = () => {
+    if (
+      !selectionSummary.allRequiredSelected ||
+      !termsSelectionConfirmed
+    ) {
+      return;
+    }
+
+    window.location.assign(createDepositPasswordPath(product.id));
   };
 
   const selectionMessage = selectionSummary.allRequiredSelected
@@ -169,12 +185,28 @@ export default function DepositTermsPage({
           >
             약관 선택 확인
           </button>
+          <button
+            {...elementIdentity(ELEMENT_IDS.BUTTON_DEPOSIT_TERMS_NEXT)}
+            type="button"
+            className="primary-button"
+            disabled={
+              !selectionSummary.allRequiredSelected ||
+              !termsSelectionConfirmed
+            }
+            aria-describedby={
+              ELEMENT_IDS.STATUS_DEPOSIT_TERMS_CONFIRMATION
+            }
+            onClick={handlePasswordStart}
+          >
+            비밀번호 입력으로 이동
+          </button>
         </div>
       </section>
 
       <p className="no-transaction-notice">
         약관 선택은 이 화면의 로컬 상태에서만 확인합니다. 실제 예금 가입과
-        보안 입력은 진행하지 않습니다.
+        보안 입력 화면으로 이동해도 실제 인증이나 예금 가입은 진행하지
+        않습니다.
       </p>
     </DemoBankLayout>
   );
