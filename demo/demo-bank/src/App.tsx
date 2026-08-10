@@ -1,5 +1,6 @@
 import {
   createDepositConditionsPath,
+  createDepositPasswordPath,
   createDepositProductDetailPath,
   createDepositTermsPath,
   createTransferAmountPath,
@@ -14,6 +15,7 @@ import {
 import { demoAccounts, depositProducts } from './data/demo-data';
 import { transferRecipients } from './data/transfer-recipients';
 import DepositAmountPage from './pages/DepositAmountPage';
+import DepositPasswordPage from './pages/DepositPasswordPage';
 import DepositProductDetailPage from './pages/DepositProductDetailPage';
 import DepositProductsPage from './pages/DepositProductsPage';
 import DepositTermsPage from './pages/DepositTermsPage';
@@ -39,6 +41,9 @@ export default function App() {
   );
   const termsProduct = depositProducts.find(
     (product) => createDepositTermsPath(product.id) === currentPath
+  );
+  const passwordProduct = depositProducts.find(
+    (product) => createDepositPasswordPath(product.id) === currentPath
   );
   const transferAccount = demoAccounts.find(
     (account) =>
@@ -134,6 +139,10 @@ export default function App() {
 
   if (transferAccount) {
     return <TransferRecipientsPage account={transferAccount} />;
+  }
+
+  if (passwordProduct) {
+    return <DepositPasswordPage product={passwordProduct} />;
   }
 
   if (termsProduct) {

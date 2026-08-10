@@ -48,7 +48,19 @@ export const ELEMENT_IDS = {
   STATUS_DEPOSIT_TERMS_CONFIRMATION:
     'status-deposit-terms-confirmation',
   BUTTON_DEPOSIT_TERMS_CONFIRM: 'btn-deposit-terms-confirm',
+  BUTTON_DEPOSIT_TERMS_NEXT: 'btn-deposit-terms-next',
   BUTTON_DEPOSIT_AMOUNT_BACK: 'btn-deposit-amount-back',
+  PAGE_DEPOSIT_PASSWORD: 'page-deposit-password',
+  SUMMARY_DEPOSIT_PASSWORD_PRODUCT_NAME:
+    'summary-deposit-password-product-name',
+  SUMMARY_DEPOSIT_PASSWORD_PRODUCT_PERIOD:
+    'summary-deposit-password-product-period',
+  STATUS_DEPOSIT_PASSWORD_INPUT: 'status-deposit-password-input',
+  STATUS_CONFIRMED_DEPOSIT_PASSWORD:
+    'status-confirmed-deposit-password',
+  BUTTON_DEPOSIT_TERMS_BACK: 'btn-deposit-terms-back',
+  BUTTON_DEPOSIT_PASSWORD_CANCEL: 'btn-deposit-password-cancel',
+  NOTICE_DEPOSIT_SECURE_INPUT: 'notice-deposit-secure-input',
   ACCOUNT_LIVING_EXPENSE: 'account-living-expense',
   ACCOUNT_SAVINGS: 'account-savings',
   BUTTON_SELECT_ACCOUNT_LIVING_EXPENSE:

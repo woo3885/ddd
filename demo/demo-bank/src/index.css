@@ -887,7 +887,8 @@ input:focus-visible {
   display: none;
 }
 
-.transfer-password-card {
+.transfer-password-card,
+.deposit-password-card {
   max-width: 900px;
   margin-top: 36px;
   padding: 32px;
@@ -897,13 +898,15 @@ input:focus-visible {
   box-shadow: 0 8px 24px rgb(16 24 40 / 8%);
 }
 
-.transfer-password-context-grid {
+.transfer-password-context-grid,
+.deposit-password-context-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
-.transfer-password-context-panel {
+.transfer-password-context-panel,
+.deposit-password-context-panel {
   display: flex;
   min-width: 0;
   padding: 20px;
@@ -914,17 +917,20 @@ input:focus-visible {
   background: #f8fafc;
 }
 
-.transfer-password-context-panel span {
+.transfer-password-context-panel span,
+.deposit-password-context-panel span {
   color: #475467;
   font-weight: 700;
 }
 
-.transfer-password-context-panel strong {
+.transfer-password-context-panel strong,
+.deposit-password-context-panel strong {
   color: #101828;
   font-size: 20px;
 }
 
-.transfer-secure-input-notice {
+.transfer-secure-input-notice,
+.deposit-secure-input-notice {
   margin-top: 24px;
   padding: 20px;
   border: 3px solid #b42318;
@@ -933,22 +939,26 @@ input:focus-visible {
   color: #7a271a;
 }
 
-.transfer-secure-input-notice h2 {
+.transfer-secure-input-notice h2,
+.deposit-secure-input-notice h2 {
   margin: 0;
   color: #912018;
 }
 
-.transfer-secure-input-notice p {
+.transfer-secure-input-notice p,
+.deposit-secure-input-notice p {
   margin: 10px 0 0;
   font-size: 17px;
   font-weight: 700;
 }
 
-.transfer-password-field {
+.transfer-password-field,
+.deposit-password-field {
   margin-top: 28px;
 }
 
-.transfer-password-field label {
+.transfer-password-field label,
+.deposit-password-field label {
   display: block;
   margin-bottom: 10px;
   color: #101828;
@@ -956,7 +966,8 @@ input:focus-visible {
   font-weight: 800;
 }
 
-.transfer-password-field input {
+.transfer-password-field input,
+.deposit-password-field input {
   width: min(100%, 440px);
   min-height: 56px;
   padding: 12px 16px;
@@ -969,7 +980,9 @@ input:focus-visible {
 }
 
 .transfer-password-input-status,
-.transfer-password-completion-status {
+.transfer-password-completion-status,
+.deposit-password-input-status,
+.deposit-password-completion-status {
   margin: 16px 0 0;
   padding: 14px 16px;
   border: 2px solid #1570ef;
@@ -980,17 +993,20 @@ input:focus-visible {
   font-weight: 700;
 }
 
-.transfer-password-completion-status {
+.transfer-password-completion-status,
+.deposit-password-completion-status {
   border-color: #667085;
   background: #f8fafc;
   color: #344054;
 }
 
-.transfer-password-completion-status:empty {
+.transfer-password-completion-status:empty,
+.deposit-password-completion-status:empty {
   display: none;
 }
 
-.transfer-password-actions {
+.transfer-password-actions,
+.deposit-password-actions {
   display: flex;
   margin-top: 28px;
   align-items: stretch;
@@ -998,7 +1014,8 @@ input:focus-visible {
   gap: 16px;
 }
 
-.transfer-password-actions .primary-button {
+.transfer-password-actions .primary-button,
+.deposit-password-actions .primary-button {
   width: auto;
   margin-top: 0;
 }
@@ -1286,6 +1303,7 @@ input:focus-visible {
   .recipient-list,
   .transfer-amount-context-grid,
   .transfer-password-context-grid,
+  .deposit-password-context-grid,
   .transfer-confirmation-summary,
   .transfer-completion-summary {
     grid-template-columns: 1fr;
@@ -1317,6 +1335,7 @@ input:focus-visible {
   .deposit-terms-card,
   .transfer-amount-card,
   .transfer-password-card,
+  .deposit-password-card,
   .transfer-confirmation-card,
   .transfer-confirmation-notice,
   .transfer-completion-card,
@@ -1336,6 +1355,7 @@ input:focus-visible {
   .deposit-terms-actions,
   .transfer-recipient-actions,
   .transfer-password-actions,
+  .deposit-password-actions,
   .transfer-confirmation-actions,
   .transfer-completion-actions {
     flex-direction: column;
@@ -1352,6 +1372,8 @@ input:focus-visible {
   .transfer-amount-actions .secondary-button,
   .transfer-password-actions .primary-button,
   .transfer-password-actions .secondary-button,
+  .deposit-password-actions .primary-button,
+  .deposit-password-actions .secondary-button,
   .transfer-confirmation-actions .primary-button,
   .transfer-confirmation-actions .secondary-button,
   .transfer-completion-actions .primary-button {
