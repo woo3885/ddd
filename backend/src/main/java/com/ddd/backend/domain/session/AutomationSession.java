@@ -1,6 +1,7 @@
 package com.ddd.backend.domain.session;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 public class AutomationSession {
@@ -25,9 +26,15 @@ public class AutomationSession {
         this.updatedAt = updatedAt;
     }
 
-    public static AutomationSession create(String userRequest) {
-        if (userRequest == null || userRequest.isBlank()) {
-            throw new IllegalArgumentException("사용자 요청은 비어 있을 수 없습니다.");
+    public static AutomationSession create(
+            String userRequest
+    ) {
+        if (userRequest == null
+                || userRequest.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "사용자 요청은 비어 있을 수 없습니다."
+            );
         }
 
         Instant now = Instant.now();
@@ -41,14 +48,102 @@ public class AutomationSession {
         );
     }
 
-    public void cancel() {
-        if (status == WorkflowStatus.COMPLETED
-                || status == WorkflowStatus.CANCELLED
-                || status == WorkflowStatus.TERMINATED) {
-            throw new IllegalStateException("현재 상태에서는 세션을 취소할 수 없습니다.");
+    public void transitionTo(
+            WorkflowStatus nextStatus
+    ) {
+        Objects.requireNonNull(
+                nextStatus,
+                "변경할 워크플로 상태는 필수입니다."
+        );
+
+        if (isTerminalStatus()) {
+            throw new IllegalStateException(
+                    "종료된 세션의 상태를 변경할 수 없습니다."
+            );
         }
 
-        this.status = WorkflowStatus.CANCELLED;
+        if (nextStatus == WorkflowStatus.SESSION_CREATED
+                && status != WorkflowStatus.SESSION_CREATED) {
+
+            throw new IllegalStateException(
+                    "세션 생성 상태로 되돌릴 수 없습니다."
+            );
+        }
+
+        if (status == nextStatus) {
+            return;
+        }
+
+        changeStatus(nextStatus);
+    }
+
+    public void submitDecision() {
+        if (status != WorkflowStatus.USER_DECISION_REQUIRED
+                && status
+                != WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED) {
+
+            throw new IllegalStateException(
+                    "현재 상태에서는 사용자 결정을 제출할 수 없습니다. "
+                            + "status="
+                            + status
+            );
+        }
+
+        changeStatus(
+                WorkflowStatus.AI_EXECUTING
+        );
+    }
+
+    public void approveFinalConfirmation() {
+        ensureFinalConfirmationRequired();
+
+        changeStatus(
+                WorkflowStatus.AI_EXECUTING
+        );
+    }
+
+    public void rejectFinalConfirmation() {
+        ensureFinalConfirmationRequired();
+
+        changeStatus(
+                WorkflowStatus.CANCELLED
+        );
+    }
+
+    public void cancel() {
+        if (isTerminalStatus()) {
+            throw new IllegalStateException(
+                    "현재 상태에서는 세션을 취소할 수 없습니다."
+            );
+        }
+
+        changeStatus(
+                WorkflowStatus.CANCELLED
+        );
+    }
+
+    private void ensureFinalConfirmationRequired() {
+        if (status
+                != WorkflowStatus.FINAL_CONFIRMATION_REQUIRED) {
+
+            throw new IllegalStateException(
+                    "현재 상태에서는 최종 확인을 처리할 수 없습니다. "
+                            + "status="
+                            + status
+            );
+        }
+    }
+
+    private boolean isTerminalStatus() {
+        return status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.TERMINATED;
+    }
+
+    private void changeStatus(
+            WorkflowStatus nextStatus
+    ) {
+        this.status = nextStatus;
         this.updatedAt = Instant.now();
     }
 

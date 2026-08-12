@@ -3,6 +3,9 @@ package com.ddd.backend.service;
 import com.ddd.backend.automation.BrowserAction;
 import com.ddd.backend.automation.BrowserActionExecutionResult;
 import com.ddd.backend.automation.BrowserActionExecutor;
+import com.ddd.backend.common.exception.SessionNotFoundException;
+import com.ddd.backend.domain.session.AutomationSession;
+import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.websocket.mapper.BrowserActionStatusEventMapper;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
@@ -25,11 +28,13 @@ public final class BrowserActionExecutionService {
 
     private final BrowserActionExecutor actionExecutor;
     private final BrowserActionStatusEventMapper statusEventMapper;
+    private final AutomationSessionRepository sessionRepository;
     private final AutomationStatusEventPublisher statusEventPublisher;
 
     public BrowserActionExecutionService(
             BrowserActionExecutor actionExecutor,
             BrowserActionStatusEventMapper statusEventMapper,
+            AutomationSessionRepository sessionRepository,
             AutomationStatusEventPublisher statusEventPublisher
     ) {
         this.actionExecutor =
@@ -44,6 +49,12 @@ public final class BrowserActionExecutionService {
                         "BrowserActionStatusEventMapper는 필수입니다."
                 );
 
+        this.sessionRepository =
+                Objects.requireNonNull(
+                        sessionRepository,
+                        "AutomationSessionRepository는 필수입니다."
+                );
+
         this.statusEventPublisher =
                 Objects.requireNonNull(
                         statusEventPublisher,
@@ -55,6 +66,9 @@ public final class BrowserActionExecutionService {
             String sessionId,
             BrowserAction action
     ) {
+        AutomationSession session =
+                getSession(sessionId);
+
         BrowserActionExecutionResult result;
 
         try {
@@ -64,6 +78,10 @@ public final class BrowserActionExecutionService {
                             action
                     );
         } catch (RuntimeException executionException) {
+            updateExecutionErrorStatusSafely(
+                    session
+            );
+
             publishExecutionErrorSafely(
                     sessionId
             );
@@ -86,6 +104,14 @@ public final class BrowserActionExecutionService {
                         result.status()
                 );
 
+        session.transitionTo(
+                workflowStatus
+        );
+
+        sessionRepository.save(
+                session
+        );
+
         statusEventPublisher.publish(
                 sessionId,
                 workflowStatus,
@@ -93,6 +119,49 @@ public final class BrowserActionExecutionService {
         );
 
         return result;
+    }
+
+    private AutomationSession getSession(
+            String sessionId
+    ) {
+        if (sessionId == null
+                || sessionId.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "세션 ID는 비어 있을 수 없습니다."
+            );
+        }
+
+        return sessionRepository
+                .findById(sessionId)
+                .orElseThrow(
+                        () -> new SessionNotFoundException(
+                                sessionId
+                        )
+                );
+    }
+
+    private void updateExecutionErrorStatusSafely(
+            AutomationSession session
+    ) {
+        try {
+            session.transitionTo(
+                    WorkflowStatus.ERROR
+            );
+
+            sessionRepository.save(
+                    session
+            );
+        } catch (RuntimeException updateException) {
+            log.warn(
+                    "브라우저 실행 오류 상태 저장 실패. "
+                            + "sessionId={}, exceptionType={}",
+                    session.getSessionId(),
+                    updateException
+                            .getClass()
+                            .getSimpleName()
+            );
+        }
     }
 
     private void publishExecutionErrorSafely(
