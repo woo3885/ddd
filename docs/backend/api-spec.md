@@ -206,27 +206,123 @@
 - 이후 Redis 기반 저장소로 교체할 예정이다.
 - 도메인 계층은 저장 방식과 분리하기 위해 `AutomationSessionRepository` 인터페이스를 사용한다.
 
-## 7. 사용자 결정 API 예정 명세
+## 7. 사용자 결정 API
 
-> 아래 API는 향후 구현 예정이며, 현재 버전에서는 제공하지 않는다.
+사용자가 금융상품, 출금 계좌, 수취인, 약관 또는 추가 정보를 직접 선택한 결과를 백엔드에 전달한다.
+
+AI는 해당 항목을 사용자를 대신해 선택하지 않는다.
 
 ### 7.1 사용자 선택 전달
 
 - Method: `POST`
 - URL: `/api/v1/sessions/{sessionId}/decisions`
-- 구현 상태: 예정
+- 구현 상태: 완료
 
-### 7.2 최종 실행 확인
+요청 본문:
+
+```json
+{
+  "decisionType": "PRODUCT_SELECTION",
+  "selectedOptionIds": [
+    "product-001"
+  ]
+}
+```
+
+지원하는 `decisionType`:
+
+- `PRODUCT_SELECTION`
+- `SOURCE_ACCOUNT_SELECTION`
+- `RECIPIENT_SELECTION`
+- `TERMS_AGREEMENT`
+- `ADDITIONAL_INFORMATION`
+
+검증 규칙:
+
+- 상품, 출금 계좌, 수취인 및 추가 정보는 한 개의 항목만 선택할 수 있다.
+- 약관 동의는 여러 항목을 선택할 수 있다.
+- 선택 항목은 최대 20개까지 전달할 수 있다.
+- 비어 있는 선택 항목 ID는 허용하지 않는다.
+- 동일한 선택 항목 ID를 중복해서 전달할 수 없다.
+- 일반 사용자 결정은 `USER_DECISION_REQUIRED` 상태에서만 제출할 수 있다.
+- 추가 정보는 `ADDITIONAL_INFORMATION_REQUIRED` 상태에서만 제출할 수 있다.
+
+처리 성공 후 세션 상태:
+
+```text
+AI_EXECUTING
+```
+
+### 7.2 최종 실행 승인
 
 - Method: `POST`
 - URL: `/api/v1/sessions/{sessionId}/confirm`
-- 구현 상태: 예정
+- 구현 상태: 완료
+
+요청 본문:
+
+```json
+{
+  "confirmationId": "confirm-001",
+  "approved": true
+}
+```
+
+검증 규칙:
+
+- `confirmationId`는 필수다.
+- `confirmationId`는 100자를 초과할 수 없다.
+- 승인 API의 `approved` 값은 반드시 `true`여야 한다.
+- 세션 상태가 `FINAL_CONFIRMATION_REQUIRED`일 때만 승인할 수 있다.
+
+처리 성공 후 세션 상태:
+
+```text
+AI_EXECUTING
+```
+
+사용자 승인 이후에만 최종 금융 Action을 실행할 수 있다.
 
 ### 7.3 최종 실행 거절
 
 - Method: `POST`
 - URL: `/api/v1/sessions/{sessionId}/reject`
-- 구현 상태: 예정
+- 구현 상태: 완료
+
+요청 본문:
+
+```json
+{
+  "confirmationId": "confirm-001",
+  "approved": false
+}
+```
+
+검증 규칙:
+
+- `confirmationId`는 필수다.
+- 거절 API의 `approved` 값은 반드시 `false`여야 한다.
+- 세션 상태가 `FINAL_CONFIRMATION_REQUIRED`일 때만 거절할 수 있다.
+
+처리 성공 후 세션 상태:
+
+```text
+CANCELLED
+```
+
+브라우저 세션이 존재하면 함께 종료한다.
+
+### 7.4 오류 응답
+
+- 요청값 오류: `400 COMMON_400`
+- 존재하지 않는 세션: `404 SESSION_404`
+- 잘못된 세션 상태: `409 SESSION_409`
+
+### 7.5 현재 제한사항
+
+현재 버전은 `confirmationId`의 필수 여부와 형식만 검증한다.
+
+백엔드 세션에 대기 중인 `confirmationId`를 저장하고 요청값과 일치하는지 검증하는 기능은 AI 응답 및 최종 확인 요청 저장 구조를 연결할 때 추가한다.
 
 ## 8. 주요 워크플로 상태
 
