@@ -7,7 +7,13 @@ import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.WorkflowStatus;
+import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.infrastructure.session.InMemoryAutomationSessionRepository;
+import com.ddd.backend.security.capture.BrowserFrameCaptureService;
+import com.ddd.backend.security.capture.CapturedBrowserFrame;
+import com.ddd.backend.security.capture.FrameCaptureAttempt;
+import com.ddd.backend.security.capture.FrameCaptureDecision;
+import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import com.ddd.backend.websocket.mapper.BrowserActionStatusEventMapper;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -24,32 +31,79 @@ import static org.mockito.Mockito.when;
 class BrowserActionExecutionServiceTest {
 
     private BrowserActionExecutor actionExecutor;
+
     private AutomationStatusEventPublisher statusEventPublisher;
+
     private InMemoryAutomationSessionRepository sessionRepository;
+
+    private BrowserFrameCaptureService browserFrameCaptureService;
+
+    private BrowserFrameStore browserFrameStore;
+
+    private BrowserFrameWebSocketHandler frameWebSocketHandler;
+
     private BrowserActionExecutionService service;
+
+    private CapturedBrowserFrame capturedFrame;
 
     @BeforeEach
     void setUp() {
         actionExecutor =
-                mock(BrowserActionExecutor.class);
+                mock(
+                        BrowserActionExecutor.class
+                );
 
         statusEventPublisher =
-                mock(AutomationStatusEventPublisher.class);
+                mock(
+                        AutomationStatusEventPublisher.class
+                );
 
         sessionRepository =
                 new InMemoryAutomationSessionRepository();
+
+        browserFrameCaptureService =
+                mock(
+                        BrowserFrameCaptureService.class
+                );
+
+        browserFrameStore =
+                mock(
+                        BrowserFrameStore.class
+                );
+
+        frameWebSocketHandler =
+                mock(
+                        BrowserFrameWebSocketHandler.class
+                );
+
+        capturedFrame =
+                new CapturedBrowserFrame(
+                        new byte[]{
+                                1, 2, 3, 4
+                        },
+                        1280,
+                        720,
+                        "image/png"
+                );
 
         service =
                 new BrowserActionExecutionService(
                         actionExecutor,
                         new BrowserActionStatusEventMapper(),
                         sessionRepository,
-                        statusEventPublisher
+                        statusEventPublisher,
+                        browserFrameCaptureService,
+                        browserFrameStore,
+                        frameWebSocketHandler
                 );
     }
 
+    /*
+     * 기존 기능 +
+     * D17 Frame 갱신 확인.
+     */
     @Test
-    void 행동을_실행하고_세션과_WebSocket_상태를_변경한다() {
+    void 행동을_실행하고_세션상태와_Viewer_Frame을_갱신한다() {
         AutomationSession session =
                 createSession();
 
@@ -72,30 +126,73 @@ class BrowserActionExecutionServiceTest {
                 executionResult
         );
 
+        when(
+                browserFrameCaptureService.capture(
+                        session.getSessionId()
+                )
+        ).thenReturn(
+                FrameCaptureAttempt.captured(
+                        capturedFrame
+                )
+        );
+
         BrowserActionExecutionResult result =
                 service.execute(
                         session.getSessionId(),
                         action
                 );
 
-        assertThat(result)
-                .isSameAs(executionResult);
+        assertThat(
+                result
+        ).isSameAs(
+                executionResult
+        );
 
         assertSessionStatus(
                 session.getSessionId(),
                 WorkflowStatus.AI_EXECUTING
         );
 
-        verify(statusEventPublisher)
-                .publish(
-                        session.getSessionId(),
-                        WorkflowStatus.AI_EXECUTING,
-                        "브라우저 행동을 실행했습니다."
-                );
+        verify(
+                statusEventPublisher
+        ).publish(
+                session.getSessionId(),
+                WorkflowStatus.AI_EXECUTING,
+                "브라우저 행동을 실행했습니다."
+        );
+
+        /*
+         * D17:
+         * 성공한 행동 후 새 Frame 캡처.
+         */
+        verify(
+                browserFrameCaptureService
+        ).capture(
+                session.getSessionId()
+        );
+
+        /*
+         * 최신 Frame Store 갱신.
+         */
+        verify(
+                browserFrameStore
+        ).publish(
+                session.getSessionId(),
+                capturedFrame
+        );
+
+        /*
+         * 연결된 Viewer로 최신 Frame 전송.
+         */
+        verify(
+                frameWebSocketHandler
+        ).sendLatest(
+                session.getSessionId()
+        );
     }
 
     @Test
-    void 사용자_선택이_필요하면_결정_대기_상태를_저장한다() {
+    void 사용자_선택이_필요하면_Frame을_새로_캡처하지_않는다() {
         AutomationSession session =
                 createSession();
 
@@ -129,16 +226,29 @@ class BrowserActionExecutionServiceTest {
                 WorkflowStatus.USER_DECISION_REQUIRED
         );
 
-        verify(statusEventPublisher)
-                .publish(
-                        session.getSessionId(),
-                        WorkflowStatus.USER_DECISION_REQUIRED,
-                        "사용자의 선택이 필요합니다."
-                );
+        verify(
+                statusEventPublisher
+        ).publish(
+                session.getSessionId(),
+                WorkflowStatus.USER_DECISION_REQUIRED,
+                "사용자의 선택이 필요합니다."
+        );
+
+        verify(
+                browserFrameCaptureService,
+                never()
+        ).capture(
+                session.getSessionId()
+        );
+
+        verifyNoInteractions(
+                browserFrameStore,
+                frameWebSocketHandler
+        );
     }
 
     @Test
-    void 민감정보_입력이_필요하면_보안입력_상태를_저장한다() {
+    void 민감정보_입력이_필요하면_Frame을_캡처하지_않는다() {
         AutomationSession session =
                 createSession();
 
@@ -177,16 +287,33 @@ class BrowserActionExecutionServiceTest {
                 WorkflowStatus.SECURE_INPUT_REQUIRED
         );
 
-        verify(statusEventPublisher)
-                .publish(
-                        session.getSessionId(),
-                        WorkflowStatus.SECURE_INPUT_REQUIRED,
-                        "민감정보는 사용자가 직접 입력해야 합니다."
-                );
+        verify(
+                statusEventPublisher
+        ).publish(
+                session.getSessionId(),
+                WorkflowStatus.SECURE_INPUT_REQUIRED,
+                "민감정보는 사용자가 직접 입력해야 합니다."
+        );
+
+        /*
+         * 보안입력 화면에서는 screenshot 자체를
+         * 호출하지 않는 것이 핵심.
+         */
+        verify(
+                browserFrameCaptureService,
+                never()
+        ).capture(
+                session.getSessionId()
+        );
+
+        verifyNoInteractions(
+                browserFrameStore,
+                frameWebSocketHandler
+        );
     }
 
     @Test
-    void 최종_확인이_필요하면_최종확인_대기_상태를_저장한다() {
+    void 최종_확인이_필요하면_Frame을_새로_캡처하지_않는다() {
         AutomationSession session =
                 createSession();
 
@@ -220,12 +347,262 @@ class BrowserActionExecutionServiceTest {
                 WorkflowStatus.FINAL_CONFIRMATION_REQUIRED
         );
 
-        verify(statusEventPublisher)
-                .publish(
-                        session.getSessionId(),
-                        WorkflowStatus.FINAL_CONFIRMATION_REQUIRED,
-                        "최종 실행 전 사용자의 확인이 필요합니다."
+        verify(
+                statusEventPublisher
+        ).publish(
+                session.getSessionId(),
+                WorkflowStatus.FINAL_CONFIRMATION_REQUIRED,
+                "최종 실행 전 사용자의 확인이 필요합니다."
+        );
+
+        verify(
+                browserFrameCaptureService,
+                never()
+        ).capture(
+                session.getSessionId()
+        );
+
+        verifyNoInteractions(
+                browserFrameStore,
+                frameWebSocketHandler
+        );
+    }
+
+    /*
+     * Action은 EXECUTED였지만
+     * CaptureGuard가 secure-input을 감지한 경우.
+     *
+     * 기존 마지막 안전 Frame을 유지해야 한다.
+     */
+    @Test
+    void 실행후_Frame_캡처가_보안정책으로_차단되면_기존_Frame을_유지한다() {
+        AutomationSession session =
+                createSession();
+
+        BrowserAction action =
+                createClickAction(
+                        "#next"
                 );
+
+        BrowserActionExecutionResult executionResult =
+                BrowserActionExecutionResult.executed(
+                        BrowserActionType.CLICK
+                );
+
+        when(
+                actionExecutor.execute(
+                        session.getSessionId(),
+                        action
+                )
+        ).thenReturn(
+                executionResult
+        );
+
+        when(
+                browserFrameCaptureService.capture(
+                        session.getSessionId()
+                )
+        ).thenReturn(
+                FrameCaptureAttempt.blocked(
+                        FrameCaptureDecision
+                                .SECURE_INPUT_BLOCKED
+                )
+        );
+
+        BrowserActionExecutionResult result =
+                service.execute(
+                        session.getSessionId(),
+                        action
+                );
+
+        /*
+         * Browser Action 자체는 성공.
+         */
+        assertThat(
+                result
+        ).isSameAs(
+                executionResult
+        );
+
+        assertSessionStatus(
+                session.getSessionId(),
+                WorkflowStatus.AI_EXECUTING
+        );
+
+        /*
+         * 새 Frame을 Store에 넣거나
+         * Viewer로 보내면 안 된다.
+         */
+        verify(
+                browserFrameStore,
+                never()
+        ).publish(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any()
+        );
+
+        verify(
+                frameWebSocketHandler,
+                never()
+        ).sendLatest(
+                session.getSessionId()
+        );
+    }
+
+    /*
+     * Viewer Frame 캡처 자체가 실패해도
+     * 이미 성공한 Browser Action을 ERROR로
+     * 뒤집지 않는다.
+     */
+    @Test
+    void Frame_캡처_오류가_발생해도_실행된_Action은_성공상태를_유지한다() {
+        AutomationSession session =
+                createSession();
+
+        BrowserAction action =
+                createClickAction(
+                        "#next"
+                );
+
+        BrowserActionExecutionResult executionResult =
+                BrowserActionExecutionResult.executed(
+                        BrowserActionType.CLICK
+                );
+
+        when(
+                actionExecutor.execute(
+                        session.getSessionId(),
+                        action
+                )
+        ).thenReturn(
+                executionResult
+        );
+
+        when(
+                browserFrameCaptureService.capture(
+                        session.getSessionId()
+                )
+        ).thenThrow(
+                new IllegalStateException(
+                        "frame capture failed"
+                )
+        );
+
+        BrowserActionExecutionResult result =
+                service.execute(
+                        session.getSessionId(),
+                        action
+                );
+
+        assertThat(
+                result
+        ).isSameAs(
+                executionResult
+        );
+
+        assertSessionStatus(
+                session.getSessionId(),
+                WorkflowStatus.AI_EXECUTING
+        );
+
+        verify(
+                browserFrameStore,
+                never()
+        ).publish(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any()
+        );
+
+        verify(
+                frameWebSocketHandler,
+                never()
+        ).sendLatest(
+                session.getSessionId()
+        );
+    }
+
+    /*
+     * Frame은 Store에 정상 저장했지만
+     * Viewer WebSocket 전송이 실패한 경우.
+     *
+     * Action 성공 결과는 그대로 유지한다.
+     */
+    @Test
+    void Viewer_WebSocket_전송이_실패해도_Action은_성공상태를_유지한다() {
+        AutomationSession session =
+                createSession();
+
+        BrowserAction action =
+                createClickAction(
+                        "#next"
+                );
+
+        BrowserActionExecutionResult executionResult =
+                BrowserActionExecutionResult.executed(
+                        BrowserActionType.CLICK
+                );
+
+        when(
+                actionExecutor.execute(
+                        session.getSessionId(),
+                        action
+                )
+        ).thenReturn(
+                executionResult
+        );
+
+        when(
+                browserFrameCaptureService.capture(
+                        session.getSessionId()
+                )
+        ).thenReturn(
+                FrameCaptureAttempt.captured(
+                        capturedFrame
+                )
+        );
+
+        doThrow(
+                new IllegalStateException(
+                        "viewer send failed"
+                )
+        ).when(
+                frameWebSocketHandler
+        ).sendLatest(
+                session.getSessionId()
+        );
+
+        BrowserActionExecutionResult result =
+                service.execute(
+                        session.getSessionId(),
+                        action
+                );
+
+        assertThat(
+                result
+        ).isSameAs(
+                executionResult
+        );
+
+        assertSessionStatus(
+                session.getSessionId(),
+                WorkflowStatus.AI_EXECUTING
+        );
+
+        /*
+         * 전송 전 Store 갱신까지는 정상 수행됨.
+         */
+        verify(
+                browserFrameStore
+        ).publish(
+                session.getSessionId(),
+                capturedFrame
+        );
+
+        verify(
+                frameWebSocketHandler
+        ).sendLatest(
+                session.getSessionId()
+        );
     }
 
     @Test
@@ -250,10 +627,11 @@ class BrowserActionExecutionServiceTest {
         );
 
         assertThatThrownBy(
-                () -> service.execute(
-                        session.getSessionId(),
-                        action
-                )
+                () ->
+                        service.execute(
+                                session.getSessionId(),
+                                action
+                        )
         )
                 .isInstanceOf(
                         IllegalStateException.class
@@ -267,12 +645,23 @@ class BrowserActionExecutionServiceTest {
                 WorkflowStatus.ERROR
         );
 
-        verify(statusEventPublisher)
-                .publish(
-                        session.getSessionId(),
-                        WorkflowStatus.ERROR,
-                        "브라우저 행동 실행 중 오류가 발생했습니다."
-                );
+        verify(
+                statusEventPublisher
+        ).publish(
+                session.getSessionId(),
+                WorkflowStatus.ERROR,
+                "브라우저 행동 실행 중 오류가 발생했습니다."
+        );
+
+        /*
+         * Action 자체가 실패했으므로
+         * Frame 갱신은 시도하지 않는다.
+         */
+        verifyNoInteractions(
+                browserFrameCaptureService,
+                browserFrameStore,
+                frameWebSocketHandler
+        );
     }
 
     @Test
@@ -312,10 +701,11 @@ class BrowserActionExecutionServiceTest {
         );
 
         assertThatThrownBy(
-                () -> service.execute(
-                        session.getSessionId(),
-                        action
-                )
+                () ->
+                        service.execute(
+                                session.getSessionId(),
+                                action
+                        )
         ).isSameAs(
                 originalException
         );
@@ -323,6 +713,12 @@ class BrowserActionExecutionServiceTest {
         assertSessionStatus(
                 session.getSessionId(),
                 WorkflowStatus.ERROR
+        );
+
+        verifyNoInteractions(
+                browserFrameCaptureService,
+                browserFrameStore,
+                frameWebSocketHandler
         );
     }
 
@@ -334,10 +730,11 @@ class BrowserActionExecutionServiceTest {
                 );
 
         assertThatThrownBy(
-                () -> service.execute(
-                        "not-found-session",
-                        action
-                )
+                () ->
+                        service.execute(
+                                "not-found-session",
+                                action
+                        )
         )
                 .isInstanceOf(
                         SessionNotFoundException.class
@@ -345,7 +742,10 @@ class BrowserActionExecutionServiceTest {
 
         verifyNoInteractions(
                 actionExecutor,
-                statusEventPublisher
+                statusEventPublisher,
+                browserFrameCaptureService,
+                browserFrameStore,
+                frameWebSocketHandler
         );
     }
 
@@ -379,7 +779,9 @@ class BrowserActionExecutionServiceTest {
     ) {
         AutomationSession savedSession =
                 sessionRepository
-                        .findById(sessionId)
+                        .findById(
+                                sessionId
+                        )
                         .orElseThrow();
 
         assertThat(

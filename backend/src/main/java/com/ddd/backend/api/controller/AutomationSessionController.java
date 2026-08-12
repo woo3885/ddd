@@ -40,7 +40,9 @@ public class AutomationSessionController {
     ) {
         AutomationSession session =
                 sessionService.createSession(
-                        request.userRequest()
+                        request.userRequest(),
+                        request.siteId(),
+                        request.initialPath()
                 );
 
         AutomationSessionResponse response =
