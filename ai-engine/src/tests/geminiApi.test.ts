@@ -22,10 +22,35 @@ async function testGeminiApi() {
     console.log("\n[Gemini 응답]");
     console.log(result.text);
 
+    console.log("\n[응답 Source]");
+    console.log(result.source);
+
     console.log("\n[API 연결 상태]");
-    console.log("SUCCESS");
+    console.log(
+      result.source === "FALLBACK"
+        ? "FALLBACK"
+        : "SUCCESS",
+    );
+
+    console.log("\n========================================");
+    console.log("동일 Prompt Cache 테스트");
+    console.log("========================================");
+
+    const cachedResult = await aiService.generateText({
+      prompt,
+    });
+
+    console.log("\n[Cache 테스트 응답 Source]");
+    console.log(cachedResult.source);
+
+    console.log("\n[Cache 테스트 결과]");
+    console.log(
+      cachedResult.source === "CACHE"
+        ? "SUCCESS"
+        : "FAILED",
+    );
   } catch (error) {
-    console.error("\n[API 연결 상태]");
+    console.error("\n[테스트 상태]");
     console.error("FAILED");
     console.error(error);
   }
