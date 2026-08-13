@@ -4,15 +4,41 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { defaultDashboardSessionClient } from '@/features/F1_Dashboard/api/dashboard-session-client';
 import * as orchestratorClient from '@/shared/api/orchestratorClient';
-import App from './App';
+import App, { shouldRenderSessionFramePreview } from './App';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  window.history.replaceState({}, '', '/');
 });
 
 describe('App', () => {
+  it('DEV에서 정확한 session frame query만 실제 Preview로 진입시킨다', () => {
+    window.history.replaceState({}, '', '/?preview=session-frame');
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+
+    render(<App />);
+
+    expect(screen.getByTestId('preview-session-frame-d17')).toBeInTheDocument();
+    expect(screen.queryByTestId('dashboard-page')).not.toBeInTheDocument();
+  });
+
+  it('다른 query는 기존 Dashboard를 유지한다', () => {
+    window.history.replaceState({}, '', '/?preview=other');
+
+    render(<App />);
+
+    expect(screen.queryByTestId('preview-session-frame-d17')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+  });
+
+  it('production gate에서는 session frame Preview 진입을 허용하지 않는다', () => {
+    expect(shouldRenderSessionFramePreview('?preview=session-frame', false)).toBe(false);
+    expect(shouldRenderSessionFramePreview('?preview=session-frame', true)).toBe(true);
+    expect(shouldRenderSessionFramePreview('?preview=session-frame&sessionId=x', true)).toBe(false);
+  });
+
   it('F1 Dashboard를 기본 화면으로 렌더링하고 네트워크를 호출하지 않는다', () => {
     const fetchMock = vi.fn();
     const webSocketMock = vi.fn();
