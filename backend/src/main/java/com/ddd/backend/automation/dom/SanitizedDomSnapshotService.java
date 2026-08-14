@@ -4,6 +4,7 @@ import com.ddd.backend.automation.BrowserActionPolicyContext;
 import com.ddd.backend.automation.BrowserActionPolicyContextResolver;
 import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.automation.session.BrowserSessionManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -34,11 +35,19 @@ public final class SanitizedDomSnapshotService {
 
     private final DomSanitizer sanitizer;
 
+    private final ElementRegistry elementRegistry;
+
+    /*
+     * 실제 Spring 실행에서는
+     * 공유 ElementRegistry Bean을 사용한다.
+     */
+    @Autowired
     public SanitizedDomSnapshotService(
             BrowserSessionManager browserSessionManager,
             InteractiveElementExtractor elementExtractor,
             BrowserActionPolicyContextResolver policyResolver,
-            DomSanitizer sanitizer
+            DomSanitizer sanitizer,
+            ElementRegistry elementRegistry
     ) {
         this.browserSessionManager =
                 Objects.requireNonNull(
@@ -59,6 +68,31 @@ public final class SanitizedDomSnapshotService {
                 Objects.requireNonNull(
                         sanitizer
                 );
+
+        this.elementRegistry =
+                Objects.requireNonNull(
+                        elementRegistry
+                );
+    }
+
+    /*
+     * 기존 D15 테스트와의 호환용 생성자.
+     */
+    public SanitizedDomSnapshotService(
+            BrowserSessionManager browserSessionManager,
+            InteractiveElementExtractor elementExtractor,
+            BrowserActionPolicyContextResolver policyResolver,
+            DomSanitizer sanitizer
+    ) {
+        this(
+                browserSessionManager,
+                elementExtractor,
+                policyResolver,
+                sanitizer,
+                new ElementRegistry(
+                        sanitizer
+                )
+        );
     }
 
     public SanitizedDomSnapshot createSnapshot(
@@ -99,15 +133,21 @@ public final class SanitizedDomSnapshotService {
                             sanitizedElements =
                             new ArrayList<>();
 
+                    /*
+                     * D16 Registry 등록용 데이터.
+                     *
+                     * Locator는 저장하지 않는다.
+                     */
+                    List<ElementRegistry.ElementRegistration>
+                            registrations =
+                            new ArrayList<>();
+
                     int sequence =
                             1;
 
                     for (InteractiveElement element :
                             rawElements) {
 
-                        /*
-                         * AI에는 현재 보이는 요소만 전달.
-                         */
                         if (!element.visible()) {
                             continue;
                         }
@@ -140,14 +180,6 @@ public final class SanitizedDomSnapshotService {
                                                 element.autocomplete(),
                                                 element.ariaLabel(),
                                                 element.text(),
-
-                                                /*
-                                                 * Snapshot의 interactive 후보는
-                                                 * CLICK 관점으로 판정한다.
-                                                 *
-                                                 * user-choice 판정은
-                                                 * CLICK/SELECT 둘 다 허용된다.
-                                                 */
                                                 BrowserActionType.CLICK
                                         );
 
@@ -163,35 +195,85 @@ public final class SanitizedDomSnapshotService {
                                         element
                                 );
 
+                        /*
+                         * AI 전달용 값.
+                         */
+                        String sanitizedRole =
+                                sanitizer
+                                        .sanitizeNullableText(
+                                                element.role()
+                                        );
+
+                        String sanitizedText =
+                                sanitizer
+                                        .sanitizeText(
+                                                element.text()
+                                        );
+
+                        String sanitizedAriaLabel =
+                                sanitizer
+                                        .sanitizeNullableText(
+                                                element.ariaLabel()
+                                        );
+
+                        String sanitizedPlaceholder =
+                                sanitizer
+                                        .sanitizeNullableText(
+                                                element.placeholder()
+                                        );
+
+                        String sanitizedInputType =
+                                sanitizer
+                                        .sanitizeNullableText(
+                                                element.inputType()
+                                        );
+
                         sanitizedElements.add(
                                 new SanitizedDomSnapshot
                                         .ElementSnapshot(
                                         elementId,
                                         element.tagName(),
-                                        sanitizer
-                                                .sanitizeNullableText(
-                                                        element.role()
-                                                ),
-                                        sanitizer
-                                                .sanitizeText(
-                                                        element.text()
-                                                ),
-                                        sanitizer
-                                                .sanitizeNullableText(
-                                                        element.ariaLabel()
-                                                ),
-                                        sanitizer
-                                                .sanitizeNullableText(
-                                                        element.placeholder()
-                                                ),
-                                        sanitizer
-                                                .sanitizeNullableText(
-                                                        element.inputType()
-                                                ),
+                                        sanitizedRole,
+                                        sanitizedText,
+                                        sanitizedAriaLabel,
+                                        sanitizedPlaceholder,
+                                        sanitizedInputType,
                                         element.visible(),
                                         element.enabled(),
                                         boundingBox,
                                         securityPolicy
+                                )
+                        );
+
+                        /*
+                         * Registry에는 AI에 전달한
+                         * Sanitized fingerprint와
+                         * 내부 식별 속성만 저장한다.
+                         *
+                         * input value는 여기에도 없다.
+                         */
+                        registrations.add(
+                                new ElementRegistry
+                                        .ElementRegistration(
+                                        elementId,
+                                        element.tagName(),
+                                        sanitizedText,
+                                        sanitizedRole,
+                                        sanitizedAriaLabel,
+                                        sanitizedPlaceholder,
+                                        sanitizedInputType,
+                                        normalizeNullable(
+                                                element.domId()
+                                        ),
+                                        normalizeNullable(
+                                                element.name()
+                                        ),
+                                        normalizeNullableLowercase(
+                                                element.autocomplete()
+                                        ),
+                                        normalizeNullableLowercase(
+                                                element.explicitPolicy()
+                                        )
                                 )
                         );
                     }
@@ -208,6 +290,22 @@ public final class SanitizedDomSnapshotService {
                                     )
                             );
 
+                    /*
+                     * D16 핵심.
+                     *
+                     * Snapshot 반환 전에
+                     * elementId ↔ fingerprint를 등록한다.
+                     *
+                     * 동일 Session의 이전 Snapshot은
+                     * 여기서 교체된다.
+                     */
+                    elementRegistry.replaceSnapshot(
+                            sessionId,
+                            snapshotId,
+                            page.url(),
+                            registrations
+                    );
+
                     return new SanitizedDomSnapshot(
                             SCHEMA_VERSION,
                             snapshotId,
@@ -222,9 +320,6 @@ public final class SanitizedDomSnapshotService {
     toSecurityPolicy(
             BrowserActionPolicyContext context
     ) {
-        /*
-         * Action Policy와 같은 우선순위.
-         */
         if (context.blockedTarget()) {
 
             return SanitizedDomSnapshot
@@ -274,6 +369,33 @@ public final class SanitizedDomSnapshotService {
                 element.width(),
                 element.height()
         );
+    }
+
+    private String normalizeNullable(
+            String value
+    ) {
+        if (value == null
+                || value.isBlank()) {
+
+            return null;
+        }
+
+        return value.trim();
+    }
+
+    private String normalizeNullableLowercase(
+            String value
+    ) {
+        String normalized =
+                normalizeNullable(
+                        value
+                );
+
+        if (normalized == null) {
+            return null;
+        }
+
+        return normalized.toLowerCase();
     }
 
     private void validateSessionId(
