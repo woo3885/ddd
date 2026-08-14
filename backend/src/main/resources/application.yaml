@@ -8,6 +8,12 @@ spring:
       enabled: true
       force: true
 
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+
 server:
   port: 8080
 
@@ -22,6 +28,18 @@ management:
       enabled: false
 
 ddd:
+  session-store:
+    type: ${DDD_SESSION_STORE_TYPE:memory}
+
+    # D8
+    # 마지막 save 이후 세션 유지 시간.
+    ttl: ${DDD_SESSION_TTL:30m}
+
+    # D8
+    # Redis TTL이 끝난 BrowserSession을
+    # 찾아 정리하는 주기.
+    cleanup-interval-ms: ${DDD_SESSION_CLEANUP_INTERVAL_MS:5000}
+
   demo-bank:
     enabled: ${DDD_DEMO_BANK_ENABLED:false}
     base-url: ${DEMO_BANK_BASE_URL:http://127.0.0.1:5190}

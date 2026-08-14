@@ -18,10 +18,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -89,9 +91,6 @@ class AutomationSessionServiceTest {
 
         /*
          * FrameStore는 실제 객체를 사용한다.
-         *
-         * D17 최초 Frame의 sequence와
-         * session 분리를 실제로 확인하기 위해서다.
          */
         browserFrameStore =
                 new BrowserFrameStore();
@@ -105,10 +104,6 @@ class AutomationSessionServiceTest {
                         )
                 );
 
-        /*
-         * CaptureService 자체는 Mock이므로
-         * 여기서는 유효한 PNG일 필요는 없다.
-         */
         capturedFrame =
                 new CapturedBrowserFrame(
                         new byte[]{
@@ -131,7 +126,8 @@ class AutomationSessionServiceTest {
     }
 
     /*
-     * 기존 createSession(String) 회귀 테스트.
+     * 기존 createSession(String) 회귀 테스트 +
+     * D7 lastAccessedAt 초기화 검증.
      */
     @Test
     void 자동화_세션을_생성한다() {
@@ -162,6 +158,21 @@ class AutomationSessionServiceTest {
                 session.getUpdatedAt()
         );
 
+        /*
+         * D7
+         */
+        assertNotNull(
+                session.getLastAccessedAt()
+        );
+
+        /*
+         * 기존 호환 생성에서는
+         * 실제 navigation을 하지 않으므로 null.
+         */
+        assertNull(
+                session.getCurrentUrl()
+        );
+
         verify(
                 browserSessionManager
         ).createSession(
@@ -176,9 +187,6 @@ class AutomationSessionServiceTest {
                 "자동화 세션이 생성되었습니다."
         );
 
-        /*
-         * 기존 방식에서는 Frame을 만들지 않는다.
-         */
         verify(
                 browserFrameCaptureService,
                 never()
@@ -188,14 +196,15 @@ class AutomationSessionServiceTest {
     }
 
     /*
-     * D17 핵심:
+     * D17 + D7 핵심.
      *
-     * 페이지 이동 후
-     * 첫 Frame을 캡처하고
-     * BrowserFrameStore에 sequence=1로 저장한다.
+     * 페이지 이동 후:
+     * - 실제 final URL 저장
+     * - lastAccessedAt 갱신
+     * - 첫 Frame sequence=1 저장
      */
     @Test
-    void D17_세션_생성시_최초_Frame을_sequence_1로_저장한다() {
+    void D17_세션_생성시_URL과_최초_Frame을_저장한다() {
         when(
                 demoNavigationPolicy.resolve(
                         DEMO_SITE_ID,
@@ -242,6 +251,27 @@ class AutomationSessionServiceTest {
                 session.getStatus()
         );
 
+        /*
+         * D7
+         * 실제 navigation 완료 URL이
+         * 세션에 기록되어야 한다.
+         */
+        assertEquals(
+                ACCOUNTS_URL,
+                session.getCurrentUrl()
+        );
+
+        assertNotNull(
+                session.getLastAccessedAt()
+        );
+
+        assertFalse(
+                session.getLastAccessedAt()
+                        .isBefore(
+                                session.getCreatedAt()
+                        )
+        );
+
         verify(
                 demoNavigationPolicy
         ).resolve(
@@ -275,9 +305,6 @@ class AutomationSessionServiceTest {
                 session.getSessionId()
         );
 
-        /*
-         * 실제 FrameStore 확인.
-         */
         assertTrue(
                 browserFrameStore.containsSession(
                         session.getSessionId()
@@ -342,6 +369,58 @@ class AutomationSessionServiceTest {
     }
 
     /*
+     * D7
+     *
+     * Repository에 저장된 세션을 조회하면
+     * lastAccessedAt이 갱신되어야 한다.
+     */
+    @Test
+    void 세션을_조회하면_lastAccessedAt을_갱신한다() {
+        AutomationSession created =
+                sessionService.createSession(
+                        "예금 상품을 찾아 줘"
+                );
+
+        Instant beforeAccess =
+                created.getLastAccessedAt();
+
+        AutomationSession found =
+                sessionService.getSession(
+                        created.getSessionId()
+                );
+
+        assertEquals(
+                created.getSessionId(),
+                found.getSessionId()
+        );
+
+        assertNotNull(
+                found.getLastAccessedAt()
+        );
+
+        assertFalse(
+                found.getLastAccessedAt()
+                        .isBefore(
+                                beforeAccess
+                        )
+        );
+
+        /*
+         * touch 후 다시 Repository에 저장되었는지 확인.
+         */
+        AutomationSession stored =
+                repository.findById(
+                                created.getSessionId()
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                found.getLastAccessedAt(),
+                stored.getLastAccessedAt()
+        );
+    }
+
+    /*
      * URL 정책 단계에서 차단되면
      * BrowserContext 자체를 만들지 않는다.
      */
@@ -388,10 +467,6 @@ class AutomationSessionServiceTest {
         );
     }
 
-    /*
-     * Page.navigate() 실패 시
-     * BrowserSession을 정리한다.
-     */
     @Test
     void navigation_실패시_브라우저와_Frame을_정리한다() {
         when(
@@ -454,11 +529,6 @@ class AutomationSessionServiceTest {
         );
     }
 
-    /*
-     * navigation이 성공했더라도
-     * redirect 결과가 보안 정책에 위배되면
-     * Frame을 생성하지 않는다.
-     */
     @Test
     void 이동후_URL_검증_실패시_Frame을_만들지_않고_정리한다() {
         String redirectedUrl =
@@ -533,11 +603,6 @@ class AutomationSessionServiceTest {
         );
     }
 
-    /*
-     * secure-input 화면이면
-     * FrameCaptureGuard 결과에 따라
-     * 세션 시작 자체를 실패 처리한다.
-     */
     @Test
     void secure_input_화면이면_세션_생성을_중단하고_정리한다() {
         when(
@@ -658,6 +723,10 @@ class AutomationSessionServiceTest {
                 cancelled.getStatus()
         );
 
+        assertNotNull(
+                cancelled.getLastAccessedAt()
+        );
+
         verify(
                 browserSessionManager
         ).closeSession(
@@ -673,10 +742,6 @@ class AutomationSessionServiceTest {
         );
     }
 
-    /*
-     * D17 Frame이 있는 세션 취소 시
-     * BrowserFrameStore도 정리한다.
-     */
     @Test
     void D17_세션을_취소하면_저장된_Frame도_삭제한다() {
         when(
