@@ -4,25 +4,47 @@ import {
   generateStructuredAction,
 } from "../services/structuredAction.service.js";
 
+import {
+  adaptBackendRequestToAiActionRequest,
+} from "./aiDecisionRequest.adapter.js";
+
+import {
+  adaptStructuredResponseToBackend,
+} from "./aiDecisionResponse.adapter.js";
+
 import type {
-  AiActionRequest,
+  BackendAiDecisionRequest,
 } from "./aiRequest.types.js";
 
-export const aiActionRouter = Router();
+export const aiActionRouter =
+  Router();
 
 aiActionRouter.post(
   "/action",
+
   async (req, res) => {
     try {
-      const request =
-        req.body as AiActionRequest;
+      const backendRequest =
+        req.body as BackendAiDecisionRequest;
 
-      const result =
-        await generateStructuredAction(
-          request,
+      const internalRequest =
+        adaptBackendRequestToAiActionRequest(
+          backendRequest,
         );
 
-      res.status(200).json(result);
+      const structuredResponse =
+        await generateStructuredAction(
+          internalRequest,
+        );
+
+      const backendResponse =
+        adaptStructuredResponseToBackend(
+          structuredResponse,
+        );
+
+      res
+        .status(200)
+        .json(backendResponse);
     } catch (error) {
       console.error(
         "[AI Engine] /action 처리 실패",

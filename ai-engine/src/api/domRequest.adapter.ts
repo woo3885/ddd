@@ -1,54 +1,59 @@
 import type {
-  BackendSanitizedDomSnapshot,
-} from "./aiRequest.types.js";
-
-import type {
   DomModelInput,
-  ModelDomElement,
   ModelElementType,
 } from "../dom/types.js";
 
+import type {
+  BackendSanitizedDomElement,
+  BackendSanitizedDomSnapshot,
+} from "./aiRequest.types.js";
+
 function mapElementType(
-  tag: string,
-  role?: string | null,
+  element: BackendSanitizedDomElement,
 ): ModelElementType {
-  const normalizedTag = tag.toLowerCase();
-  const normalizedRole = role?.toLowerCase();
+  const tag =
+    element.tag.toLowerCase();
+
+  const role =
+    element.role?.toLowerCase();
 
   if (
-    normalizedTag === "button" ||
-    normalizedRole === "button"
-  ) {
-    return "button";
-  }
-
-  if (
-    normalizedTag === "a" ||
-    normalizedRole === "link"
-  ) {
-    return "link";
-  }
-
-  if (
-    normalizedTag === "input" ||
-    normalizedTag === "textarea" ||
-    normalizedRole === "textbox"
+    tag === "input" ||
+    tag === "textarea" ||
+    role === "textbox"
   ) {
     return "input";
   }
 
   if (
-    normalizedTag === "select" ||
-    normalizedRole === "combobox"
+    tag === "button" ||
+    role === "button"
   ) {
+    return "button";
+  }
+
+  if (
+    tag === "a" ||
+    role === "link"
+  ) {
+    return "link";
+  }
+
+  if (tag === "select") {
     return "select";
   }
 
-  if (normalizedRole === "checkbox") {
+  if (
+    element.inputType === "checkbox" ||
+    role === "checkbox"
+  ) {
     return "checkbox";
   }
 
-  if (normalizedRole === "radio") {
+  if (
+    element.inputType === "radio" ||
+    role === "radio"
+  ) {
     return "radio";
   }
 
@@ -56,7 +61,7 @@ function mapElementType(
 }
 
 function createLabel(
-  element: BackendSanitizedDomSnapshot["elements"][number],
+  element: BackendSanitizedDomElement,
 ): string {
   return (
     element.text ??
@@ -66,25 +71,48 @@ function createLabel(
   );
 }
 
+function isNormalActionableElement(
+  element: BackendSanitizedDomElement,
+): boolean {
+  if (!element.visible) {
+    return false;
+  }
+
+  if (!element.enabled) {
+    return false;
+  }
+
+  return (
+    element.securityPolicy === "NORMAL"
+  );
+}
+
 export function adaptBackendDomToModelInput(
   snapshot: BackendSanitizedDomSnapshot,
 ): DomModelInput {
-  const elements: ModelDomElement[] =
+  const modelElements =
     snapshot.elements
-      .filter((element) => {
-        return element.visible && element.enabled;
-      })
-      .map((element) => {
-        return {
-          id: element.elementId,
-          type: mapElementType(
-            element.tag,
-            element.role,
+      .filter(
+        (element) =>
+          element.visible,
+      )
+      .map((element) => ({
+        id: element.elementId,
+
+        type: mapElementType(element),
+
+        label: createLabel(element),
+
+        actionable:
+          isNormalActionableElement(
+            element,
           ),
-          label: createLabel(element),
-          actionable: true,
-        };
-      });
+
+        actionHint:
+          element.securityPolicy === "NORMAL"
+            ? undefined
+            : `SECURITY_POLICY:${element.securityPolicy}`,
+      }));
 
   return {
     page: {
@@ -92,14 +120,14 @@ export function adaptBackendDomToModelInput(
       title: snapshot.page.title,
     },
 
-    elements,
+    elements: modelElements,
 
     metadata: {
       originalElementCount:
         snapshot.elements.length,
 
       modelElementCount:
-        elements.length,
+        modelElements.length,
     },
   };
 }

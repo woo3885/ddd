@@ -5,7 +5,6 @@ import {
 async function runTest() {
   const request = {
     requestId: "req-d18-bc-001",
-    sessionId: "session-test-001",
 
     userGoal: {
       rawMessage:
@@ -31,25 +30,50 @@ async function runTest() {
           tag: "input",
           role: "textbox",
           text: null,
-          ariaLabel: "상품 검색",
+
+          ariaLabel:
+            "상품 검색",
           placeholder:
             "상품명을 입력하세요",
+
           inputType: "text",
           visible: true,
           enabled: true,
+
+          boundingBox: {
+            x: 100,
+            y: 100,
+            width: 300,
+            height: 40,
+          },
+
+          securityPolicy:
+            "NORMAL" as const,
         },
 
         {
           elementId:
             "el-a1b2c3d4-002",
+
           tag: "button",
           role: "button",
           text: "검색",
-          ariaLabel: "검색",
+
+          ariaLabel: null,
           placeholder: null,
           inputType: null,
           visible: true,
           enabled: true,
+
+          boundingBox: {
+            x: 420,
+            y: 100,
+            width: 80,
+            height: 40,
+          },
+
+          securityPolicy:
+            "NORMAL" as const,
         },
       ],
     },
