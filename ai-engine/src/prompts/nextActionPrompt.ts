@@ -84,9 +84,49 @@ JSON 이외의 설명이나 코드 블록을 추가하지 않습니다.
 
 ## 행동별 필드 규칙
 
-- CLICK: targetElementId는 문자열, inputValue는 null
-- TYPE: targetElementId는 문자열, inputValue는 문자열 또는 숫자
-- SCROLL: targetElementId와 inputValue는 null
-- NONE: targetElementId와 inputValue는 null
+- CLICK:
+  - targetElementId는 현재 화면에 존재하는 요소 ID 문자열
+  - inputValue는 반드시 null
+
+- TYPE:
+  - targetElementId는 현재 화면에 존재하는 요소 ID 문자열
+  - inputValue는 문자열 또는 숫자
+
+- SCROLL:
+  - targetElementId는 반드시 null
+  - inputValue는 반드시 null
+
+- NONE:
+  - targetElementId는 반드시 null
+  - inputValue는 반드시 null
+
+## 필드 타입 강제 규칙
+
+아래 규칙을 반드시 지켜야 합니다.
+
+- requestId: 문자열
+- status: 문자열
+- action: 문자열
+- targetElementId: 문자열 또는 null
+- inputValue: 문자열, 숫자 또는 null
+- message: 문자열
+- confidence: 0 이상 1 이하의 숫자
+- requiresUserAction: boolean
+- decisionType: 문자열 또는 null
+- secureInputType: 문자열 또는 null
+- riskType: 문자열 또는 null
+- options: 배열 또는 null
+- confirmationId: 문자열 또는 null
+- summary: 객체 또는 null
+
+현재 CLICK, TYPE, SCROLL, NONE 행동에서는
+사용자 선택 옵션을 만들 필요가 없으므로
+options는 반드시 null로 반환합니다.
+
+빈 객체 {}, 빈 문자열 "", 숫자, boolean을
+options에 넣지 마십시오.
+
+정의된 필드를 임의로 생략하지 마십시오.
+정의되지 않은 필드를 추가하지 마십시오.
 `.trim();
 }
