@@ -16,10 +16,15 @@ import org.springframework.stereotype.Service;
 public class AutomationSessionService {
 
     private final AutomationSessionRepository sessionRepository;
+
     private final BrowserSessionManager browserSessionManager;
+
     private final AutomationStatusEventPublisher statusEventPublisher;
+
     private final DemoNavigationPolicy demoNavigationPolicy;
+
     private final BrowserFrameCaptureService browserFrameCaptureService;
+
     private final BrowserFrameStore browserFrameStore;
 
     public AutomationSessionService(
@@ -50,10 +55,13 @@ public class AutomationSessionService {
     }
 
     /*
-     * 기존 코드/테스트 호환용 세션 생성.
+     * 기존 코드 / 테스트 호환용 세션 생성.
      *
-     * 기존 API 내부 사용을 위해 유지한다.
      * Demo navigation 및 Frame 생성은 하지 않는다.
+     *
+     * D7:
+     * AutomationSession.create() 단계에서
+     * lastAccessedAt이 자동 초기화된다.
      */
     public AutomationSession createSession(
             String userRequest
@@ -95,15 +103,16 @@ public class AutomationSessionService {
     }
 
     /*
-     * D17 세션 생성.
+     * D17 / D7 세션 생성.
      *
-     * 1. site/path 보안검증
+     * 1. site/path 보안 검증
      * 2. BrowserContext 생성
      * 3. 실제 페이지 이동
      * 4. 최종 URL 재검증
-     * 5. 최초 Frame 캡처
-     * 6. 최신 Frame Store 저장
-     * 7. AutomationSession 저장
+     * 5. D7 currentUrl / lastAccessedAt 갱신
+     * 6. 최초 Frame 캡처
+     * 7. 최신 Frame Store 저장
+     * 8. AutomationSession 저장
      */
     public AutomationSession createSession(
             String userRequest,
@@ -144,7 +153,7 @@ public class AutomationSessionService {
 
             /*
              * redirect 등을 포함한
-             * 실제 최종 URL을 재검증한다.
+             * 실제 최종 URL을 다시 검증한다.
              */
             demoNavigationPolicy.validateNavigatedTarget(
                     navigationTarget,
@@ -152,9 +161,22 @@ public class AutomationSessionService {
             );
 
             /*
+             * D7
+             *
+             * 검증까지 끝난 실제 Browser URL을
+             * AutomationSession에 저장한다.
+             *
+             * 이 메서드 내부에서
+             * updatedAt과 lastAccessedAt도 갱신된다.
+             */
+            session.updateCurrentUrl(
+                    finalUrl
+            );
+
+            /*
              * D17 첫 Frame 생성.
              *
-             * 여기서 FrameCaptureGuard가 먼저 실행되므로
+             * FrameCaptureGuard가 먼저 실행되므로
              * secure-input 화면이면 screenshot 자체가
              * 실행되지 않는다.
              */
@@ -188,8 +210,18 @@ public class AutomationSessionService {
             );
 
             /*
-             * 브라우저 및 최초 Frame 준비가
-             * 모두 끝난 뒤에만 도메인 세션 저장.
+             * D7
+             *
+             * 여기서 Repository가 memory라면 메모리에,
+             * redis라면 Redis Hash에 아래 정보가 저장된다.
+             *
+             * - sessionId
+             * - userRequest
+             * - status
+             * - createdAt
+             * - updatedAt
+             * - currentUrl
+             * - lastAccessedAt
              */
             AutomationSession savedSession =
                     sessionRepository.save(
@@ -224,6 +256,21 @@ public class AutomationSessionService {
         }
     }
 
+    /*
+     * D7
+     *
+     * 단순 조회가 아니라
+     * "세션에 접근했다"는 의미로 처리한다.
+     *
+     * 조회 성공 시:
+     *
+     * findById
+     * → touch()
+     * → lastAccessedAt 갱신
+     * → 다시 Repository 저장
+     *
+     * Redis 모드에서는 이 시각까지 Redis에 반영된다.
+     */
     public AutomationSession getSession(
             String sessionId
     ) {
@@ -231,25 +278,41 @@ public class AutomationSessionService {
                 sessionId
         );
 
-        return sessionRepository.findById(
-                        sessionId
-                )
-                .orElseThrow(
-                        () ->
-                                new SessionNotFoundException(
-                                        sessionId
-                                )
-                );
+        AutomationSession session =
+                sessionRepository.findById(
+                                sessionId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new SessionNotFoundException(
+                                                sessionId
+                                        )
+                        );
+
+        session.touch();
+
+        return sessionRepository.save(
+                session
+        );
     }
 
     public AutomationSession cancelSession(
             String sessionId
     ) {
+        /*
+         * getSession() 호출 시
+         * D7 lastAccessedAt이 먼저 갱신된다.
+         */
         AutomationSession session =
                 getSession(
                         sessionId
                 );
 
+        /*
+         * cancel()에서
+         * status / updatedAt / lastAccessedAt이
+         * 함께 갱신된다.
+         */
         session.cancel();
 
         AutomationSession savedSession =

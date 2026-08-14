@@ -33,14 +33,18 @@ public final class BrowserActionPolicyContextResolver {
             String sessionId,
             BrowserAction action
     ) {
-        validateSessionId(sessionId);
+        validateSessionId(
+                sessionId
+        );
 
         Objects.requireNonNull(
                 action,
                 "브라우저 행동 명령은 필수입니다."
         );
 
-        if (!requiresElementInspection(action)) {
+        if (!requiresElementInspection(
+                action
+        )) {
             return BrowserActionPolicyContext.normal();
         }
 
@@ -48,25 +52,73 @@ public final class BrowserActionPolicyContextResolver {
                 browserSessionManager.execute(
                         sessionId,
                         RESOLVE_TIMEOUT,
-                        page -> inspectElement(
-                                page.locator(
-                                        action.selector()
-                                ).first()
-                        )
+                        page ->
+                                inspectElement(
+                                        page.locator(
+                                                action.selector()
+                                        ).first()
+                                )
                 );
 
         if (!snapshot.found()) {
             return BrowserActionPolicyContext.normal();
         }
 
+        return resolveSnapshot(
+                snapshot,
+                action.type()
+        );
+    }
+
+    /*
+     * D15
+     *
+     * Sanitized DOM에서도
+     * Browser Action과 정확히 같은
+     * 보안 정책 판정 규칙을 재사용한다.
+     */
+    public BrowserActionPolicyContext resolveMetadata(
+            String explicitPolicy,
+            String type,
+            String id,
+            String name,
+            String autocomplete,
+            String ariaLabel,
+            String text,
+            BrowserActionType actionType
+    ) {
+        Objects.requireNonNull(
+                actionType,
+                "브라우저 행동 유형은 필수입니다."
+        );
+
+        ElementPolicySnapshot snapshot =
+                new ElementPolicySnapshot(
+                        true,
+                        explicitPolicy,
+                        type,
+                        id,
+                        name,
+                        autocomplete,
+                        ariaLabel,
+                        text
+                );
+
+        return resolveSnapshot(
+                snapshot,
+                actionType
+        );
+    }
+
+    private BrowserActionPolicyContext resolveSnapshot(
+            ElementPolicySnapshot snapshot,
+            BrowserActionType actionType
+    ) {
         BrowserActionPolicyContext explicitContext =
                 resolveExplicitPolicy(
                         snapshot.policy()
                 );
 
-        /*
-         * 명시적 blocked는 최우선으로 적용한다.
-         */
         if (explicitContext != null
                 && explicitContext.blockedTarget()) {
 
@@ -84,10 +136,6 @@ public final class BrowserActionPolicyContextResolver {
                         snapshot.text()
                 );
 
-        /*
-         * data-ddd-policy="normal"이어도
-         * password·OTP 등의 민감정보 판정을 해제할 수 없다.
-         */
         if ((explicitContext != null
                 && explicitContext.sensitiveInput())
                 || isSensitiveInput(
@@ -101,7 +149,9 @@ public final class BrowserActionPolicyContextResolver {
 
         if ((explicitContext != null
                 && explicitContext.finalExecution())
-                || isFinalExecution(searchableText)) {
+                || isFinalExecution(
+                searchableText
+        )) {
 
             return BrowserActionPolicyContext
                     .forFinalExecution();
@@ -121,7 +171,7 @@ public final class BrowserActionPolicyContextResolver {
         if ((explicitContext != null
                 && explicitContext.userChoice())
                 || isUserChoice(
-                action,
+                actionType,
                 searchableText
         )) {
 
@@ -141,7 +191,9 @@ public final class BrowserActionPolicyContextResolver {
             return false;
         }
 
-        return switch (action.type()) {
+        return switch (
+                action.type()
+                ) {
             case CLICK,
                  TYPE,
                  SELECT -> true;
@@ -162,11 +214,21 @@ public final class BrowserActionPolicyContextResolver {
                 locator.getAttribute(
                         POLICY_ATTRIBUTE
                 ),
-                locator.getAttribute("type"),
-                locator.getAttribute("id"),
-                locator.getAttribute("name"),
-                locator.getAttribute("autocomplete"),
-                locator.getAttribute("aria-label"),
+                locator.getAttribute(
+                        "type"
+                ),
+                locator.getAttribute(
+                        "id"
+                ),
+                locator.getAttribute(
+                        "name"
+                ),
+                locator.getAttribute(
+                        "autocomplete"
+                ),
+                locator.getAttribute(
+                        "aria-label"
+                ),
                 locator.textContent()
         );
     }
@@ -174,13 +236,17 @@ public final class BrowserActionPolicyContextResolver {
     private BrowserActionPolicyContext resolveExplicitPolicy(
             String policy
     ) {
-        if (policy == null || policy.isBlank()) {
+        if (policy == null
+                || policy.isBlank()) {
+
             return null;
         }
 
         return switch (
                 policy.trim()
-                        .toLowerCase(Locale.ROOT)
+                        .toLowerCase(
+                                Locale.ROOT
+                        )
                 ) {
             case "secure-input" ->
                     BrowserActionPolicyContext
@@ -203,7 +269,8 @@ public final class BrowserActionPolicyContextResolver {
                             .forBlockedTarget();
 
             case "normal" ->
-                    BrowserActionPolicyContext.normal();
+                    BrowserActionPolicyContext
+                            .normal();
 
             default ->
                     BrowserActionPolicyContext
@@ -222,7 +289,9 @@ public final class BrowserActionPolicyContextResolver {
         }
 
         String autocomplete =
-                normalize(snapshot.autocomplete());
+                normalize(
+                        snapshot.autocomplete()
+                );
 
         if (containsAny(
                 autocomplete,
@@ -309,12 +378,12 @@ public final class BrowserActionPolicyContextResolver {
     }
 
     private boolean isUserChoice(
-            BrowserAction action,
+            BrowserActionType actionType,
             String text
     ) {
-        if (action.type()
+        if (actionType
                 != BrowserActionType.CLICK
-                && action.type()
+                && actionType
                 != BrowserActionType.SELECT) {
 
             return false;
@@ -345,18 +414,26 @@ public final class BrowserActionPolicyContextResolver {
         StringBuilder builder =
                 new StringBuilder();
 
-        for (String value : values) {
-            if (value == null || value.isBlank()) {
+        for (String value :
+                values) {
+
+            if (value == null
+                    || value.isBlank()) {
+
                 continue;
             }
 
             if (!builder.isEmpty()) {
-                builder.append(' ');
+                builder.append(
+                        ' '
+                );
             }
 
             builder.append(
                     value.trim()
-                            .toLowerCase(Locale.ROOT)
+                            .toLowerCase(
+                                    Locale.ROOT
+                            )
             );
         }
 
@@ -367,11 +444,15 @@ public final class BrowserActionPolicyContextResolver {
             String source,
             String... keywords
     ) {
-        if (source == null || source.isBlank()) {
+        if (source == null
+                || source.isBlank()) {
+
             return false;
         }
 
-        for (String keyword : keywords) {
+        for (String keyword :
+                keywords) {
+
             if (source.contains(
                     keyword.toLowerCase(
                             Locale.ROOT

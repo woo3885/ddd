@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -173,6 +174,21 @@ public class BrowserSessionManager implements AutoCloseable {
                                 !session.isClosed()
                 )
                 .count();
+    }
+
+    /*
+     * D8
+     *
+     * 현재 BrowserSessionManager가 관리 중인
+     * 세션 ID Snapshot을 반환한다.
+     *
+     * Scheduler가 Redis에서 만료된 세션과
+     * BrowserSession을 비교할 때 사용한다.
+     */
+    public synchronized Set<String> activeSessionIds() {
+        return Set.copyOf(
+                sessions.keySet()
+        );
     }
 
     /*
