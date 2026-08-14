@@ -1,0 +1,11 @@
+{
+  "type": "STT_PARTIAL_RESULT",
+  "sessionId": "bs-20260727-001",
+  "utteranceId": "utt-001",
+  "timestamp": 1785140001200,
+  "text": "1년 동안 천만 원을",
+  "language": "ko-KR",
+  "sequence": 1,
+  "isFinal": false,
+  "confidence": null
+}
