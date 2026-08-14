@@ -49,3 +49,11 @@ ddd:
 
   rest-cors:
     allowed-origins: ${DDD_REST_CORS_ALLOWED_ORIGINS:http://127.0.0.1:5173}
+
+  ai:
+    gemini:
+      enabled: ${DDD_GEMINI_ENABLED:false}
+      api-key: ${GEMINI_API_KEY:}
+      model: ${GEMINI_MODEL:gemini-3.6-flash}
+      connect-timeout: ${GEMINI_CONNECT_TIMEOUT:5s}
+      request-timeout: ${GEMINI_REQUEST_TIMEOUT:20s}
