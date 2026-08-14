@@ -1,0 +1,95 @@
+import { aiService } from "./ai.service.js";
+
+import {
+  createNextActionPrompt,
+} from "../prompts/nextActionPrompt.js";
+
+import {
+  parseStructuredAIResponse,
+} from "../output/aiResponse.parser.js";
+
+import {
+  createStructuredFallbackResponse,
+} from "../output/aiResponse.fallback.js";
+
+import {
+  adaptBackendDomToModelInput,
+} from "../api/domRequest.adapter.js";
+
+import type {
+  AiActionRequest,
+} from "../api/aiRequest.types.js";
+
+import type {
+  StructuredAIResponse,
+} from "../output/aiResponse.types.js";
+
+export async function generateStructuredAction(
+  request: AiActionRequest,
+): Promise<StructuredAIResponse> {
+  const dom = adaptBackendDomToModelInput(
+    request.domSnapshot,
+  );
+
+  const prompt = createNextActionPrompt(
+    request.requestId,
+    request.userGoal,
+    dom,
+  );
+
+  const result = await aiService.generateText({
+    prompt,
+  });
+
+  console.log("\n[Structured Action Raw Gemini Response]");
+  console.log(result.text);
+
+  if (result.source === "FALLBACK") {
+    return createStructuredFallbackResponse(
+      request.requestId,
+    );
+  }
+
+  try {
+    const structured =
+      parseStructuredAIResponse(result.text);
+
+    validateTargetElementId(
+      structured,
+      request,
+    );
+
+    return structured;
+  } catch (error) {
+    console.error(
+      "[AI Engine] Structured Output 처리 실패. Fallback을 반환합니다.",
+      error,
+    );
+
+    return createStructuredFallbackResponse(
+      request.requestId,
+    );
+  }
+}
+
+function validateTargetElementId(
+  response: StructuredAIResponse,
+  request: AiActionRequest,
+): void {
+  if (!response.targetElementId) {
+    return;
+  }
+
+  const exists =
+    request.domSnapshot.elements.some(
+      (element) =>
+        element.elementId ===
+        response.targetElementId,
+    );
+
+  if (!exists) {
+    throw new Error(
+      `[AI Engine] 존재하지 않는 targetElementId입니다: ${response.targetElementId}`,
+    );
+  }
+}
