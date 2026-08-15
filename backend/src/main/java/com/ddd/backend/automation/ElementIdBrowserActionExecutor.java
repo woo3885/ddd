@@ -41,21 +41,35 @@ public final class ElementIdBrowserActionExecutor {
     }
 
     /*
-     * Public Viewer CLICK 전용 실행.
+     * 기존 Public Viewer CLICK 호환 메서드.
      *
-     * 외부에서 selector를 절대 받지 않는다.
-     *
-     * elementId
-     *   ↓
-     * ElementRegistry
-     *   ↓
-     * 현재 DOM에서 Locator 재탐색
-     *   ↓
-     * visible / enabled / 보안정책 재검증
-     *   ↓
-     * CLICK
+     * Frontend 사용자가 Viewer에서 직접 클릭한 경우다.
      */
     public BrowserActionExecutionResult executeClick(
+            String sessionId,
+            String elementId
+    ) {
+        return executeUserClick(
+                sessionId,
+                elementId
+        );
+    }
+
+    /*
+     * 사용자가 Viewer에서 직접 선택한 CLICK.
+     *
+     * userChoice / optionalConsent는
+     * 실제 사용자 행동이므로 실행할 수 있다.
+     *
+     * 단:
+     *
+     * - blocked
+     * - sensitive
+     * - final execution
+     *
+     * 은 여전히 실행하지 않는다.
+     */
+    public BrowserActionExecutionResult executeUserClick(
             String sessionId,
             String elementId
     ) {
@@ -74,22 +88,18 @@ public final class ElementIdBrowserActionExecutor {
                     .withLocator(
                             sessionId,
                             elementId,
-                            this::executeResolvedClick
+                            this::executeResolvedUserClick
                     );
 
         } catch (RuntimeException exception) {
 
             /*
-             * 오래된 elementId,
-             * 위조 elementId,
-             * Page 변경,
-             * DOM 변경,
-             * 재탐색 실패 등을
-             * 임의 Selector fallback으로 처리하지 않는다.
+             * stale elementId
+             * 다른 Page
+             * fingerprint 불일치
+             * Element 재탐색 실패
              *
-             * 안전하게 BLOCKED로 끝낸다.
-             *
-             * sessionId / elementId는 로그에 남기지 않는다.
+             * 등의 경우 Selector fallback을 하지 않는다.
              */
             log.debug(
                     "Viewer elementId Action 차단. "
@@ -107,11 +117,106 @@ public final class ElementIdBrowserActionExecutor {
     }
 
     /*
-     * 이 메서드는 ElementLocatorResolver의
-     * PlaywrightWorker 작업 내부에서 호출된다.
+     * AI Engine이 반환한 elementId Action 실행.
+     *
+     * 지원:
+     *
+     * CLICK
+     * TYPE
+     * SELECT
+     *
+     * AI는 userChoice / optionalConsent를
+     * 자동으로 조작할 수 없다.
+     */
+    public BrowserActionExecutionResult executeAiAction(
+            String sessionId,
+            BrowserActionType actionType,
+            String elementId,
+            String value
+    ) {
+        validateText(
+                sessionId,
+                "sessionId"
+        );
+
+        Objects.requireNonNull(
+                actionType,
+                "BrowserActionType은 필수입니다."
+        );
+
+        validateText(
+                elementId,
+                "elementId"
+        );
+
+        if (actionType
+                != BrowserActionType.CLICK
+                && actionType
+                != BrowserActionType.TYPE
+                && actionType
+                != BrowserActionType.SELECT) {
+
+            throw new IllegalArgumentException(
+                    "elementId 기반 AI Action은 "
+                            + "CLICK, TYPE, SELECT만 지원합니다."
+            );
+        }
+
+        if ((actionType == BrowserActionType.TYPE
+                || actionType == BrowserActionType.SELECT)
+                && (value == null
+                || value.isBlank())) {
+
+            throw new IllegalArgumentException(
+                    actionType
+                            + " Action에는 value가 필요합니다."
+            );
+        }
+
+        try {
+            return elementLocatorResolver
+                    .withLocator(
+                            sessionId,
+                            elementId,
+                            locator ->
+                                    executeResolvedAiAction(
+                                            locator,
+                                            actionType,
+                                            value
+                                    )
+                    );
+
+        } catch (RuntimeException exception) {
+
+            /*
+             * AI가 받은 elementId가 Snapshot 이후
+             * 더 이상 유효하지 않으면 실행하지 않는다.
+             *
+             * Selector fallback 금지.
+             */
+            log.debug(
+                    "AI elementId Action 차단. "
+                            + "actionType={}, "
+                            + "exceptionType={}",
+                    actionType,
+                    exception
+                            .getClass()
+                            .getSimpleName()
+            );
+
+            return BrowserActionExecutionResult
+                    .blocked(
+                            actionType
+                    );
+        }
+    }
+
+    /*
+     * ElementLocatorResolver 내부의
+     * PlaywrightWorker Thread에서 실행된다.
      */
     private BrowserActionExecutionResult
-    executeResolvedClick(
+    executeResolvedUserClick(
             Locator locator
     ) {
         Objects.requireNonNull(
@@ -119,12 +224,9 @@ public final class ElementIdBrowserActionExecutor {
                 "Locator는 필수입니다."
         );
 
-        /*
-         * Snapshot 당시 visible이었더라도
-         * 실제 실행 직전에 다시 검사한다.
-         */
-        if (!locator.isVisible()
-                || !locator.isEnabled()) {
+        if (!isInteractable(
+                locator
+        )) {
 
             return BrowserActionExecutionResult
                     .blocked(
@@ -132,41 +234,12 @@ public final class ElementIdBrowserActionExecutor {
                     );
         }
 
-        /*
-         * 현재 DOM의 실제 속성으로
-         * 보안정책도 다시 계산한다.
-         *
-         * Snapshot에 있던 SecurityPolicy만
-         * 그대로 믿지 않는다.
-         */
         BrowserActionPolicyContext context =
-                policyContextResolver
-                        .resolveMetadata(
-                                locator.getAttribute(
-                                        "data-ddd-policy"
-                                ),
-                                locator.getAttribute(
-                                        "type"
-                                ),
-                                locator.getAttribute(
-                                        "id"
-                                ),
-                                locator.getAttribute(
-                                        "name"
-                                ),
-                                locator.getAttribute(
-                                        "autocomplete"
-                                ),
-                                locator.getAttribute(
-                                        "aria-label"
-                                ),
-                                locator.textContent(),
-                                BrowserActionType.CLICK
-                        );
+                resolveCurrentPolicy(
+                        locator,
+                        BrowserActionType.CLICK
+                );
 
-        /*
-         * 절대 실행 불가 대상.
-         */
         if (context.blockedTarget()) {
 
             return BrowserActionExecutionResult
@@ -175,10 +248,6 @@ public final class ElementIdBrowserActionExecutor {
                     );
         }
 
-        /*
-         * 비밀번호 / OTP / 보안정보 대상은
-         * Viewer CLICK에서도 보안 입력 모드로 넘긴다.
-         */
         if (context.sensitiveInput()) {
 
             return BrowserActionExecutionResult
@@ -187,13 +256,6 @@ public final class ElementIdBrowserActionExecutor {
                     );
         }
 
-        /*
-         * 최종 송금/가입/결제 버튼은
-         * Viewer에서 사용자가 한 번 클릭했다고
-         * 바로 실행하지 않는다.
-         *
-         * 별도 Final Confirmation Gate로 보낸다.
-         */
         if (context.finalExecution()) {
 
             return BrowserActionExecutionResult
@@ -203,22 +265,149 @@ public final class ElementIdBrowserActionExecutor {
         }
 
         /*
-         * 중요:
-         *
          * userChoice / optionalConsent는
-         * AI 자동 클릭이면 USER_ACTION_REQUIRED지만,
-         *
-         * 이 Public Action API 자체가
-         * Viewer에서 실제 사용자가 선택해서 보낸
-         * CLICK 요청이므로 여기서는 실행을 허용한다.
+         * 사용자가 직접 Viewer에서 보낸 요청이므로 허용.
          */
-
         locator.click();
 
         return BrowserActionExecutionResult
                 .executed(
                         BrowserActionType.CLICK
                 );
+    }
+
+    /*
+     * AI Action 실행.
+     *
+     * Snapshot 정책 검사를 통과했더라도
+     * 실제 실행 직전 현재 DOM으로 다시 검사한다.
+     */
+    private BrowserActionExecutionResult
+    executeResolvedAiAction(
+            Locator locator,
+            BrowserActionType actionType,
+            String value
+    ) {
+        Objects.requireNonNull(
+                locator,
+                "Locator는 필수입니다."
+        );
+
+        if (!isInteractable(
+                locator
+        )) {
+
+            return BrowserActionExecutionResult
+                    .blocked(
+                            actionType
+                    );
+        }
+
+        BrowserActionPolicyContext context =
+                resolveCurrentPolicy(
+                        locator,
+                        actionType
+                );
+
+        if (context.blockedTarget()) {
+
+            return BrowserActionExecutionResult
+                    .blocked(
+                            actionType
+                    );
+        }
+
+        if (context.sensitiveInput()) {
+
+            return BrowserActionExecutionResult
+                    .secureInputRequired(
+                            actionType
+                    );
+        }
+
+        if (context.finalExecution()) {
+
+            return BrowserActionExecutionResult
+                    .finalConfirmationRequired(
+                            actionType
+                    );
+        }
+
+        /*
+         * AI는 사용자가 직접 판단해야 하는
+         * 선택사항을 자동 실행하지 않는다.
+         */
+        if (context.userChoice()
+                || context.optionalConsent()) {
+
+            return BrowserActionExecutionResult
+                    .userActionRequired(
+                            actionType
+                    );
+        }
+
+        switch (actionType) {
+
+            case CLICK ->
+                    locator.click();
+
+            case TYPE ->
+                    locator.fill(
+                            value
+                    );
+
+            case SELECT ->
+                    locator.selectOption(
+                            value
+                    );
+
+            default ->
+                    throw new IllegalStateException(
+                            "지원하지 않는 elementId Action입니다."
+                    );
+        }
+
+        return BrowserActionExecutionResult
+                .executed(
+                        actionType
+                );
+    }
+
+    private BrowserActionPolicyContext
+    resolveCurrentPolicy(
+            Locator locator,
+            BrowserActionType actionType
+    ) {
+        return policyContextResolver
+                .resolveMetadata(
+                        locator.getAttribute(
+                                "data-ddd-policy"
+                        ),
+                        locator.getAttribute(
+                                "type"
+                        ),
+                        locator.getAttribute(
+                                "id"
+                        ),
+                        locator.getAttribute(
+                                "name"
+                        ),
+                        locator.getAttribute(
+                                "autocomplete"
+                        ),
+                        locator.getAttribute(
+                                "aria-label"
+                        ),
+                        locator.textContent(),
+                        actionType
+                );
+    }
+
+    private boolean isInteractable(
+            Locator locator
+    ) {
+        return locator.isVisible()
+                && locator.isEnabled();
     }
 
     private void validateText(
