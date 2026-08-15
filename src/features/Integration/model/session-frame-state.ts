@@ -1,4 +1,4 @@
-import type { ViewerFrame } from '@/features/F2_StreamViewer/model/viewer-frame';
+import type { SessionViewerFrame } from '@/features/Integration/api/session-frame-transport';
 
 export type SessionFramePhase =
   | 'IDLE'
@@ -13,7 +13,7 @@ export interface SessionFrameState {
   runId: number;
   phase: SessionFramePhase;
   message: string;
-  frame?: ViewerFrame;
+  frame?: SessionViewerFrame;
   hasReceivedFirstFrame: boolean;
   canReset: boolean;
 }

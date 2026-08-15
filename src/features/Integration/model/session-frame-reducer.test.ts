@@ -1,18 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
+import type { SessionViewerFrame } from '@/features/Integration/api/session-frame-transport';
 import { sessionFrameReducer } from './session-frame-reducer';
 import {
   createInitialSessionFrameState,
   initialSessionFrameState
 } from './session-frame-state';
 
-const frame = {
+const frame: SessionViewerFrame = {
   metadata: {
     type: 'BROWSER_FRAME' as const,
     sessionId: 'session-123',
+    frameId: 'frm-123',
+    sequence: 1,
     timestamp: 1_786_350_000_000,
     width: 1280,
-    height: 720
+    height: 720,
+    mimeType: 'image/png' as const,
+    byteLength: 4
   },
   imageSrc: 'blob:frame'
 };
@@ -56,6 +61,11 @@ describe('sessionFrameReducer', () => {
       frame,
       hasReceivedFirstFrame: true,
       canReset: true
+    });
+    expect(ready.frame?.metadata).toMatchObject({
+      frameId: 'frm-123',
+      sequence: 1,
+      timestamp: 1_786_350_000_000
     });
   });
 

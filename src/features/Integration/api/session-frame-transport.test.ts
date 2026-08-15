@@ -64,6 +64,14 @@ function setup() {
 }
 
 describe('session frame transport', () => {
+  it('검증할 metadata 입력 객체를 변경하지 않는다', () => {
+    const input = Object.freeze(metadata());
+    const snapshot = { ...input };
+
+    expect(validateFrameMetadata(input, sessionId)).toEqual(input);
+    expect(input).toEqual(snapshot);
+  });
+
   it('raw WebSocket URL, subprotocol, arraybuffer 설정으로 연결한다', () => {
     const { transport, socket, webSocketFactory, listener } = setup();
     transport.connect();
@@ -88,14 +96,17 @@ describe('session frame transport', () => {
     );
     expect(listener).toHaveBeenCalledWith({
       type: 'FRAME_RECEIVED',
-      sequence: 1,
       frame: {
         metadata: {
           type: 'BROWSER_FRAME',
           sessionId,
+          frameId: 'frm-1',
+          sequence: 1,
           timestamp: 1_786_350_000_000,
           width: 1280,
-          height: 720
+          height: 720,
+          mimeType: 'image/png',
+          byteLength: 4
         },
         imageSrc: 'blob:frame-1'
       }
@@ -126,6 +137,31 @@ describe('session frame transport', () => {
 
     expect(objectUrlFactory.create).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls.filter(([event]) => event.type === 'FRAME_RECEIVED')).toHaveLength(1);
+  });
+
+  it('다음 frame은 metadata 전체를 하나의 ViewerFrame으로 교체한다', () => {
+    const { transport, socket, listener } = setup();
+    transport.connect();
+    socket.message(JSON.stringify(metadata(1)));
+    socket.message(new Uint8Array(4).buffer);
+    socket.message(JSON.stringify(metadata(2)));
+    socket.message(new Uint8Array(4).buffer);
+
+    const frames = listener.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.type === 'FRAME_RECEIVED');
+
+    expect(frames).toHaveLength(2);
+    expect(frames[1]).toMatchObject({
+      frame: {
+        metadata: {
+          frameId: 'frm-2',
+          sequence: 2,
+          timestamp: 1_786_350_000_000
+        },
+        imageSrc: 'blob:frame-2'
+      }
+    });
   });
 
   it('metadata 없는 Binary를 protocol error로 처리한다', () => {

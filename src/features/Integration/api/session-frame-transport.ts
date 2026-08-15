@@ -21,9 +21,13 @@ export interface BrowserFrameMetadataV1 {
   byteLength: number;
 }
 
+export interface SessionViewerFrame extends ViewerFrame {
+  metadata: BrowserFrameMetadataV1;
+}
+
 export type SessionFrameTransportEvent =
   | { type: 'CONNECTED' }
-  | { type: 'FRAME_RECEIVED'; frame: ViewerFrame; sequence: number }
+  | { type: 'FRAME_RECEIVED'; frame: SessionViewerFrame }
   | { type: 'DISCONNECTED' }
   | {
       type: 'SAFE_ERROR';
@@ -232,15 +236,8 @@ export function createSessionFrameTransport(
 
       emit({
         type: 'FRAME_RECEIVED',
-        sequence: frame.metadata.sequence,
         frame: {
-          metadata: {
-            type: 'BROWSER_FRAME',
-            sessionId: frame.metadata.sessionId,
-            timestamp: frame.metadata.timestamp,
-            width: frame.metadata.width,
-            height: frame.metadata.height
-          },
+          metadata: frame.metadata,
           imageSrc: nextObjectUrl
         }
       });
