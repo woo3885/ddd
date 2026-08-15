@@ -4,6 +4,7 @@ import com.ddd.backend.automation.BrowserAction;
 import com.ddd.backend.automation.BrowserActionExecutionResult;
 import com.ddd.backend.automation.BrowserActionExecutionStatus;
 import com.ddd.backend.automation.BrowserActionExecutor;
+import com.ddd.backend.automation.ElementIdBrowserActionExecutor;
 import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
@@ -16,9 +17,11 @@ import com.ddd.backend.websocket.mapper.BrowserActionStatusEventMapper;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
+import java.util.function.Supplier;
 
 @Service
 public final class BrowserActionExecutionService {
@@ -28,26 +31,72 @@ public final class BrowserActionExecutionService {
                     BrowserActionExecutionService.class
             );
 
-    private static final String EXECUTION_ERROR_MESSAGE =
+    private static final String
+            EXECUTION_ERROR_MESSAGE =
             "브라우저 행동 실행 중 오류가 발생했습니다.";
 
-    private final BrowserActionExecutor actionExecutor;
+    private final BrowserActionExecutor
+            actionExecutor;
 
-    private final BrowserActionStatusEventMapper statusEventMapper;
+    private final BrowserActionStatusEventMapper
+            statusEventMapper;
 
-    private final AutomationSessionRepository sessionRepository;
+    private final AutomationSessionRepository
+            sessionRepository;
 
-    private final AutomationStatusEventPublisher statusEventPublisher;
+    private final AutomationStatusEventPublisher
+            statusEventPublisher;
+
+    private final BrowserFrameCaptureService
+            browserFrameCaptureService;
+
+    private final BrowserFrameStore
+            browserFrameStore;
+
+    private final BrowserFrameWebSocketHandler
+            frameWebSocketHandler;
 
     /*
-     * D17 Viewer Frame 갱신용.
+     * D19 Public Viewer elementId Action.
      */
-    private final BrowserFrameCaptureService browserFrameCaptureService;
+    private final ElementIdBrowserActionExecutor
+            elementIdActionExecutor;
 
-    private final BrowserFrameStore browserFrameStore;
+    /*
+     * Spring 실제 구동 시 사용하는 Constructor.
+     */
+    @Autowired
+    public BrowserActionExecutionService(
+            BrowserActionExecutor actionExecutor,
+            BrowserActionStatusEventMapper statusEventMapper,
+            AutomationSessionRepository sessionRepository,
+            AutomationStatusEventPublisher statusEventPublisher,
+            BrowserFrameCaptureService browserFrameCaptureService,
+            BrowserFrameStore browserFrameStore,
+            BrowserFrameWebSocketHandler frameWebSocketHandler,
+            ElementIdBrowserActionExecutor
+                    elementIdActionExecutor
+    ) {
+        this(
+                actionExecutor,
+                statusEventMapper,
+                sessionRepository,
+                statusEventPublisher,
+                browserFrameCaptureService,
+                browserFrameStore,
+                frameWebSocketHandler,
+                elementIdActionExecutor,
+                false
+        );
+    }
 
-    private final BrowserFrameWebSocketHandler frameWebSocketHandler;
-
+    /*
+     * 기존 테스트 코드 호환용 Constructor.
+     *
+     * 기존 테스트들이 7개 인자로
+     * BrowserActionExecutionService를 직접 생성해도
+     * 깨지지 않도록 유지한다.
+     */
     public BrowserActionExecutionService(
             BrowserActionExecutor actionExecutor,
             BrowserActionStatusEventMapper statusEventMapper,
@@ -56,6 +105,31 @@ public final class BrowserActionExecutionService {
             BrowserFrameCaptureService browserFrameCaptureService,
             BrowserFrameStore browserFrameStore,
             BrowserFrameWebSocketHandler frameWebSocketHandler
+    ) {
+        this(
+                actionExecutor,
+                statusEventMapper,
+                sessionRepository,
+                statusEventPublisher,
+                browserFrameCaptureService,
+                browserFrameStore,
+                frameWebSocketHandler,
+                null,
+                true
+        );
+    }
+
+    private BrowserActionExecutionService(
+            BrowserActionExecutor actionExecutor,
+            BrowserActionStatusEventMapper statusEventMapper,
+            AutomationSessionRepository sessionRepository,
+            AutomationStatusEventPublisher statusEventPublisher,
+            BrowserFrameCaptureService browserFrameCaptureService,
+            BrowserFrameStore browserFrameStore,
+            BrowserFrameWebSocketHandler frameWebSocketHandler,
+            ElementIdBrowserActionExecutor
+                    elementIdActionExecutor,
+            boolean allowMissingElementIdExecutor
     ) {
         this.actionExecutor =
                 Objects.requireNonNull(
@@ -98,12 +172,85 @@ public final class BrowserActionExecutionService {
                         frameWebSocketHandler,
                         "BrowserFrameWebSocketHandler는 필수입니다."
                 );
+
+        if (allowMissingElementIdExecutor) {
+
+            this.elementIdActionExecutor =
+                    elementIdActionExecutor;
+
+        } else {
+
+            this.elementIdActionExecutor =
+                    Objects.requireNonNull(
+                            elementIdActionExecutor,
+                            "ElementIdBrowserActionExecutor는 필수입니다."
+                    );
+        }
     }
 
+    /*
+     * 기존 AI / 내부 selector 기반 Action 실행.
+     */
     public BrowserActionExecutionResult execute(
             String sessionId,
             BrowserAction action
     ) {
+        return executeInternal(
+                sessionId,
+                () ->
+                        actionExecutor.execute(
+                                sessionId,
+                                action
+                        )
+        );
+    }
+
+    /*
+     * D19 Public Viewer Action.
+     *
+     * 외부에서 selector를 받지 않는다.
+     */
+    public BrowserActionExecutionResult
+    executeElementClick(
+            String sessionId,
+            String elementId
+    ) {
+        if (elementIdActionExecutor == null) {
+
+            throw new IllegalStateException(
+                    "elementId Action 실행기가 "
+                            + "구성되지 않았습니다."
+            );
+        }
+
+        return executeInternal(
+                sessionId,
+                () ->
+                        elementIdActionExecutor
+                                .executeClick(
+                                        sessionId,
+                                        elementId
+                                )
+        );
+    }
+
+    /*
+     * 기존 selector Action과
+     * 신규 elementId Action이
+     * 동일한 Session 상태/Frame 갱신 흐름을
+     * 사용하도록 공통화한다.
+     */
+    private BrowserActionExecutionResult
+    executeInternal(
+            String sessionId,
+            Supplier<BrowserActionExecutionResult>
+                    execution
+    ) {
+        Objects.requireNonNull(
+                execution,
+                "Browser Action 실행 작업은 필수입니다."
+        );
+
         AutomationSession session =
                 getSession(
                         sessionId
@@ -113,12 +260,10 @@ public final class BrowserActionExecutionService {
 
         try {
             result =
-                    actionExecutor.execute(
-                            sessionId,
-                            action
-                    );
+                    execution.get();
 
-        } catch (RuntimeException executionException) {
+        } catch (RuntimeException
+                executionException) {
 
             updateExecutionErrorStatusSafely(
                     session
@@ -137,14 +282,16 @@ public final class BrowserActionExecutionService {
         );
 
         WorkflowStatus workflowStatus =
-                statusEventMapper.toWorkflowStatus(
-                        result.status()
-                );
+                statusEventMapper
+                        .toWorkflowStatus(
+                                result.status()
+                        );
 
         String message =
-                statusEventMapper.message(
-                        result.status()
-                );
+                statusEventMapper
+                        .message(
+                                result.status()
+                        );
 
         /*
          * BrowserAction 결과를
@@ -159,7 +306,7 @@ public final class BrowserActionExecutionService {
         );
 
         /*
-         * 기존 STOMP 상태 이벤트.
+         * STOMP 상태 이벤트.
          */
         statusEventPublisher.publish(
                 sessionId,
@@ -168,10 +315,8 @@ public final class BrowserActionExecutionService {
         );
 
         /*
-         * D17:
-         *
-         * 실제 Browser Action이 실행된 경우에만
-         * Viewer Frame을 갱신한다.
+         * 실제 Action이 실행된 경우에만
+         * Viewer Frame을 딱 한 번 갱신한다.
          */
         refreshFrameAfterExecutedActionSafely(
                 sessionId,
@@ -182,60 +327,43 @@ public final class BrowserActionExecutionService {
     }
 
     /*
-     * D17 Viewer 화면 갱신.
-     *
-     * EXECUTED 외 상태에서는 절대 Frame을
-     * 새로 캡처하지 않는다.
+     * EXECUTED 외 상태에서는
+     * Frame을 새로 캡처하지 않는다.
      */
-    private void refreshFrameAfterExecutedActionSafely(
+    private void
+    refreshFrameAfterExecutedActionSafely(
             String sessionId,
             BrowserActionExecutionResult result
     ) {
         if (result.status()
-                != BrowserActionExecutionStatus.EXECUTED) {
+                != BrowserActionExecutionStatus
+                .EXECUTED) {
 
             return;
         }
 
         try {
-            /*
-             * BrowserFrameCaptureService 내부에서
-             *
-             * latest currentPage
-             * → FrameCaptureGuard
-             * → secure-input 검사
-             * → PNG screenshot
-             *
-             * 순서로 처리한다.
-             */
             FrameCaptureAttempt captureAttempt =
-                    browserFrameCaptureService.capture(
-                            sessionId
-                    );
+                    browserFrameCaptureService
+                            .capture(
+                                    sessionId
+                            );
 
             /*
-             * secure-input 또는 검사 실패 등으로
-             * Capture가 차단됐다면
-             *
-             * 기존 마지막 안전 Frame을 그대로 유지한다.
+             * Secure Input 화면 등으로
+             * Capture가 차단된 경우
+             * 기존 마지막 안전 Frame 유지.
              */
             if (!captureAttempt.captured()
-                    || captureAttempt.frame() == null) {
+                    || captureAttempt.frame()
+                    == null) {
 
                 return;
             }
 
             /*
-             * 새로운 Frame 저장.
-             *
-             * 기존:
-             * sequence=1
-             *
-             * 행동 실행 후:
-             * sequence=2
-             *
-             * 다음 행동:
-             * sequence=3
+             * BrowserFrameStore가
+             * sequence를 증가시킨다.
              */
             browserFrameStore.publish(
                     sessionId,
@@ -243,32 +371,22 @@ public final class BrowserActionExecutionService {
             );
 
             /*
-             * Viewer WebSocket이 연결돼 있으면
-             *
-             * metadata
-             * → PNG binary
-             *
-             * 를 바로 전송한다.
-             *
-             * Viewer가 아직 연결되지 않은 경우
-             * sendLatest()는 아무 작업도 하지 않고,
-             * FrameStore에는 최신 Frame이 유지된다.
+             * 연결된 Viewer가 있으면
+             * metadata → PNG binary 순으로 전달.
              */
             frameWebSocketHandler.sendLatest(
                     sessionId
             );
 
-        } catch (RuntimeException frameException) {
+        } catch (RuntimeException
+                frameException) {
 
             /*
-             * Frame 갱신은 Browser Action의
-             * 부가적인 Viewer 동기화 작업이다.
+             * Action 자체는 이미 성공했다.
              *
-             * 이미 성공한 Browser Action 결과를
-             * Frame 전송 실패 때문에 ERROR로
-             * 변경하지 않는다.
-             *
-             * Frame bytes나 sessionId는 로그에 남기지 않는다.
+             * Frame 갱신 실패 때문에
+             * 성공한 금융사이트 Action을
+             * 다시 실행해서는 안 된다.
              */
             log.warn(
                     "Browser Viewer Frame 갱신 실패. "
@@ -303,7 +421,8 @@ public final class BrowserActionExecutionService {
                 );
     }
 
-    private void updateExecutionErrorStatusSafely(
+    private void
+    updateExecutionErrorStatusSafely(
             AutomationSession session
     ) {
         try {
@@ -315,11 +434,13 @@ public final class BrowserActionExecutionService {
                     session
             );
 
-        } catch (RuntimeException updateException) {
+        } catch (RuntimeException
+                updateException) {
 
             log.warn(
                     "브라우저 실행 오류 상태 저장 실패. "
-                            + "sessionId={}, exceptionType={}",
+                            + "sessionId={}, "
+                            + "exceptionType={}",
                     session.getSessionId(),
                     updateException
                             .getClass()
@@ -328,7 +449,8 @@ public final class BrowserActionExecutionService {
         }
     }
 
-    private void publishExecutionErrorSafely(
+    private void
+    publishExecutionErrorSafely(
             String sessionId
     ) {
         try {
@@ -338,11 +460,14 @@ public final class BrowserActionExecutionService {
                     EXECUTION_ERROR_MESSAGE
             );
 
-        } catch (RuntimeException publishException) {
+        } catch (RuntimeException
+                publishException) {
 
             log.warn(
-                    "WebSocket 오류 상태 이벤트 발행 실패. "
-                            + "sessionId={}, exceptionType={}",
+                    "WebSocket 오류 상태 이벤트 "
+                            + "발행 실패. "
+                            + "sessionId={}, "
+                            + "exceptionType={}",
                     sessionId,
                     publishException
                             .getClass()

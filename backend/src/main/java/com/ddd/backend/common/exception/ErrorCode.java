@@ -22,6 +22,24 @@ public enum ErrorCode {
             "현재 세션 상태에서는 요청을 처리할 수 없습니다."
     ),
 
+    ACTION_FRAME_NOT_READY(
+            HttpStatus.CONFLICT,
+            "ACTION_409_FRAME_NOT_READY",
+            "현재 Viewer Frame이 준비되지 않았습니다."
+    ),
+
+    ACTION_STALE_FRAME(
+            HttpStatus.CONFLICT,
+            "ACTION_409_STALE_FRAME",
+            "오래된 Viewer Frame을 기준으로 한 요청입니다."
+    ),
+
+    ACTION_DUPLICATE_REQUEST(
+            HttpStatus.CONFLICT,
+            "ACTION_409_DUPLICATE_REQUEST",
+            "이미 처리된 Browser Action 요청입니다."
+    ),
+
     INTERNAL_SERVER_ERROR(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "COMMON_500",
@@ -37,9 +55,14 @@ public enum ErrorCode {
             String code,
             String message
     ) {
-        this.httpStatus = httpStatus;
-        this.code = code;
-        this.message = message;
+        this.httpStatus =
+                httpStatus;
+
+        this.code =
+                code;
+
+        this.message =
+                message;
     }
 
     public HttpStatus getHttpStatus() {
