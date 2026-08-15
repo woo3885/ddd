@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
+  SessionViewerFrame,
   SessionFrameTransport,
   SessionFrameTransportEvent
 } from '@/features/Integration/api/session-frame-transport';
@@ -16,13 +17,17 @@ const session: BackendSession = {
   frameWebSocketUrl: 'ws://127.0.0.1:8080/ws/sessions/session-123/frames'
 };
 
-const frame = {
+const frame: SessionViewerFrame = {
   metadata: {
     type: 'BROWSER_FRAME' as const,
     sessionId: 'session-123',
+    frameId: 'frm-123',
+    sequence: 1,
     timestamp: 1_786_350_000_000,
     width: 1280,
-    height: 720
+    height: 720,
+    mimeType: 'image/png' as const,
+    byteLength: 4
   },
   imageSrc: 'blob:frame-1'
 };
@@ -141,9 +146,14 @@ describe('useSessionFrameIntegration', () => {
     act(() => transport.emit({ type: 'CONNECTED' }));
     expect(result.current.phase).toBe('WAITING_FIRST_FRAME');
 
-    act(() => transport.emit({ type: 'FRAME_RECEIVED', frame, sequence: 1 }));
+    act(() => transport.emit({ type: 'FRAME_RECEIVED', frame }));
     expect(result.current.phase).toBe('FRAME_READY');
     expect(result.current.frame).toBe(frame);
+    expect(result.current.frame?.metadata).toMatchObject({
+      frameId: 'frm-123',
+      sequence: 1,
+      timestamp: 1_786_350_000_000
+    });
     expect(result.current.hasReceivedFirstFrame).toBe(true);
   });
 
@@ -209,7 +219,7 @@ describe('useSessionFrameIntegration', () => {
     const oldListener = vi.mocked(transport.subscribe).mock.calls[0][0];
     await act(async () => result.current.reset());
 
-    act(() => oldListener({ type: 'FRAME_RECEIVED', frame, sequence: 1 }));
+    act(() => oldListener({ type: 'FRAME_RECEIVED', frame }));
     expect(result.current.phase).toBe('IDLE');
     expect(result.current.frame).toBeUndefined();
   });

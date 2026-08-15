@@ -3,7 +3,7 @@ import {
   SESSION_FRAME_MESSAGES,
   type SessionFrameState
 } from '@/features/Integration/model/session-frame-state';
-import type { ViewerFrame } from '@/features/F2_StreamViewer/model/viewer-frame';
+import type { SessionViewerFrame } from '@/features/Integration/api/session-frame-transport';
 
 type ScopedAction = { runId: number };
 
@@ -11,7 +11,7 @@ export type SessionFrameAction =
   | (ScopedAction & { type: 'START_REQUESTED' })
   | (ScopedAction & { type: 'SESSION_CREATED' })
   | (ScopedAction & { type: 'FRAME_CONNECTED' })
-  | (ScopedAction & { type: 'FRAME_RECEIVED'; frame: ViewerFrame })
+  | (ScopedAction & { type: 'FRAME_RECEIVED'; frame: SessionViewerFrame })
   | (ScopedAction & { type: 'DISCONNECTED' })
   | (ScopedAction & { type: 'SAFE_ERROR'; message?: string })
   | { type: 'RESET'; nextRunId: number };
