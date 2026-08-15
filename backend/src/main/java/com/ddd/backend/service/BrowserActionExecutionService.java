@@ -4,6 +4,7 @@ import com.ddd.backend.automation.BrowserAction;
 import com.ddd.backend.automation.BrowserActionExecutionResult;
 import com.ddd.backend.automation.BrowserActionExecutionStatus;
 import com.ddd.backend.automation.BrowserActionExecutor;
+import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.automation.ElementIdBrowserActionExecutor;
 import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
@@ -56,15 +57,9 @@ public final class BrowserActionExecutionService {
     private final BrowserFrameWebSocketHandler
             frameWebSocketHandler;
 
-    /*
-     * D19 Public Viewer elementId Action.
-     */
     private final ElementIdBrowserActionExecutor
             elementIdActionExecutor;
 
-    /*
-     * Spring 실제 구동 시 사용하는 Constructor.
-     */
     @Autowired
     public BrowserActionExecutionService(
             BrowserActionExecutor actionExecutor,
@@ -91,11 +86,7 @@ public final class BrowserActionExecutionService {
     }
 
     /*
-     * 기존 테스트 코드 호환용 Constructor.
-     *
-     * 기존 테스트들이 7개 인자로
-     * BrowserActionExecutionService를 직접 생성해도
-     * 깨지지 않도록 유지한다.
+     * 기존 테스트 호환 생성자.
      */
     public BrowserActionExecutionService(
             BrowserActionExecutor actionExecutor,
@@ -189,7 +180,7 @@ public final class BrowserActionExecutionService {
     }
 
     /*
-     * 기존 AI / 내부 selector 기반 Action 실행.
+     * 기존 selector 기반 내부 Action 실행.
      */
     public BrowserActionExecutionResult execute(
             String sessionId,
@@ -206,28 +197,20 @@ public final class BrowserActionExecutionService {
     }
 
     /*
-     * D19 Public Viewer Action.
-     *
-     * 외부에서 selector를 받지 않는다.
+     * Frontend Viewer에서 사용자가 직접 클릭.
      */
     public BrowserActionExecutionResult
     executeElementClick(
             String sessionId,
             String elementId
     ) {
-        if (elementIdActionExecutor == null) {
-
-            throw new IllegalStateException(
-                    "elementId Action 실행기가 "
-                            + "구성되지 않았습니다."
-            );
-        }
+        requireElementIdExecutor();
 
         return executeInternal(
                 sessionId,
                 () ->
                         elementIdActionExecutor
-                                .executeClick(
+                                .executeUserClick(
                                         sessionId,
                                         elementId
                                 )
@@ -235,11 +218,33 @@ public final class BrowserActionExecutionService {
     }
 
     /*
-     * 기존 selector Action과
-     * 신규 elementId Action이
-     * 동일한 Session 상태/Frame 갱신 흐름을
-     * 사용하도록 공통화한다.
+     * D19 AI Action 전용.
+     *
+     * CSS Selector를 사용하지 않고
+     * B가 발급한 elementId로 실행한다.
      */
+    public BrowserActionExecutionResult
+    executeAiElementAction(
+            String sessionId,
+            BrowserActionType actionType,
+            String elementId,
+            String value
+    ) {
+        requireElementIdExecutor();
+
+        return executeInternal(
+                sessionId,
+                () ->
+                        elementIdActionExecutor
+                                .executeAiAction(
+                                        sessionId,
+                                        actionType,
+                                        elementId,
+                                        value
+                                )
+        );
+    }
+
     private BrowserActionExecutionResult
     executeInternal(
             String sessionId,
@@ -293,10 +298,6 @@ public final class BrowserActionExecutionService {
                                 result.status()
                         );
 
-        /*
-         * BrowserAction 결과를
-         * AutomationSession 상태에 반영한다.
-         */
         session.transitionTo(
                 workflowStatus
         );
@@ -305,9 +306,6 @@ public final class BrowserActionExecutionService {
                 session
         );
 
-        /*
-         * STOMP 상태 이벤트.
-         */
         statusEventPublisher.publish(
                 sessionId,
                 workflowStatus,
@@ -315,8 +313,7 @@ public final class BrowserActionExecutionService {
         );
 
         /*
-         * 실제 Action이 실행된 경우에만
-         * Viewer Frame을 딱 한 번 갱신한다.
+         * EXECUTED일 때만 새 Frame.
          */
         refreshFrameAfterExecutedActionSafely(
                 sessionId,
@@ -326,10 +323,6 @@ public final class BrowserActionExecutionService {
         return result;
     }
 
-    /*
-     * EXECUTED 외 상태에서는
-     * Frame을 새로 캡처하지 않는다.
-     */
     private void
     refreshFrameAfterExecutedActionSafely(
             String sessionId,
@@ -349,11 +342,6 @@ public final class BrowserActionExecutionService {
                                     sessionId
                             );
 
-            /*
-             * Secure Input 화면 등으로
-             * Capture가 차단된 경우
-             * 기존 마지막 안전 Frame 유지.
-             */
             if (!captureAttempt.captured()
                     || captureAttempt.frame()
                     == null) {
@@ -361,19 +349,11 @@ public final class BrowserActionExecutionService {
                 return;
             }
 
-            /*
-             * BrowserFrameStore가
-             * sequence를 증가시킨다.
-             */
             browserFrameStore.publish(
                     sessionId,
                     captureAttempt.frame()
             );
 
-            /*
-             * 연결된 Viewer가 있으면
-             * metadata → PNG binary 순으로 전달.
-             */
             frameWebSocketHandler.sendLatest(
                     sessionId
             );
@@ -382,11 +362,10 @@ public final class BrowserActionExecutionService {
                 frameException) {
 
             /*
-             * Action 자체는 이미 성공했다.
+             * 실제 Action은 이미 성공했다.
              *
-             * Frame 갱신 실패 때문에
-             * 성공한 금융사이트 Action을
-             * 다시 실행해서는 안 된다.
+             * Frame 실패 때문에 Action을
+             * 재실행해서는 안 된다.
              */
             log.warn(
                     "Browser Viewer Frame 갱신 실패. "
@@ -394,6 +373,16 @@ public final class BrowserActionExecutionService {
                     frameException
                             .getClass()
                             .getSimpleName()
+            );
+        }
+    }
+
+    private void requireElementIdExecutor() {
+        if (elementIdActionExecutor == null) {
+
+            throw new IllegalStateException(
+                    "elementId Action 실행기가 "
+                            + "구성되지 않았습니다."
             );
         }
     }
