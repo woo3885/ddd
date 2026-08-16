@@ -3,8 +3,10 @@ package com.ddd.backend.infrastructure.session;
 import com.ddd.backend.automation.session.BrowserSessionManager;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.frame.BrowserFrameStore;
+import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -24,16 +26,24 @@ public class SessionExpirationScheduler {
                     SessionExpirationScheduler.class
             );
 
-    private final AutomationSessionRepository sessionRepository;
+    private final AutomationSessionRepository
+            sessionRepository;
 
-    private final BrowserSessionManager browserSessionManager;
+    private final BrowserSessionManager
+            browserSessionManager;
 
-    private final BrowserFrameStore browserFrameStore;
+    private final BrowserFrameStore
+            browserFrameStore;
 
+    private final BrowserFrameWebSocketHandler
+            frameWebSocketHandler;
+
+    @Autowired
     public SessionExpirationScheduler(
             AutomationSessionRepository sessionRepository,
             BrowserSessionManager browserSessionManager,
-            BrowserFrameStore browserFrameStore
+            BrowserFrameStore browserFrameStore,
+            BrowserFrameWebSocketHandler frameWebSocketHandler
     ) {
         this.sessionRepository =
                 sessionRepository;
@@ -43,17 +53,27 @@ public class SessionExpirationScheduler {
 
         this.browserFrameStore =
                 browserFrameStore;
+
+        this.frameWebSocketHandler =
+                frameWebSocketHandler;
     }
 
     /*
-     * D8
-     *
-     * Redis TTL에 의해 Key가 삭제된 세션이
-     * BrowserSessionManager에는 남아 있는지
-     * 주기적으로 확인한다.
-     *
-     * 기본 5초.
+     * 기존 테스트 호환 생성자.
      */
+    public SessionExpirationScheduler(
+            AutomationSessionRepository sessionRepository,
+            BrowserSessionManager browserSessionManager,
+            BrowserFrameStore browserFrameStore
+    ) {
+        this(
+                sessionRepository,
+                browserSessionManager,
+                browserFrameStore,
+                null
+        );
+    }
+
     @Scheduled(
             fixedDelayString =
                     "${ddd.session-store.cleanup-interval-ms:5000}"
@@ -70,10 +90,6 @@ public class SessionExpirationScheduler {
             boolean sessionExists;
 
             try {
-                /*
-                 * Redis Key가 TTL에 의해 없어졌으면
-                 * Optional.empty().
-                 */
                 sessionExists =
                         sessionRepository
                                 .findById(
@@ -84,11 +100,8 @@ public class SessionExpirationScheduler {
             } catch (RuntimeException exception) {
 
                 /*
-                 * Redis 자체가 장애난 경우에는
-                 * "세션 만료"라고 판단하면 안 된다.
-                 *
-                 * Redis 장애 때문에 정상 BrowserContext를
-                 * 전부 닫는 것을 방지한다.
+                 * Redis 장애를 TTL 만료로
+                 * 잘못 판단하지 않는다.
                  */
                 log.warn(
                         "세션 만료 검사 중 저장소 조회 실패. "
@@ -118,6 +131,7 @@ public class SessionExpirationScheduler {
          * BrowserContext / Page 종료.
          */
         try {
+
             if (browserSessionManager.exists(
                     sessionId
             )) {
@@ -129,10 +143,6 @@ public class SessionExpirationScheduler {
 
         } catch (RuntimeException exception) {
 
-            /*
-             * Scheduler는 한 세션 cleanup 실패 때문에
-             * 전체 주기가 중단되면 안 된다.
-             */
             log.warn(
                     "만료 BrowserSession 정리 실패. "
                             + "exceptionType={}",
@@ -143,9 +153,36 @@ public class SessionExpirationScheduler {
         }
 
         /*
-         * Viewer용 최신 Frame도 제거.
+         * D20:
+         * Redis TTL로 Session이 사라졌다면
+         * Viewer WebSocket도 즉시 종료한다.
          */
         try {
+
+            if (frameWebSocketHandler != null) {
+
+                frameWebSocketHandler
+                        .closeConnection(
+                                sessionId
+                        );
+            }
+
+        } catch (RuntimeException exception) {
+
+            log.warn(
+                    "만료 Browser Viewer 연결 정리 실패. "
+                            + "exceptionType={}",
+                    exception
+                            .getClass()
+                            .getSimpleName()
+            );
+        }
+
+        /*
+         * Viewer 최신 Frame 제거.
+         */
+        try {
+
             if (browserFrameStore.containsSession(
                     sessionId
             )) {
