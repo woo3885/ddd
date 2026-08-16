@@ -6,10 +6,18 @@ export type SessionFramePhase =
   | 'CONNECTING_FRAME'
   | 'WAITING_FIRST_FRAME'
   | 'FRAME_READY'
+  | 'RECONNECTING'
   | 'DISCONNECTED'
   | 'ERROR';
 
-export interface SessionFrameState {
+export interface SessionFrameRecoveryState {
+  recoveryAttempt: number;
+  recoveryMaxAttempts: number | null;
+  canRetryManually: boolean;
+  recoveryPending: boolean;
+}
+
+export interface SessionFrameState extends SessionFrameRecoveryState {
   runId: number;
   phase: SessionFramePhase;
   message: string;
@@ -24,6 +32,7 @@ export const SESSION_FRAME_MESSAGES: Record<SessionFramePhase, string> = {
   CONNECTING_FRAME: '원격 화면 연결을 준비하고 있습니다.',
   WAITING_FIRST_FRAME: '첫 원격 화면을 기다리고 있습니다.',
   FRAME_READY: '첫 원격 화면을 안전하게 표시했습니다.',
+  RECONNECTING: '원격 화면 연결을 복구하고 있습니다.',
   DISCONNECTED: '원격 화면 연결이 종료되었습니다.',
   ERROR: '원격 화면을 표시하지 못했습니다. 초기화 후 다시 시도해 주세요.'
 };
@@ -35,8 +44,16 @@ export function createInitialSessionFrameState(runId = 0): SessionFrameState {
     message: SESSION_FRAME_MESSAGES.IDLE,
     frame: undefined,
     hasReceivedFirstFrame: false,
-    canReset: false
+    canReset: false,
+    recoveryAttempt: 0,
+    recoveryMaxAttempts: null,
+    canRetryManually: false,
+    recoveryPending: false
   };
+}
+
+export function canSubmitViewerAction(state: SessionFrameState): boolean {
+  return state.phase === 'FRAME_READY' && !state.recoveryPending;
 }
 
 export const initialSessionFrameState = createInitialSessionFrameState();

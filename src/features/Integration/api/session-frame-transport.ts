@@ -1,5 +1,6 @@
 import type { ViewerFrame } from '@/features/F2_StreamViewer/model/viewer-frame';
 import { FRAME_SUBPROTOCOL } from '@/features/Integration/api/session-rest-client';
+import type { FrameConnectionClose } from '@/features/Integration/model/frame-reconnect-policy';
 
 export const FRAME_WIDTH = 1280;
 export const FRAME_HEIGHT = 720;
@@ -28,7 +29,7 @@ export interface SessionViewerFrame extends ViewerFrame {
 export type SessionFrameTransportEvent =
   | { type: 'CONNECTED' }
   | { type: 'FRAME_RECEIVED'; frame: SessionViewerFrame }
-  | { type: 'DISCONNECTED' }
+  | { type: 'DISCONNECTED'; close: FrameConnectionClose }
   | {
       type: 'SAFE_ERROR';
       category: 'PROTOCOL' | 'UNSUPPORTED_FRAME' | 'CONNECTION';
@@ -70,6 +71,7 @@ export interface SessionFrameTransportOptions {
   protocol?: typeof FRAME_SUBPROTOCOL;
   webSocketFactory?: WebSocketFactory;
   objectUrlFactory?: ObjectUrlFactory;
+  initialSequence?: number;
 }
 
 interface PendingFrame {
@@ -147,11 +149,16 @@ export function createSessionFrameTransport(
     options.webSocketFactory ?? ((url, selectedProtocol) => new WebSocket(url, selectedProtocol));
   const objectUrls = options.objectUrlFactory ?? defaultObjectUrlFactory;
   const listeners = new Set<SessionFrameTransportListener>();
+  const initialSequence = options.initialSequence ?? 0;
+
+  if (!Number.isSafeInteger(initialSequence) || initialSequence < 0) {
+    throw new Error('마지막 화면 순서는 0 이상의 안전한 정수여야 합니다.');
+  }
 
   let socket: WebSocketLike | null = null;
   let active = false;
   let pending: PendingFrame | null = null;
-  let latestSequence = 0;
+  let latestSequence = initialSequence;
   let currentObjectUrl: string | null = null;
 
   const emit = (event: SessionFrameTransportEvent) => {
@@ -171,6 +178,23 @@ export function createSessionFrameTransport(
     socket.onmessage = null;
     socket.onerror = null;
     socket.onclose = null;
+  };
+
+  const notifyDisconnected = (
+    close: FrameConnectionClose,
+    closeSocket = false
+  ) => {
+    if (!active) return;
+
+    const closingSocket = socket;
+    active = false;
+    pending = null;
+    detachSocket();
+    socket = null;
+    revokeCurrentObjectUrl();
+
+    if (closeSocket) closingSocket?.close();
+    listeners.forEach((listener) => listener({ type: 'DISCONNECTED', close }));
   };
 
   const fail = (
@@ -272,7 +296,6 @@ export function createSessionFrameTransport(
       }
       active = true;
       pending = null;
-      latestSequence = 0;
 
       try {
         socket = socketFactory(options.webSocketUrl, protocol);
@@ -289,18 +312,17 @@ export function createSessionFrameTransport(
           }
         };
         socket.onerror = () => {
-          fail('CONNECTION', '화면 연결 중 오류가 발생했습니다.');
+          notifyDisconnected({ code: 1006, wasClean: false }, true);
         };
-        socket.onclose = () => {
-          if (!active) return;
-          active = false;
-          pending = null;
-          socket = null;
-          revokeCurrentObjectUrl();
-          listeners.forEach((listener) => listener({ type: 'DISCONNECTED' }));
+        socket.onclose = (event) => {
+          const code =
+            Number.isSafeInteger(event.code) && event.code >= 1000 && event.code <= 4999
+              ? event.code
+              : 1005;
+          notifyDisconnected({ code, wasClean: event.wasClean === true });
         };
       } catch {
-        fail('CONNECTION', '화면 연결을 시작하지 못했습니다.');
+        notifyDisconnected({ code: 1006, wasClean: false }, true);
       }
     },
 
@@ -308,7 +330,6 @@ export function createSessionFrameTransport(
       if (!active && socket === null && currentObjectUrl === null) return;
       active = false;
       pending = null;
-      latestSequence = 0;
       detachSocket();
       socket?.close(1000, 'client disconnect');
       socket = null;

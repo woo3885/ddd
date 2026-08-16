@@ -12,8 +12,23 @@ export type SessionFrameAction =
   | (ScopedAction & { type: 'SESSION_CREATED' })
   | (ScopedAction & { type: 'FRAME_CONNECTED' })
   | (ScopedAction & { type: 'FRAME_RECEIVED'; frame: SessionViewerFrame })
-  | (ScopedAction & { type: 'DISCONNECTED' })
-  | (ScopedAction & { type: 'SAFE_ERROR'; message?: string })
+  | (ScopedAction & {
+      type: 'DISCONNECTED';
+      message?: string;
+      canRetryManually?: boolean;
+    })
+  | (ScopedAction & {
+      type: 'RECONNECT_SCHEDULED';
+      attempt: number;
+      maxAttempts: number;
+    })
+  | (ScopedAction & { type: 'MANUAL_RETRY_STARTED' })
+  | (ScopedAction & { type: 'RECOVERY_FAILED'; message?: string })
+  | (ScopedAction & {
+      type: 'SAFE_ERROR';
+      message?: string;
+      canRetryManually?: boolean;
+    })
   | { type: 'RESET'; nextRunId: number };
 
 function isStale(state: SessionFrameState, action: SessionFrameAction): boolean {
@@ -49,11 +64,21 @@ export function sessionFrameReducer(
         canReset: true
       };
     case 'FRAME_CONNECTED':
+      if (state.phase === 'RECONNECTING') {
+        return {
+          ...state,
+          message: SESSION_FRAME_MESSAGES.RECONNECTING,
+          recoveryPending: true,
+          canRetryManually: false
+        };
+      }
       return {
         ...state,
         phase: 'WAITING_FIRST_FRAME',
         message: SESSION_FRAME_MESSAGES.WAITING_FIRST_FRAME,
-        canReset: true
+        canReset: true,
+        recoveryPending: false,
+        canRetryManually: false
       };
     case 'FRAME_RECEIVED':
       return {
@@ -62,15 +87,54 @@ export function sessionFrameReducer(
         message: SESSION_FRAME_MESSAGES.FRAME_READY,
         frame: action.frame,
         hasReceivedFirstFrame: true,
-        canReset: true
+        canReset: true,
+        recoveryAttempt: 0,
+        canRetryManually: false,
+        recoveryPending: false
       };
     case 'DISCONNECTED':
       return {
         ...state,
         phase: 'DISCONNECTED',
-        message: SESSION_FRAME_MESSAGES.DISCONNECTED,
+        message: safeErrorMessage(action.message ?? SESSION_FRAME_MESSAGES.DISCONNECTED),
         frame: undefined,
-        canReset: true
+        canReset: true,
+        canRetryManually: action.canRetryManually ?? false,
+        recoveryPending: false
+      };
+    case 'RECONNECT_SCHEDULED':
+      return {
+        ...state,
+        phase: 'RECONNECTING',
+        message: SESSION_FRAME_MESSAGES.RECONNECTING,
+        frame: undefined,
+        canReset: true,
+        recoveryAttempt: action.attempt,
+        recoveryMaxAttempts: action.maxAttempts,
+        canRetryManually: false,
+        recoveryPending: true
+      };
+    case 'MANUAL_RETRY_STARTED':
+      return {
+        ...state,
+        phase: 'RECONNECTING',
+        message: SESSION_FRAME_MESSAGES.RECONNECTING,
+        frame: undefined,
+        canReset: true,
+        canRetryManually: false,
+        recoveryPending: true
+      };
+    case 'RECOVERY_FAILED':
+      return {
+        ...state,
+        phase: 'ERROR',
+        message: safeErrorMessage(
+          action.message ?? '원격 화면 연결을 복구하지 못했습니다. 다시 연결해 주세요.'
+        ),
+        frame: undefined,
+        canReset: true,
+        canRetryManually: true,
+        recoveryPending: false
       };
     case 'SAFE_ERROR':
       return {
@@ -78,7 +142,9 @@ export function sessionFrameReducer(
         phase: 'ERROR',
         message: safeErrorMessage(action.message),
         frame: undefined,
-        canReset: true
+        canReset: true,
+        canRetryManually: action.canRetryManually ?? false,
+        recoveryPending: false
       };
     case 'RESET':
       return createInitialSessionFrameState(action.nextRunId);

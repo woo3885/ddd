@@ -23,8 +23,8 @@ class FakeSocket {
     this.onmessage?.({ data } as MessageEvent<unknown>);
   }
 
-  closed() {
-    this.onclose?.({} as CloseEvent);
+  closed(code = 1006, wasClean = false, reason = 'raw close reason') {
+    this.onclose?.({ code, wasClean, reason } as CloseEvent);
   }
 }
 
@@ -232,6 +232,100 @@ describe('session frame transport', () => {
     expect(socket.close).toHaveBeenCalledTimes(1);
     expect(objectUrlFactory.revoke).toHaveBeenCalledTimes(1);
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('close code와 clean 여부만 안전한 종료 구조로 전달한다', () => {
+    const { transport, socket, listener } = setup();
+    transport.connect();
+
+    socket.closed(1012, false, 'private backend detail');
+
+    expect(listener).toHaveBeenCalledWith({
+      type: 'DISCONNECTED',
+      close: { code: 1012, wasClean: false }
+    });
+    expect(JSON.stringify(listener.mock.calls)).not.toContain('private backend detail');
+  });
+
+  it('client 의도 종료는 비정상 DISCONNECTED callback을 만들지 않는다', () => {
+    const { transport, socket, listener } = setup();
+    transport.connect();
+    listener.mockClear();
+
+    transport.disconnect();
+    socket.closed(1000, true);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('Binary 대기 중 close 시 불완전 frame을 폐기한다', () => {
+    const { transport, socket, objectUrlFactory, listener } = setup();
+    transport.connect();
+    socket.message(JSON.stringify(metadata(1)));
+
+    socket.closed();
+
+    expect(objectUrlFactory.create).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'DISCONNECTED' })
+    );
+  });
+
+  it('reconnect에서도 마지막 sequence를 유지하고 duplicate는 소비 후 무시한다', () => {
+    const firstSocket = new FakeSocket();
+    const secondSocket = new FakeSocket();
+    const sockets = [firstSocket, secondSocket];
+    const webSocketFactory = vi.fn(() => {
+      const socket = sockets.shift();
+      if (!socket) throw new Error('unexpected socket');
+      return socket;
+    });
+    const objectUrlFactory = {
+      create: vi.fn(() => 'blob:new-frame'),
+      revoke: vi.fn()
+    };
+    const listener = vi.fn<(event: SessionFrameTransportEvent) => void>();
+    const transport = createSessionFrameTransport({
+      webSocketUrl: `ws://127.0.0.1:8080/ws/sessions/${sessionId}/frames`,
+      sessionId,
+      initialSequence: 5,
+      webSocketFactory,
+      objectUrlFactory
+    });
+    transport.subscribe(listener);
+
+    transport.connect();
+    firstSocket.message(JSON.stringify(metadata(5)));
+    firstSocket.message(new Uint8Array(4).buffer);
+    firstSocket.closed();
+    transport.connect();
+    secondSocket.message(JSON.stringify(metadata(5)));
+    secondSocket.message(new Uint8Array(4).buffer);
+    secondSocket.message(JSON.stringify(metadata(6)));
+    secondSocket.message(new Uint8Array(4).buffer);
+
+    expect(webSocketFactory).toHaveBeenCalledTimes(2);
+    expect(objectUrlFactory.create).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls.filter(([event]) => event.type === 'FRAME_RECEIVED'))
+      .toHaveLength(1);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'FRAME_RECEIVED',
+        frame: expect.objectContaining({
+          metadata: expect.objectContaining({ sequence: 6 })
+        })
+      })
+    );
+  });
+
+  it('잘못된 initialSequence를 거부한다', () => {
+    expect(() =>
+      createSessionFrameTransport({
+        webSocketUrl: `ws://127.0.0.1:8080/ws/sessions/${sessionId}/frames`,
+        sessionId,
+        initialSequence: -1
+      })
+    ).toThrow('마지막 화면 순서');
   });
 
   it('unsubscribe 이후 listener callback을 호출하지 않는다', () => {
