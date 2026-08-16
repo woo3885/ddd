@@ -44,10 +44,6 @@ public final class BrowserFrameWebSocketHandler
                 );
     }
 
-    /*
-     * Spring WebSocket handshake에서
-     * 이 subprotocol을 협상한다.
-     */
     @Override
     public List<String> getSubProtocols() {
         return List.of(
@@ -61,11 +57,8 @@ public final class BrowserFrameWebSocketHandler
     ) throws Exception {
 
         /*
-         * Frontend가 반드시:
-         *
-         * ddd.browser-frame.v1
-         *
-         * 을 요청해야 한다.
+         * Frontend는 반드시
+         * ddd.browser-frame.v1을 요청해야 한다.
          */
         if (!SUB_PROTOCOL.equals(
                 session.getAcceptedProtocol()
@@ -93,8 +86,8 @@ public final class BrowserFrameWebSocketHandler
         }
 
         /*
-         * 같은 AutomationSession에
-         * 동시에 여러 Viewer가 붙지 못하도록 한다.
+         * 동일 AutomationSession에는
+         * Viewer WebSocket 하나만 허용한다.
          */
         synchronized (connections) {
 
@@ -120,19 +113,13 @@ public final class BrowserFrameWebSocketHandler
         }
 
         /*
-         * 연결 직후 Store에 이미 준비돼 있는
-         * 최초 sequence=1 Frame을 즉시 전송한다.
+         * 연결 직후 최신 Frame 즉시 전송.
          */
         sendLatest(
                 automationSessionId
         );
     }
 
-    /*
-     * 향후 Browser Action이나 navigation 완료 후
-     * 최신 Frame을 Viewer로 다시 보낼 때도
-     * 이 메서드를 그대로 사용한다.
-     */
     public void sendLatest(
             String automationSessionId
     ) {
@@ -145,10 +132,6 @@ public final class BrowserFrameWebSocketHandler
                         automationSessionId
                 );
 
-        /*
-         * 아직 Viewer가 연결되지 않았다면
-         * Frame은 Store에만 유지한다.
-         */
         if (session == null
                 || !session.isOpen()) {
 
@@ -156,21 +139,24 @@ public final class BrowserFrameWebSocketHandler
         }
 
         BrowserFramePayload payload =
-                browserFrameStore.latest(
+                browserFrameStore
+                        .latest(
                                 automationSessionId
                         )
-                        .orElse(null);
+                        .orElse(
+                                null
+                        );
 
         if (payload == null) {
-
-            closeQuietly(
-                    session,
-                    CloseStatus.POLICY_VIOLATION
-            );
 
             connections.remove(
                     automationSessionId,
                     session
+            );
+
+            closeQuietly(
+                    session,
+                    CloseStatus.POLICY_VIOLATION
             );
 
             return;
@@ -195,23 +181,43 @@ public final class BrowserFrameWebSocketHandler
             );
 
             throw new IllegalStateException(
-                    "Browser Frame WebSocket 전송에 "
-                            + "실패했습니다."
+                    "Browser Frame WebSocket 전송에 실패했습니다."
             );
         }
     }
 
     /*
-     * 하나의 Frame은 반드시:
+     * D20 Session Lifecycle.
      *
-     * 1. metadata TextMessage
-     * 2. PNG BinaryMessage
+     * AutomationSession 취소 / 만료 시
+     * 서버가 Viewer WebSocket을 직접 종료한다.
      *
-     * 순서로 연속 전송한다.
-     *
-     * 다른 Frame 전송이 중간에 끼어들지 못하게
-     * 같은 WebSocketSession 기준으로 동기화한다.
+     * 단순히 connections Map에서만 제거하면
+     * Frontend Socket 자체가 살아 있을 수 있으므로
+     * 실제 WebSocketSession.close()까지 수행한다.
      */
+    public void closeConnection(
+            String automationSessionId
+    ) {
+        validateAutomationSessionId(
+                automationSessionId
+        );
+
+        WebSocketSession session =
+                connections.remove(
+                        automationSessionId
+                );
+
+        if (session == null) {
+            return;
+        }
+
+        closeQuietly(
+                session,
+                CloseStatus.NORMAL
+        );
+    }
+
     private void sendPayload(
             WebSocketSession session,
             BrowserFramePayload payload
@@ -225,6 +231,10 @@ public final class BrowserFrameWebSocketHandler
         byte[] frameBytes =
                 payload.bytes();
 
+        /*
+         * metadata와 binary 사이에
+         * 다른 Frame이 끼어들지 못하게 한다.
+         */
         synchronized (session) {
 
             if (!session.isOpen()) {
@@ -259,13 +269,6 @@ public final class BrowserFrameWebSocketHandler
             return;
         }
 
-        /*
-         * disconnect 시 WebSocket 연결 정보만 제거한다.
-         *
-         * BrowserContext / Frame Store는
-         * AutomationSession cancel/failure lifecycle에서
-         * 정리한다.
-         */
         connections.remove(
                 automationSessionId,
                 session
@@ -313,7 +316,8 @@ public final class BrowserFrameWebSocketHandler
     }
 
     public int activeConnectionCount() {
-        return (int) connections.values()
+        return (int) connections
+                .values()
                 .stream()
                 .filter(
                         WebSocketSession::isOpen
@@ -325,7 +329,8 @@ public final class BrowserFrameWebSocketHandler
             WebSocketSession session
     ) {
         Object value =
-                session.getAttributes()
+                session
+                        .getAttributes()
                         .get(
                                 FrameWebSocketHandshakeInterceptor
                                         .SESSION_ID_ATTRIBUTE
@@ -347,28 +352,29 @@ public final class BrowserFrameWebSocketHandler
                 || automationSessionId.isBlank()) {
 
             throw new IllegalArgumentException(
-                    "AutomationSession ID는 "
-                            + "비어 있을 수 없습니다."
+                    "AutomationSession ID는 비어 있을 수 없습니다."
             );
         }
     }
 
-    /*
-     * Jackson dependency/package 차이에 의존하지 않도록
-     * D17 Frame Metadata 계약만 직접 JSON으로 직렬화한다.
-     */
     private String metadataToJson(
             BrowserFrameMetadata metadata
     ) {
         return "{"
                 + "\"type\":"
-                + quote(metadata.type())
+                + quote(
+                metadata.type()
+        )
                 + ","
                 + "\"sessionId\":"
-                + quote(metadata.sessionId())
+                + quote(
+                metadata.sessionId()
+        )
                 + ","
                 + "\"frameId\":"
-                + quote(metadata.frameId())
+                + quote(
+                metadata.frameId()
+        )
                 + ","
                 + "\"sequence\":"
                 + metadata.sequence()
@@ -383,7 +389,9 @@ public final class BrowserFrameWebSocketHandler
                 + metadata.height()
                 + ","
                 + "\"mimeType\":"
-                + quote(metadata.mimeType())
+                + quote(
+                metadata.mimeType()
+        )
                 + ","
                 + "\"byteLength\":"
                 + metadata.byteLength()
@@ -414,6 +422,7 @@ public final class BrowserFrameWebSocketHandler
                     );
 
             switch (character) {
+
                 case '"' ->
                         builder.append(
                                 "\\\""
@@ -450,6 +459,7 @@ public final class BrowserFrameWebSocketHandler
                         );
 
                 default -> {
+
                     if (character < 0x20) {
 
                         builder.append(
@@ -481,6 +491,7 @@ public final class BrowserFrameWebSocketHandler
             CloseStatus closeStatus
     ) {
         try {
+
             if (session.isOpen()) {
 
                 session.close(
@@ -489,9 +500,11 @@ public final class BrowserFrameWebSocketHandler
             }
 
         } catch (IOException ignored) {
+
             /*
              * WebSocket cleanup 실패가
-             * 기존 오류를 덮어쓰지 않는다.
+             * 원래 Session cleanup 작업을
+             * 방해하지 않도록 한다.
              */
         }
     }
