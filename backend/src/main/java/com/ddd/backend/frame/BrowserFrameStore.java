@@ -13,37 +13,48 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class BrowserFrameStore {
 
-    /*
-     * D22
-     *
-     * Session마다:
-     *
-     * - 현재 sequence
-     * - 최신 Frame 1개
-     *
-     * 만 유지한다.
-     *
-     * 과거 Frame Queue를 만들지 않는다.
-     */
     private final Map<String, SessionFrameState> states =
             new ConcurrentHashMap<>();
 
     /*
-     * Frame을 publish한다.
+     * 일반 Frame publish.
      *
-     * D22 Change Detection:
-     *
-     * 직전 Frame과 PNG byte[]가 완전히 같다면
-     *
-     * - 새 frameId 생성 X
-     * - sequence 증가 X
-     * - latest 교체 X
-     *
-     * 기존 최신 Payload를 그대로 반환한다.
+     * 동일 PNG면 기존 Frame을 재사용한다.
      */
     public BrowserFramePayload publish(
             String sessionId,
             CapturedBrowserFrame frame
+    ) {
+        return publishInternal(
+                sessionId,
+                frame,
+                false
+        );
+    }
+
+    /*
+     * Browser Action 성공 직후 Frame.
+     *
+     * HTTP Action response와
+     * WebSocket Binary Frame을 sequence로
+     * 명확하게 연결하기 위해
+     * 동일 PNG라도 새로운 sequence/frameId를 발급한다.
+     */
+    public BrowserFramePayload publishAfterAction(
+            String sessionId,
+            CapturedBrowserFrame frame
+    ) {
+        return publishInternal(
+                sessionId,
+                frame,
+                true
+        );
+    }
+
+    private BrowserFramePayload publishInternal(
+            String sessionId,
+            CapturedBrowserFrame frame,
+            boolean forceAdvance
     ) {
         validateSessionId(
                 sessionId
@@ -63,7 +74,8 @@ public class BrowserFrameStore {
 
         return state.publish(
                 sessionId,
-                frame
+                frame,
+                forceAdvance
         );
     }
 
@@ -137,25 +149,18 @@ public class BrowserFrameStore {
 
         private BrowserFramePayload latest;
 
-        /*
-         * Change Detection 비교용.
-         *
-         * Store 외부에는 노출하지 않는다.
-         */
         private byte[] latestFrameBytes;
 
         private synchronized BrowserFramePayload publish(
                 String sessionId,
-                CapturedBrowserFrame frame
+                CapturedBrowserFrame frame,
+                boolean forceAdvance
         ) {
             byte[] incomingBytes =
                     frame.bytes();
 
-            /*
-             * 동일 Frame이면
-             * 기존 sequence / frameId를 그대로 유지한다.
-             */
-            if (latest != null
+            if (!forceAdvance
+                    && latest != null
                     && latestFrameBytes != null
                     && Arrays.equals(
                     latestFrameBytes,
@@ -190,10 +195,6 @@ public class BrowserFrameStore {
             latest =
                     payload;
 
-            /*
-             * 외부 Frame 배열 변경과 독립되도록
-             * 별도 복사본 유지.
-             */
             latestFrameBytes =
                     incomingBytes.clone();
 
