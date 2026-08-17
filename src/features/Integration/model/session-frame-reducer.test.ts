@@ -32,10 +32,90 @@ describe('sessionFrameReducer', () => {
       frame: undefined,
       hasReceivedFirstFrame: false,
       canReset: false,
+      actionPending: false,
+      pendingActionType: null,
+      expectedActionFrame: null,
+      actionMessage: expect.any(String),
+      actionError: null,
       recoveryAttempt: 0,
       recoveryMaxAttempts: null,
       canRetryManually: false,
       recoveryPending: false
+    });
+  });
+
+  it('Action 요청 중 중복 전송을 막고 matching frame에서 완료한다', () => {
+    const ready = {
+      ...createInitialSessionFrameState(3),
+      phase: 'FRAME_READY' as const,
+      frame,
+      hasReceivedFirstFrame: true,
+      canReset: true
+    };
+    const pending = sessionFrameReducer(ready, {
+      type: 'ACTION_REQUESTED',
+      runId: 3,
+      actionType: 'CLICK'
+    });
+    const waiting = sessionFrameReducer(pending, {
+      type: 'ACTION_FRAME_EXPECTED',
+      runId: 3,
+      frameId: 'frm-124',
+      sequence: 2
+    });
+    const staleFrame = {
+      ...frame,
+      metadata: { ...frame.metadata, frameId: 'frm-other', sequence: 2 }
+    };
+    const stillWaiting = sessionFrameReducer(waiting, {
+      type: 'FRAME_RECEIVED',
+      runId: 3,
+      frame: staleFrame
+    });
+    const matchingFrame = {
+      ...frame,
+      metadata: { ...frame.metadata, frameId: 'frm-124', sequence: 2 }
+    };
+    const completed = sessionFrameReducer(stillWaiting, {
+      type: 'FRAME_RECEIVED',
+      runId: 3,
+      frame: matchingFrame
+    });
+
+    expect(canSubmitViewerAction(pending)).toBe(false);
+    expect(stillWaiting.actionPending).toBe(true);
+    expect(completed).toMatchObject({
+      actionPending: false,
+      pendingActionType: null,
+      expectedActionFrame: null,
+      actionError: null
+    });
+  });
+
+  it('non-advanced 응답과 안전한 오류에서 pending을 해제한다', () => {
+    const pending = sessionFrameReducer(
+      {
+        ...createInitialSessionFrameState(4),
+        phase: 'FRAME_READY',
+        frame
+      },
+      { type: 'ACTION_REQUESTED', runId: 4, actionType: 'SCROLL' }
+    );
+    const noFrame = sessionFrameReducer(pending, {
+      type: 'ACTION_FINISHED_WITHOUT_FRAME',
+      runId: 4,
+      message: '차단됨'
+    });
+    const failed = sessionFrameReducer(pending, {
+      type: 'ACTION_FAILED',
+      runId: 4,
+      message: '안전한 오류'
+    });
+
+    expect(noFrame).toMatchObject({ actionPending: false, actionMessage: '차단됨' });
+    expect(failed).toMatchObject({
+      actionPending: false,
+      actionError: '안전한 오류'
     });
   });
 

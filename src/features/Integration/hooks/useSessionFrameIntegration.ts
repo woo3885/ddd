@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
+import type { ViewerRemoteAction } from '@/features/F2_StreamViewer/model/viewer-interaction';
+import {
+  BrowserActionClientError,
+  defaultBrowserActionClient,
+  type BrowserActionClient,
+  type BrowserActionRequest,
+  type BrowserActionResponse,
+  type BrowserActionStatus
+} from '@/features/Integration/api/browser-action-client';
 import {
   createSessionFrameTransport,
   type SessionFrameTransport,
@@ -32,6 +41,7 @@ const SESSION_REQUEST: CreateBackendSessionRequest = {
 };
 
 type SessionClient = Pick<SessionRestClient, 'createSession' | 'cancelSession'>;
+type ActionClient = Pick<BrowserActionClient, 'submitBrowserAction'>;
 type TransportFactory = (
   options: SessionFrameTransportOptions
 ) => SessionFrameTransport;
@@ -41,21 +51,90 @@ type HandleFrameDisconnect = (runId: number, close: FrameConnectionClose) => voi
 
 export interface UseSessionFrameIntegrationOptions {
   sessionClient?: SessionClient;
+  actionClient?: ActionClient;
   transportFactory?: TransportFactory;
   reconnectPolicy?: FrameReconnectPolicy;
+  requestIdFactory?: () => string;
+}
+
+function createViewerActionRequestId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `viewer_${Array.from(bytes, (value) =>
+    value.toString(16).padStart(2, '0')
+  ).join('')}`;
+}
+
+function toBrowserActionRequest(
+  action: ViewerRemoteAction,
+  requestId: string
+): BrowserActionRequest {
+  const common = {
+    requestId,
+    source: 'USER_VIEWER' as const,
+    expectedFrameId: action.frameId,
+    expectedSequence: action.sequence
+  };
+
+  return action.type === 'CLICK'
+    ? {
+        ...common,
+        actionType: 'CLICK',
+        x: action.x,
+        y: action.y
+      }
+    : {
+        ...common,
+        actionType: 'SCROLL',
+        x: action.x,
+        y: action.y,
+        deltaX: action.deltaX,
+        deltaY: action.deltaY
+      };
+}
+
+function actionResultMessage(response: BrowserActionResponse): string {
+  const messages: Record<BrowserActionStatus, string> = {
+    EXECUTED: '화면 동작을 처리했지만 새 화면은 생성되지 않았습니다.',
+    NO_ACTION: '현재 화면에서 처리할 동작이 없습니다.',
+    USER_ACTION_REQUIRED: '사용자가 화면에서 직접 선택해야 합니다.',
+    SECURE_INPUT_REQUIRED: '보안 입력은 전용 입력 화면에서 직접 진행해 주세요.',
+    FINAL_CONFIRMATION_REQUIRED: '최종 실행은 승인 화면에서 직접 확인해 주세요.',
+    BLOCKED: '보안 정책에 따라 화면 동작을 차단했습니다.',
+    STOPPED: '원격 화면 동작이 중단되었습니다.'
+  };
+  return messages[response.status];
+}
+
+function safeActionErrorMessage(error: unknown): string {
+  if (error instanceof BrowserActionClientError) {
+    return error.message;
+  }
+  return '원격 화면 동작을 처리하지 못했습니다. 연결 상태를 확인해 주세요.';
 }
 
 export function useSessionFrameIntegration(
   options: UseSessionFrameIntegrationOptions = {}
 ) {
   const sessionClient = options.sessionClient ?? defaultSessionRestClient;
+  const actionClient = options.actionClient ?? defaultBrowserActionClient;
   const transportFactory = options.transportFactory ?? createSessionFrameTransport;
   const reconnectPolicy = options.reconnectPolicy;
+  const requestIdFactory = options.requestIdFactory ?? createViewerActionRequestId;
   const [state, dispatch] = useReducer(sessionFrameReducer, initialSessionFrameState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const runIdRef = useRef(0);
   const runningRef = useRef(false);
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
+  const actionAbortRef = useRef<AbortController | null>(null);
+  const actionPendingRef = useRef(false);
+  const expectedActionFrameRef = useRef<{
+    frameId: string;
+    sequence: number;
+  } | null>(null);
+  const latestFrameRef = useRef(state.frame);
   const sessionRef = useRef<BackendSession | null>(null);
   const transportRef = useRef<SessionFrameTransport | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -89,6 +168,13 @@ export function useSessionFrameIntegration(
     transport?.disconnect();
   }, []);
 
+  const cancelPendingAction = useCallback(() => {
+    actionAbortRef.current?.abort();
+    actionAbortRef.current = null;
+    actionPendingRef.current = false;
+    expectedActionFrameRef.current = null;
+  }, []);
+
   const cancelSessionBestEffort = useCallback(
     async (session: BackendSession | null): Promise<boolean> => {
       if (!session) return true;
@@ -108,6 +194,8 @@ export function useSessionFrameIntegration(
 
       clearScheduledRetry();
       releaseConnection();
+      cancelPendingAction();
+      latestFrameRef.current = undefined;
       recoveryPendingRef.current = false;
 
       const classification = classifyFrameConnectionClose(close);
@@ -190,7 +278,7 @@ export function useSessionFrameIntegration(
         }
       }, delay);
     },
-    [clearScheduledRetry, reconnectPolicy, releaseConnection]
+    [cancelPendingAction, clearScheduledRetry, reconnectPolicy, releaseConnection]
   );
 
   const connectFrameTransport = useCallback(
@@ -222,10 +310,20 @@ export function useSessionFrameIntegration(
             break;
           case 'FRAME_RECEIVED':
             lastAcceptedSequenceRef.current = event.frame.metadata.sequence;
+            latestFrameRef.current = event.frame;
             recoveryAttemptRef.current = 0;
             recoveryPendingRef.current = false;
             canRetryManuallyRef.current = false;
             manualRetryInFlightRef.current = false;
+            if (
+              expectedActionFrameRef.current?.frameId ===
+                event.frame.metadata.frameId &&
+              expectedActionFrameRef.current.sequence ===
+                event.frame.metadata.sequence
+            ) {
+              actionPendingRef.current = false;
+              expectedActionFrameRef.current = null;
+            }
             dispatch({ type: 'FRAME_RECEIVED', runId, frame: event.frame });
             break;
           case 'DISCONNECTED':
@@ -234,6 +332,8 @@ export function useSessionFrameIntegration(
           case 'SAFE_ERROR':
             clearScheduledRetry();
             releaseConnection();
+            cancelPendingAction();
+            latestFrameRef.current = undefined;
             recoveryPendingRef.current = false;
             canRetryManuallyRef.current = false;
             manualRetryInFlightRef.current = false;
@@ -248,7 +348,7 @@ export function useSessionFrameIntegration(
       });
       transport.connect();
     },
-    [clearScheduledRetry, releaseConnection, transportFactory]
+    [cancelPendingAction, clearScheduledRetry, releaseConnection, transportFactory]
   );
 
   connectFrameTransportRef.current = connectFrameTransport;
@@ -259,12 +359,14 @@ export function useSessionFrameIntegration(
 
     clearScheduledRetry();
     releaseConnection();
+    cancelPendingAction();
     runningRef.current = true;
     recoveryAttemptRef.current = 0;
     recoveryPendingRef.current = false;
     canRetryManuallyRef.current = false;
     manualRetryInFlightRef.current = false;
     lastAcceptedSequenceRef.current = 0;
+    latestFrameRef.current = undefined;
     const runId = ++runIdRef.current;
     const controller = new AbortController();
     abortRef.current = controller;
@@ -299,7 +401,112 @@ export function useSessionFrameIntegration(
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [cancelSessionBestEffort, clearScheduledRetry, releaseConnection, sessionClient]);
+  }, [
+    cancelPendingAction,
+    cancelSessionBestEffort,
+    clearScheduledRetry,
+    releaseConnection,
+    sessionClient
+  ]);
+
+  const submitViewerAction = useCallback(
+    async (action: ViewerRemoteAction) => {
+      const currentState = stateRef.current;
+      const currentFrame = latestFrameRef.current;
+      const session = sessionRef.current;
+
+      if (
+        !mountedRef.current ||
+        !session ||
+        !canSubmitViewerAction(currentState) ||
+        actionPendingRef.current ||
+        !currentFrame ||
+        currentFrame.metadata.frameId !== action.frameId ||
+        currentFrame.metadata.sequence !== action.sequence
+      ) {
+        return;
+      }
+
+      const runId = runIdRef.current;
+      const controller = new AbortController();
+      actionAbortRef.current = controller;
+      actionPendingRef.current = true;
+      expectedActionFrameRef.current = null;
+      dispatch({
+        type: 'ACTION_REQUESTED',
+        runId,
+        actionType: action.type
+      });
+
+      try {
+        const requestId = requestIdFactory();
+        const response = await actionClient.submitBrowserAction({
+          sessionId: session.sessionId,
+          request: toBrowserActionRequest(action, requestId),
+          signal: controller.signal
+        });
+
+        if (!mountedRef.current || runId !== runIdRef.current) {
+          return;
+        }
+
+        if (!response.frameAdvanced) {
+          actionPendingRef.current = false;
+          dispatch({
+            type: 'ACTION_FINISHED_WITHOUT_FRAME',
+            runId,
+            message: actionResultMessage(response)
+          });
+          return;
+        }
+
+        const expectedFrame = {
+          frameId: response.frameId,
+          sequence: response.sequence
+        };
+        const latestFrame = latestFrameRef.current;
+        if (
+          latestFrame?.metadata.frameId === expectedFrame.frameId &&
+          latestFrame.metadata.sequence === expectedFrame.sequence
+        ) {
+          actionPendingRef.current = false;
+          dispatch({
+            type: 'ACTION_COMPLETED',
+            runId,
+            message: '요청한 화면 동작이 새 화면에 반영되었습니다.'
+          });
+          return;
+        }
+
+        expectedActionFrameRef.current = expectedFrame;
+        dispatch({
+          type: 'ACTION_FRAME_EXPECTED',
+          runId,
+          ...expectedFrame
+        });
+      } catch (error) {
+        if (
+          !mountedRef.current ||
+          runId !== runIdRef.current ||
+          controller.signal.aborted
+        ) {
+          return;
+        }
+        actionPendingRef.current = false;
+        expectedActionFrameRef.current = null;
+        dispatch({
+          type: 'ACTION_FAILED',
+          runId,
+          message: safeActionErrorMessage(error)
+        });
+      } finally {
+        if (actionAbortRef.current === controller) {
+          actionAbortRef.current = null;
+        }
+      }
+    },
+    [actionClient, requestIdFactory]
+  );
 
   const retry = useCallback(() => {
     if (
@@ -338,8 +545,10 @@ export function useSessionFrameIntegration(
     manualRetryInFlightRef.current = false;
     recoveryAttemptRef.current = 0;
     lastAcceptedSequenceRef.current = 0;
+    latestFrameRef.current = undefined;
     abortRef.current?.abort();
     abortRef.current = null;
+    cancelPendingAction();
     clearScheduledRetry();
     releaseConnection();
 
@@ -355,7 +564,12 @@ export function useSessionFrameIntegration(
         message: '세션 정리를 완료하지 못했습니다. Backend 상태를 확인해 주세요.'
       });
     }
-  }, [cancelSessionBestEffort, clearScheduledRetry, releaseConnection]);
+  }, [
+    cancelPendingAction,
+    cancelSessionBestEffort,
+    clearScheduledRetry,
+    releaseConnection
+  ]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -368,13 +582,20 @@ export function useSessionFrameIntegration(
       manualRetryInFlightRef.current = false;
       abortRef.current?.abort();
       abortRef.current = null;
+      cancelPendingAction();
+      latestFrameRef.current = undefined;
       clearScheduledRetry();
       releaseConnection();
       const session = sessionRef.current;
       sessionRef.current = null;
       void cancelSessionBestEffort(session);
     };
-  }, [cancelSessionBestEffort, clearScheduledRetry, releaseConnection]);
+  }, [
+    cancelPendingAction,
+    cancelSessionBestEffort,
+    clearScheduledRetry,
+    releaseConnection
+  ]);
 
   return {
     phase: state.phase,
@@ -386,7 +607,12 @@ export function useSessionFrameIntegration(
     recoveryMaxAttempts: state.recoveryMaxAttempts,
     canRetryManually: state.canRetryManually,
     recoveryPending: state.recoveryPending,
+    actionPending: state.actionPending,
+    pendingActionType: state.pendingActionType,
+    actionMessage: state.actionMessage,
+    actionError: state.actionError,
     canSubmitViewerAction: canSubmitViewerAction(state),
+    submitViewerAction,
     start,
     retry,
     reset

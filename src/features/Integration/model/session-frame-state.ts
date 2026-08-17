@@ -17,6 +17,11 @@ export interface SessionFrameRecoveryState {
   recoveryPending: boolean;
 }
 
+export interface ExpectedActionFrame {
+  frameId: string;
+  sequence: number;
+}
+
 export interface SessionFrameState extends SessionFrameRecoveryState {
   runId: number;
   phase: SessionFramePhase;
@@ -24,6 +29,11 @@ export interface SessionFrameState extends SessionFrameRecoveryState {
   frame?: SessionViewerFrame;
   hasReceivedFirstFrame: boolean;
   canReset: boolean;
+  actionPending: boolean;
+  pendingActionType: 'CLICK' | 'SCROLL' | null;
+  expectedActionFrame: ExpectedActionFrame | null;
+  actionMessage: string;
+  actionError: string | null;
 }
 
 export const SESSION_FRAME_MESSAGES: Record<SessionFramePhase, string> = {
@@ -45,6 +55,11 @@ export function createInitialSessionFrameState(runId = 0): SessionFrameState {
     frame: undefined,
     hasReceivedFirstFrame: false,
     canReset: false,
+    actionPending: false,
+    pendingActionType: null,
+    expectedActionFrame: null,
+    actionMessage: '원격 화면이 준비되면 직접 클릭하거나 스크롤할 수 있습니다.',
+    actionError: null,
     recoveryAttempt: 0,
     recoveryMaxAttempts: null,
     canRetryManually: false,
@@ -53,7 +68,11 @@ export function createInitialSessionFrameState(runId = 0): SessionFrameState {
 }
 
 export function canSubmitViewerAction(state: SessionFrameState): boolean {
-  return state.phase === 'FRAME_READY' && !state.recoveryPending;
+  return (
+    state.phase === 'FRAME_READY' &&
+    !state.recoveryPending &&
+    !state.actionPending
+  );
 }
 
 export const initialSessionFrameState = createInitialSessionFrameState();

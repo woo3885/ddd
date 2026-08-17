@@ -10,6 +10,9 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 const ELEMENT_ID_PATTERN = /^el-[A-Za-z0-9]{8}-\d{3}$/;
 const FRAME_ID_PATTERN = /^[A-Za-z0-9-]{1,100}$/;
 const SAFE_MESSAGE_PATTERN = /^[^<>\u0000-\u001F\u007F]{1,500}$/u;
+const VIEWPORT_WIDTH = 1280;
+const VIEWPORT_HEIGHT = 720;
+const MAX_SCROLL_DELTA = 3000;
 
 const ACTION_STATUSES = new Set<BrowserActionStatus>([
   'EXECUTED',
@@ -21,10 +24,33 @@ const ACTION_STATUSES = new Set<BrowserActionStatus>([
   'STOPPED'
 ]);
 
-const REQUEST_KEYS = [
+const ELEMENT_CLICK_REQUEST_KEYS = [
   'requestId',
   'actionType',
+  'source',
   'elementId',
+  'expectedFrameId',
+  'expectedSequence'
+] as const;
+
+const COORDINATE_CLICK_REQUEST_KEYS = [
+  'requestId',
+  'actionType',
+  'source',
+  'x',
+  'y',
+  'expectedFrameId',
+  'expectedSequence'
+] as const;
+
+const SCROLL_REQUEST_KEYS = [
+  'requestId',
+  'actionType',
+  'source',
+  'x',
+  'y',
+  'deltaX',
+  'deltaY',
   'expectedFrameId',
   'expectedSequence'
 ] as const;
@@ -41,13 +67,36 @@ const RESPONSE_KEYS = [
 
 const ENVELOPE_KEYS = ['success', 'data', 'errorCode', 'message'] as const;
 
-export interface BrowserActionRequest {
+interface BrowserActionRequestBase {
   requestId: string;
-  actionType: 'CLICK';
-  elementId: string;
+  source: 'USER_VIEWER';
   expectedFrameId: string;
   expectedSequence: number;
 }
+
+export interface BrowserElementClickRequest extends BrowserActionRequestBase {
+  actionType: 'CLICK';
+  elementId: string;
+}
+
+export interface BrowserCoordinateClickRequest extends BrowserActionRequestBase {
+  actionType: 'CLICK';
+  x: number;
+  y: number;
+}
+
+export interface BrowserScrollRequest extends BrowserActionRequestBase {
+  actionType: 'SCROLL';
+  x: number;
+  y: number;
+  deltaX: number;
+  deltaY: number;
+}
+
+export type BrowserActionRequest =
+  | BrowserElementClickRequest
+  | BrowserCoordinateClickRequest
+  | BrowserScrollRequest;
 
 export type BrowserActionStatus =
   | 'EXECUTED'
@@ -60,7 +109,7 @@ export type BrowserActionStatus =
 
 export interface BrowserActionResponse {
   requestId: string;
-  actionType: 'CLICK';
+  actionType: 'CLICK' | 'SCROLL';
   status: BrowserActionStatus;
   message: string;
   frameId: string;
@@ -76,6 +125,9 @@ export type BrowserActionClientErrorCode =
   | 'FRAME_NOT_READY'
   | 'STALE_FRAME'
   | 'DUPLICATE_REQUEST'
+  | 'SESSION_STATE_BLOCKED'
+  | 'ACTION_BUSY'
+  | 'RATE_LIMITED'
   | 'REQUEST_FAILED'
   | 'REQUEST_TIMEOUT'
   | 'REQUEST_ABORTED';
@@ -154,16 +206,14 @@ function validateSessionId(value: unknown): string {
 export function validateBrowserActionRequest(
   value: unknown
 ): BrowserActionRequest {
-  if (!isRecord(value) || !hasExactKeys(value, REQUEST_KEYS)) {
+  if (!isRecord(value)) {
     return invalidRequest();
   }
 
   if (
     typeof value.requestId !== 'string' ||
     !REQUEST_ID_PATTERN.test(value.requestId) ||
-    value.actionType !== 'CLICK' ||
-    typeof value.elementId !== 'string' ||
-    !ELEMENT_ID_PATTERN.test(value.elementId) ||
+    value.source !== 'USER_VIEWER' ||
     typeof value.expectedFrameId !== 'string' ||
     !FRAME_ID_PATTERN.test(value.expectedFrameId) ||
     !Number.isSafeInteger(value.expectedSequence) ||
@@ -172,13 +222,79 @@ export function validateBrowserActionRequest(
     return invalidRequest();
   }
 
-  return {
+  const common = {
     requestId: value.requestId,
-    actionType: 'CLICK',
-    elementId: value.elementId,
+    source: 'USER_VIEWER' as const,
     expectedFrameId: value.expectedFrameId,
     expectedSequence: Number(value.expectedSequence)
   };
+
+  if (value.actionType === 'CLICK') {
+    if (hasExactKeys(value, ELEMENT_CLICK_REQUEST_KEYS)) {
+      if (
+        typeof value.elementId !== 'string' ||
+        !ELEMENT_ID_PATTERN.test(value.elementId)
+      ) {
+        return invalidRequest();
+      }
+      return {
+        ...common,
+        actionType: 'CLICK',
+        elementId: value.elementId
+      };
+    }
+
+    if (hasExactKeys(value, COORDINATE_CLICK_REQUEST_KEYS)) {
+      if (!isViewerCoordinate(value.x, value.y)) {
+        return invalidRequest();
+      }
+      return {
+        ...common,
+        actionType: 'CLICK',
+        x: Number(value.x),
+        y: Number(value.y)
+      };
+    }
+
+    return invalidRequest();
+  }
+
+  if (value.actionType === 'SCROLL') {
+    if (
+      !hasExactKeys(value, SCROLL_REQUEST_KEYS) ||
+      !isViewerCoordinate(value.x, value.y) ||
+      !isScrollDelta(value.deltaX) ||
+      !isScrollDelta(value.deltaY) ||
+      (value.deltaX === 0 && value.deltaY === 0)
+    ) {
+      return invalidRequest();
+    }
+    return {
+      ...common,
+      actionType: 'SCROLL',
+      x: Number(value.x),
+      y: Number(value.y),
+      deltaX: Number(value.deltaX),
+      deltaY: Number(value.deltaY)
+    };
+  }
+
+  return invalidRequest();
+}
+
+function isViewerCoordinate(x: unknown, y: unknown): boolean {
+  return (
+    Number.isSafeInteger(x) &&
+    Number(x) >= 0 &&
+    Number(x) < VIEWPORT_WIDTH &&
+    Number.isSafeInteger(y) &&
+    Number(y) >= 0 &&
+    Number(y) < VIEWPORT_HEIGHT
+  );
+}
+
+function isScrollDelta(value: unknown): boolean {
+  return Number.isSafeInteger(value) && Math.abs(Number(value)) <= MAX_SCROLL_DELTA;
 }
 
 function parseEnvelope(value: unknown): ApiEnvelope {
@@ -220,7 +336,7 @@ function validateBrowserActionResponse(
   }
   if (
     value.requestId !== request.requestId ||
-    value.actionType !== 'CLICK' ||
+    value.actionType !== request.actionType ||
     typeof value.status !== 'string' ||
     !ACTION_STATUSES.has(value.status as BrowserActionStatus) ||
     typeof value.frameId !== 'string' ||
@@ -250,7 +366,7 @@ function validateBrowserActionResponse(
 
   return {
     requestId: request.requestId,
-    actionType: 'CLICK',
+    actionType: request.actionType,
     status: value.status as BrowserActionStatus,
     message: validateSafeMessage(value.message),
     frameId: value.frameId,
@@ -297,6 +413,21 @@ function mapErrorEnvelope(status: number, envelope: ApiEnvelope): never {
       status: 409,
       code: 'DUPLICATE_REQUEST',
       message: '이미 처리된 화면 동작입니다.'
+    },
+    SESSION_409: {
+      status: 409,
+      code: 'SESSION_STATE_BLOCKED',
+      message: '현재 상태에서는 원격 화면을 조작할 수 없습니다.'
+    },
+    ACTION_409_BUSY: {
+      status: 409,
+      code: 'ACTION_BUSY',
+      message: '이전 화면 동작을 처리하고 있습니다.'
+    },
+    ACTION_429_RATE_LIMITED: {
+      status: 429,
+      code: 'RATE_LIMITED',
+      message: '화면 스크롤 요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.'
     },
     COMMON_500: {
       status: 500,

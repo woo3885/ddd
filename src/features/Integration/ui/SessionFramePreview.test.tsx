@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   start: vi.fn().mockResolvedValue(undefined),
   retry: vi.fn(),
   reset: vi.fn().mockResolvedValue(undefined),
+  submitViewerAction: vi.fn().mockResolvedValue(undefined),
   state: {
     phase: 'IDLE',
     frame: undefined as
@@ -27,6 +28,10 @@ const mocks = vi.hoisted(() => ({
     recoveryMaxAttempts: 3 as number | null,
     canRetryManually: false,
     recoveryPending: false,
+    actionPending: false,
+    pendingActionType: null as 'CLICK' | 'SCROLL' | null,
+    actionMessage: '원격 화면 조작 대기',
+    actionError: null as string | null,
     canSubmitViewerAction: false
   }
 }));
@@ -36,13 +41,43 @@ vi.mock('@/features/Integration/hooks/useSessionFrameIntegration', () => ({
     ...mocks.state,
     start: mocks.start,
     retry: mocks.retry,
-    reset: mocks.reset
+    reset: mocks.reset,
+    submitViewerAction: mocks.submitViewerAction
   })
 }));
 
 vi.mock('@/features/F2_StreamViewer/ui/F2_StreamViewer', () => ({
-  default: ({ frame }: { frame?: { imageSrc: string } }) => (
-    <div data-testid="viewer-remote-screen">
+  default: ({
+    frame,
+    interactionDisabled,
+    interactionBusy,
+    onRemoteAction
+  }: {
+    frame?: { imageSrc: string };
+    interactionDisabled?: boolean;
+    interactionBusy?: boolean;
+    onRemoteAction?: (action: {
+      type: 'CLICK';
+      x: number;
+      y: number;
+      frameId: string;
+      sequence: number;
+    }) => void;
+  }) => (
+    <div
+      data-testid="viewer-remote-screen"
+      data-interaction-disabled={String(interactionDisabled)}
+      data-interaction-busy={String(interactionBusy)}
+      onClick={() =>
+        onRemoteAction?.({
+          type: 'CLICK',
+          x: 640,
+          y: 360,
+          frameId: 'frm-current',
+          sequence: 1
+        })
+      }
+    >
       {frame?.imageSrc ?? 'EMPTY_VIEWER'}
     </div>
   )
@@ -56,6 +91,7 @@ beforeEach(() => {
   mocks.start.mockClear();
   mocks.retry.mockClear();
   mocks.reset.mockClear();
+  mocks.submitViewerAction.mockClear();
   Object.assign(mocks.state, {
     phase: 'IDLE',
     frame: undefined,
@@ -66,6 +102,10 @@ beforeEach(() => {
     recoveryMaxAttempts: 3,
     canRetryManually: false,
     recoveryPending: false,
+    actionPending: false,
+    pendingActionType: null,
+    actionMessage: '원격 화면 조작 대기',
+    actionError: null,
     canSubmitViewerAction: false
   });
 });
@@ -190,7 +230,60 @@ describe('SessionFramePreview', () => {
       '실제 금융거래는 발생하지 않습니다'
     );
     expect(screen.getByTestId('notice-session-frame-scope')).toHaveTextContent(
-      'AI Engine, 사용자 Action, Target, 보안 입력은 연결하지 않았습니다'
+      '사용자 CLICK·SCROLL만 연결하며 AI Engine, Target, 보안 입력은 연결하지 않았습니다'
     );
+  });
+
+  it('Viewer interaction 가능 여부와 action callback 경계를 연결한다', async () => {
+    const user = userEvent.setup();
+    mocks.state.phase = 'FRAME_READY';
+    mocks.state.canSubmitViewerAction = true;
+    render(<SessionFramePreview />);
+
+    const viewer = screen.getByTestId('viewer-remote-screen');
+    expect(viewer).toHaveAttribute('data-interaction-disabled', 'false');
+    expect(screen.getByTestId('notice-session-frame-interaction')).toHaveTextContent(
+      '원격 화면을 직접 조작할 수 있습니다.'
+    );
+
+    await user.click(viewer);
+    expect(mocks.submitViewerAction).toHaveBeenCalledTimes(1);
+    expect(mocks.submitViewerAction).toHaveBeenCalledWith({
+      type: 'CLICK',
+      x: 640,
+      y: 360,
+      frameId: 'frm-current',
+      sequence: 1
+    });
+  });
+
+  it('Action pending은 aria-busy와 진행 상태로 표시한다', () => {
+    mocks.state.phase = 'FRAME_READY';
+    mocks.state.actionPending = true;
+    mocks.state.pendingActionType = 'SCROLL';
+    mocks.state.actionMessage = '동작이 반영된 새 화면을 기다리고 있습니다.';
+    render(<SessionFramePreview />);
+
+    expect(screen.getByTestId('preview-session-frame-d17')).toHaveAttribute(
+      'aria-busy',
+      'true'
+    );
+    expect(screen.getByTestId('viewer-remote-screen')).toHaveAttribute(
+      'data-interaction-busy',
+      'true'
+    );
+    const actionStatus = screen.getByTestId('status-session-frame-action');
+    expect(actionStatus).toHaveAttribute('role', 'status');
+    expect(actionStatus).toHaveTextContent('스크롤 처리 중');
+  });
+
+  it('Action 오류는 raw 내부정보 없이 alert로 표시한다', () => {
+    mocks.state.actionError = '원격 화면 동작을 처리하지 못했습니다.';
+    render(<SessionFramePreview />);
+
+    const actionStatus = screen.getByTestId('status-session-frame-action');
+    expect(actionStatus).toHaveAttribute('role', 'alert');
+    expect(actionStatus).toHaveTextContent('원격 화면 동작을 처리하지 못했습니다.');
+    expect(actionStatus).not.toHaveTextContent(/session-|request_|\/api\/|x=|y=/i);
   });
 });

@@ -11,6 +11,7 @@ const sessionId = 'session-123';
 const request: BrowserActionRequest = {
   requestId: 'request_123',
   actionType: 'CLICK',
+  source: 'USER_VIEWER',
   elementId: 'el-Ab12cd34-001',
   expectedFrameId: 'frm-12345678-1234-1234-1234-123456789abc',
   expectedSequence: 1
@@ -23,6 +24,26 @@ const responseData = {
   frameId: 'frm-22345678-1234-1234-1234-123456789abc',
   sequence: 2,
   frameAdvanced: true
+};
+const coordinateClickRequest: BrowserActionRequest = {
+  requestId: 'coordinate_click_1',
+  actionType: 'CLICK',
+  source: 'USER_VIEWER',
+  x: 640,
+  y: 360,
+  expectedFrameId: request.expectedFrameId,
+  expectedSequence: 1
+};
+const scrollRequest: BrowserActionRequest = {
+  requestId: 'scroll_1',
+  actionType: 'SCROLL',
+  source: 'USER_VIEWER',
+  x: 640,
+  y: 360,
+  deltaX: -20,
+  deltaY: 160,
+  expectedFrameId: request.expectedFrameId,
+  expectedSequence: 1
 };
 
 function envelope(data: unknown = responseData) {
@@ -138,6 +159,63 @@ describe('BrowserActionClient request', () => {
 });
 
 describe('Browser Action request validation', () => {
+  it('좌표 CLICK payload를 그대로 전송하고 검증한다', async () => {
+    const data = {
+      ...responseData,
+      requestId: coordinateClickRequest.requestId
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(envelope(data)));
+    const client = new BrowserActionClient({ fetchImpl });
+
+    await expect(
+      client.submitBrowserAction({ sessionId, request: coordinateClickRequest })
+    ).resolves.toEqual(data);
+
+    const [, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual(coordinateClickRequest);
+  });
+
+  it('SCROLL payload를 그대로 전송하고 검증한다', async () => {
+    const data = {
+      ...responseData,
+      requestId: scrollRequest.requestId,
+      actionType: 'SCROLL'
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(envelope(data)));
+    const client = new BrowserActionClient({ fetchImpl });
+
+    await expect(
+      client.submitBrowserAction({ sessionId, request: scrollRequest })
+    ).resolves.toEqual(data);
+
+    const [, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual(scrollRequest);
+  });
+
+  it.each([
+    ['source 누락', { ...coordinateClickRequest, source: undefined }],
+    ['좌표 CLICK elementId 혼합', { ...coordinateClickRequest, elementId: 'el-Ab12cd34-001' }],
+    ['좌표 음수', { ...coordinateClickRequest, x: -1 }],
+    ['좌표 오른쪽 경계', { ...coordinateClickRequest, x: 1280 }],
+    ['좌표 아래 경계', { ...coordinateClickRequest, y: 720 }],
+    ['좌표 소수', { ...coordinateClickRequest, x: 1.5 }],
+    ['SCROLL zero delta', { ...scrollRequest, deltaX: 0, deltaY: 0 }],
+    ['SCROLL 최대 초과', { ...scrollRequest, deltaY: 3001 }],
+    ['SCROLL delta 누락', { ...scrollRequest, deltaY: undefined }],
+    ['SCROLL 추가 필드', { ...scrollRequest, selector: '#unsafe' }]
+  ])('%s 요청을 fetch 전에 거부한다', async (_, invalidRequest) => {
+    const fetchImpl = vi.fn();
+    const client = new BrowserActionClient({ fetchImpl });
+
+    await expect(
+      client.submitBrowserAction({
+        sessionId,
+        request: invalidRequest as BrowserActionRequest
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['빈 sessionId', '', request],
     ['path sessionId', '../session', request],
@@ -235,6 +313,9 @@ describe('Browser Action response validation', () => {
     [409, 'ACTION_409_FRAME_NOT_READY', 'FRAME_NOT_READY'],
     [409, 'ACTION_409_STALE_FRAME', 'STALE_FRAME'],
     [409, 'ACTION_409_DUPLICATE_REQUEST', 'DUPLICATE_REQUEST'],
+    [409, 'SESSION_409', 'SESSION_STATE_BLOCKED'],
+    [409, 'ACTION_409_BUSY', 'ACTION_BUSY'],
+    [429, 'ACTION_429_RATE_LIMITED', 'RATE_LIMITED'],
     [500, 'COMMON_500', 'REQUEST_FAILED']
   ])('HTTP %i %s를 %s 안전 오류로 변환한다', async (status, errorCode, code) => {
     const client = new BrowserActionClient({
