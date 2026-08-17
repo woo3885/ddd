@@ -9,6 +9,7 @@ import com.ddd.backend.security.capture.BrowserFrameCaptureService;
 import com.ddd.backend.security.capture.FrameCaptureAttempt;
 import com.ddd.backend.security.navigation.DemoNavigationPolicy;
 import com.ddd.backend.security.navigation.DemoNavigationTarget;
+import com.ddd.backend.service.action.PublicBrowserActionSessionState;
 import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,17 +37,29 @@ public class AutomationSessionService {
             browserFrameStore;
 
     /*
-     * D20 Viewer WebSocket lifecycle.
+     * D20
      *
-     * 기존 직접 생성 테스트 호환을 위해
-     * 테스트용 생성자에서는 null일 수 있다.
-     *
-     * 실제 Spring 구동에서는 @Autowired 생성자로
-     * 반드시 주입된다.
+     * AutomationSession 종료 시
+     * Viewer Frame WebSocket도 같이 종료한다.
      */
     private final BrowserFrameWebSocketHandler
             frameWebSocketHandler;
 
+    /*
+     * D22 Viewer Public Action lifecycle.
+     *
+     * Session 종료 시 아래 상태를 함께 제거한다.
+     *
+     * - 처리된 requestId
+     * - Session Action Lock
+     * - SCROLL rate-limit 상태
+     */
+    private final PublicBrowserActionSessionState
+            publicBrowserActionSessionState;
+
+    /*
+     * 실제 Spring 실행용 생성자.
+     */
     @Autowired
     public AutomationSessionService(
             AutomationSessionRepository sessionRepository,
@@ -55,7 +68,9 @@ public class AutomationSessionService {
             DemoNavigationPolicy demoNavigationPolicy,
             BrowserFrameCaptureService browserFrameCaptureService,
             BrowserFrameStore browserFrameStore,
-            BrowserFrameWebSocketHandler frameWebSocketHandler
+            BrowserFrameWebSocketHandler frameWebSocketHandler,
+            PublicBrowserActionSessionState
+                    publicBrowserActionSessionState
     ) {
         this.sessionRepository =
                 sessionRepository;
@@ -77,10 +92,40 @@ public class AutomationSessionService {
 
         this.frameWebSocketHandler =
                 frameWebSocketHandler;
+
+        this.publicBrowserActionSessionState =
+                publicBrowserActionSessionState;
     }
 
     /*
-     * 기존 테스트 호환 생성자.
+     * D20 시점 테스트 코드 호환용 생성자.
+     *
+     * Public Action SessionState가 없는
+     * 기존 테스트에서 사용할 수 있다.
+     */
+    public AutomationSessionService(
+            AutomationSessionRepository sessionRepository,
+            BrowserSessionManager browserSessionManager,
+            AutomationStatusEventPublisher statusEventPublisher,
+            DemoNavigationPolicy demoNavigationPolicy,
+            BrowserFrameCaptureService browserFrameCaptureService,
+            BrowserFrameStore browserFrameStore,
+            BrowserFrameWebSocketHandler frameWebSocketHandler
+    ) {
+        this(
+                sessionRepository,
+                browserSessionManager,
+                statusEventPublisher,
+                demoNavigationPolicy,
+                browserFrameCaptureService,
+                browserFrameStore,
+                frameWebSocketHandler,
+                null
+        );
+    }
+
+    /*
+     * 기존 D17 / D18 테스트 호환용 생성자.
      */
     public AutomationSessionService(
             AutomationSessionRepository sessionRepository,
@@ -97,10 +142,16 @@ public class AutomationSessionService {
                 demoNavigationPolicy,
                 browserFrameCaptureService,
                 browserFrameStore,
+                null,
                 null
         );
     }
 
+    /*
+     * 기존 코드 / 테스트 호환용 세션 생성.
+     *
+     * Demo navigation 및 Frame 생성은 하지 않는다.
+     */
     public AutomationSession createSession(
             String userRequest
     ) {
@@ -117,6 +168,7 @@ public class AutomationSessionService {
         );
 
         try {
+
             AutomationSession savedSession =
                     sessionRepository.save(
                             session
@@ -140,11 +192,27 @@ public class AutomationSessionService {
         }
     }
 
+    /*
+     * 실제 Viewer Session 생성.
+     *
+     * 1. Navigation 입력 검증
+     * 2. BrowserContext 생성
+     * 3. 안전 URL 이동
+     * 4. 최종 URL 재검증
+     * 5. currentUrl 갱신
+     * 6. 최초 Frame 캡처
+     * 7. FrameStore 저장
+     * 8. AutomationSession 저장
+     */
     public AutomationSession createSession(
             String userRequest,
             String siteId,
             String initialPath
     ) {
+        /*
+         * Browser 생성 전에
+         * 요청받은 site/path부터 검증한다.
+         */
         DemoNavigationTarget navigationTarget =
                 demoNavigationPolicy.resolve(
                         siteId,
@@ -164,22 +232,43 @@ public class AutomationSessionService {
         );
 
         try {
+
+            /*
+             * 서버가 만든 안전한 URI로 이동한다.
+             */
             String finalUrl =
                     browserSessionManager.navigate(
                             sessionId,
                             navigationTarget.targetUri()
                     );
 
+            /*
+             * redirect 등을 포함한
+             * 실제 최종 URL을 다시 검증한다.
+             */
             demoNavigationPolicy
                     .validateNavigatedTarget(
                             navigationTarget,
                             finalUrl
                     );
 
+            /*
+             * 최종 Browser URL을 Session에 기록.
+             *
+             * updateCurrentUrl 내부에서
+             * updatedAt / lastAccessedAt도 갱신된다.
+             */
             session.updateCurrentUrl(
                     finalUrl
             );
 
+            /*
+             * 최초 Viewer Frame 생성.
+             *
+             * FrameCaptureGuard에 의해
+             * secure-input 화면이면 screenshot 자체가
+             * 실행되지 않는다.
+             */
             FrameCaptureAttempt captureAttempt =
                     browserFrameCaptureService
                             .capture(
@@ -197,6 +286,12 @@ public class AutomationSessionService {
                 );
             }
 
+            /*
+             * 최초 Frame.
+             *
+             * Action 직후 Frame이 아니므로
+             * 일반 publish()를 사용한다.
+             */
             browserFrameStore.publish(
                     sessionId,
                     captureAttempt.frame()
@@ -217,6 +312,16 @@ public class AutomationSessionService {
 
         } catch (RuntimeException exception) {
 
+            /*
+             * 아래 실패 상황에서
+             * 모든 Session resource를 정리한다.
+             *
+             * - navigation 실패
+             * - URL 검증 실패
+             * - Frame capture 실패
+             * - FrameStore 실패
+             * - Repository 저장 실패
+             */
             cleanupBrowserResources(
                     sessionId
             );
@@ -225,6 +330,12 @@ public class AutomationSessionService {
         }
     }
 
+    /*
+     * Session 조회.
+     *
+     * 조회 성공 자체를 Session 접근으로 보고
+     * lastAccessedAt을 갱신한다.
+     */
     public AutomationSession getSession(
             String sessionId
     ) {
@@ -251,6 +362,9 @@ public class AutomationSessionService {
         );
     }
 
+    /*
+     * 사용자가 명시적으로 Session 취소.
+     */
     public AutomationSession cancelSession(
             String sessionId
     ) {
@@ -267,54 +381,21 @@ public class AutomationSessionService {
                 );
 
         /*
-         * Playwright BrowserContext 종료.
+         * D22
+         *
+         * Public Viewer Action 상태를 먼저 제거한다.
+         *
+         * - requestId
+         * - Action Lock
+         * - SCROLL rate-limit
          */
-        if (browserSessionManager.exists(
-                sessionId
-        )) {
-
-            browserSessionManager.closeSession(
-                    sessionId
-            );
-        }
-
-        /*
-         * D20:
-         * Viewer WebSocket도 서버에서 종료한다.
-         */
-        closeFrameWebSocketSafely(
+        cleanupPublicBrowserActionStateSafely(
                 sessionId
         );
 
         /*
-         * Viewer 최신 Frame 제거.
+         * Playwright BrowserContext / Page 종료.
          */
-        if (browserFrameStore.containsSession(
-                sessionId
-        )) {
-
-            browserFrameStore.removeSession(
-                    sessionId
-            );
-        }
-
-        statusEventPublisher.publish(
-                savedSession.getSessionId(),
-                savedSession.getStatus(),
-                "자동화 세션이 취소되었습니다."
-        );
-
-        return savedSession;
-    }
-
-    /*
-     * 세션 생성 실패 시
-     * Browser + Viewer WebSocket + Frame을
-     * 함께 정리한다.
-     */
-    private void cleanupBrowserResources(
-            String sessionId
-    ) {
         try {
 
             if (browserSessionManager.exists(
@@ -329,15 +410,98 @@ public class AutomationSessionService {
         } catch (RuntimeException ignored) {
 
             /*
-             * cleanup 실패가 원래 예외를
-             * 덮어쓰지 않는다.
+             * Browser cleanup 실패 때문에
+             * 나머지 Session cleanup을 중단하지 않는다.
              */
         }
 
+        /*
+         * D20
+         *
+         * Viewer Frame WebSocket도
+         * 서버에서 직접 종료한다.
+         */
         closeFrameWebSocketSafely(
                 sessionId
         );
 
+        /*
+         * 최신 Viewer Frame 제거.
+         */
+        try {
+
+            if (browserFrameStore.containsSession(
+                    sessionId
+            )) {
+
+                browserFrameStore.removeSession(
+                        sessionId
+                );
+            }
+
+        } catch (RuntimeException ignored) {
+
+            /*
+             * Frame cleanup 실패가
+             * Session cancel 결과를 덮어쓰지 않는다.
+             */
+        }
+
+        statusEventPublisher.publish(
+                savedSession.getSessionId(),
+                savedSession.getStatus(),
+                "자동화 세션이 취소되었습니다."
+        );
+
+        return savedSession;
+    }
+
+    /*
+     * Session 생성 실패 등의 경우
+     * 브라우저 관련 모든 Resource를 정리한다.
+     */
+    private void cleanupBrowserResources(
+            String sessionId
+    ) {
+        /*
+         * D22 Public Action 상태 제거.
+         */
+        cleanupPublicBrowserActionStateSafely(
+                sessionId
+        );
+
+        /*
+         * BrowserContext / Page 종료.
+         */
+        try {
+
+            if (browserSessionManager.exists(
+                    sessionId
+            )) {
+
+                browserSessionManager.closeSession(
+                        sessionId
+                );
+            }
+
+        } catch (RuntimeException ignored) {
+
+            /*
+             * cleanup 오류가
+             * 원래 발생한 예외를 덮어쓰지 않는다.
+             */
+        }
+
+        /*
+         * Viewer WebSocket 종료.
+         */
+        closeFrameWebSocketSafely(
+                sessionId
+        );
+
+        /*
+         * FrameStore 제거.
+         */
         try {
 
             if (browserFrameStore.containsSession(
@@ -358,18 +522,54 @@ public class AutomationSessionService {
         }
     }
 
+    /*
+     * D22
+     *
+     * Public Action 상태 cleanup.
+     *
+     * 기존 테스트 호환 생성자에서는
+     * PublicBrowserActionSessionState가 null일 수 있다.
+     */
+    private void cleanupPublicBrowserActionStateSafely(
+            String sessionId
+    ) {
+        if (publicBrowserActionSessionState
+                == null) {
+
+            return;
+        }
+
+        try {
+
+            publicBrowserActionSessionState
+                    .removeSession(
+                            sessionId
+                    );
+
+        } catch (RuntimeException ignored) {
+
+            /*
+             * Public Action 상태 cleanup 실패가
+             * 전체 Session cleanup을 실패시키면 안 된다.
+             */
+        }
+    }
+
+    /*
+     * D20 Viewer WebSocket cleanup.
+     *
+     * 기존 테스트 호환 생성자에서는
+     * Handler가 null일 수 있다.
+     */
     private void closeFrameWebSocketSafely(
             String sessionId
     ) {
-        /*
-         * 기존 테스트 호환 생성자에서는
-         * Handler가 없을 수 있다.
-         */
         if (frameWebSocketHandler == null) {
             return;
         }
 
         try {
+
             frameWebSocketHandler.closeConnection(
                     sessionId
             );
@@ -377,9 +577,8 @@ public class AutomationSessionService {
         } catch (RuntimeException ignored) {
 
             /*
-             * Viewer WebSocket cleanup 실패가
-             * Session cleanup 자체를
-             * 실패시키지 않도록 한다.
+             * WebSocket cleanup 실패가
+             * Session cleanup 자체를 실패시키지 않는다.
              */
         }
     }

@@ -6,6 +6,7 @@ import com.ddd.backend.automation.BrowserActionExecutionStatus;
 import com.ddd.backend.automation.BrowserActionExecutor;
 import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.automation.ElementIdBrowserActionExecutor;
+import com.ddd.backend.automation.ViewerCoordinateActionExecutor;
 import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
@@ -60,7 +61,40 @@ public final class BrowserActionExecutionService {
     private final ElementIdBrowserActionExecutor
             elementIdActionExecutor;
 
+    private final ViewerCoordinateActionExecutor
+            coordinateActionExecutor;
+
     @Autowired
+    public BrowserActionExecutionService(
+            BrowserActionExecutor actionExecutor,
+            BrowserActionStatusEventMapper statusEventMapper,
+            AutomationSessionRepository sessionRepository,
+            AutomationStatusEventPublisher statusEventPublisher,
+            BrowserFrameCaptureService browserFrameCaptureService,
+            BrowserFrameStore browserFrameStore,
+            BrowserFrameWebSocketHandler frameWebSocketHandler,
+            ElementIdBrowserActionExecutor
+                    elementIdActionExecutor,
+            ViewerCoordinateActionExecutor
+                    coordinateActionExecutor
+    ) {
+        this(
+                actionExecutor,
+                statusEventMapper,
+                sessionRepository,
+                statusEventPublisher,
+                browserFrameCaptureService,
+                browserFrameStore,
+                frameWebSocketHandler,
+                elementIdActionExecutor,
+                coordinateActionExecutor,
+                false
+        );
+    }
+
+    /*
+     * 기존 D19 테스트 호환 생성자.
+     */
     public BrowserActionExecutionService(
             BrowserActionExecutor actionExecutor,
             BrowserActionStatusEventMapper statusEventMapper,
@@ -81,12 +115,13 @@ public final class BrowserActionExecutionService {
                 browserFrameStore,
                 frameWebSocketHandler,
                 elementIdActionExecutor,
-                false
+                null,
+                true
         );
     }
 
     /*
-     * 기존 테스트 호환 생성자.
+     * 더 오래된 테스트 호환 생성자.
      */
     public BrowserActionExecutionService(
             BrowserActionExecutor actionExecutor,
@@ -106,6 +141,7 @@ public final class BrowserActionExecutionService {
                 browserFrameStore,
                 frameWebSocketHandler,
                 null,
+                null,
                 true
         );
     }
@@ -120,7 +156,9 @@ public final class BrowserActionExecutionService {
             BrowserFrameWebSocketHandler frameWebSocketHandler,
             ElementIdBrowserActionExecutor
                     elementIdActionExecutor,
-            boolean allowMissingElementIdExecutor
+            ViewerCoordinateActionExecutor
+                    coordinateActionExecutor,
+            boolean allowMissingPublicExecutors
     ) {
         this.actionExecutor =
                 Objects.requireNonNull(
@@ -164,10 +202,13 @@ public final class BrowserActionExecutionService {
                         "BrowserFrameWebSocketHandler는 필수입니다."
                 );
 
-        if (allowMissingElementIdExecutor) {
+        if (allowMissingPublicExecutors) {
 
             this.elementIdActionExecutor =
                     elementIdActionExecutor;
+
+            this.coordinateActionExecutor =
+                    coordinateActionExecutor;
 
         } else {
 
@@ -176,12 +217,15 @@ public final class BrowserActionExecutionService {
                             elementIdActionExecutor,
                             "ElementIdBrowserActionExecutor는 필수입니다."
                     );
+
+            this.coordinateActionExecutor =
+                    Objects.requireNonNull(
+                            coordinateActionExecutor,
+                            "ViewerCoordinateActionExecutor는 필수입니다."
+                    );
         }
     }
 
-    /*
-     * 기존 selector 기반 내부 Action 실행.
-     */
     public BrowserActionExecutionResult execute(
             String sessionId,
             BrowserAction action
@@ -196,9 +240,6 @@ public final class BrowserActionExecutionService {
         );
     }
 
-    /*
-     * Frontend Viewer에서 사용자가 직접 클릭.
-     */
     public BrowserActionExecutionResult
     executeElementClick(
             String sessionId,
@@ -217,12 +258,50 @@ public final class BrowserActionExecutionService {
         );
     }
 
-    /*
-     * D19 AI Action 전용.
-     *
-     * CSS Selector를 사용하지 않고
-     * B가 발급한 elementId로 실행한다.
-     */
+    public BrowserActionExecutionResult
+    executeViewerCoordinateClick(
+            String sessionId,
+            int x,
+            int y
+    ) {
+        requireCoordinateExecutor();
+
+        return executeInternal(
+                sessionId,
+                () ->
+                        coordinateActionExecutor
+                                .executeClick(
+                                        sessionId,
+                                        x,
+                                        y
+                                )
+        );
+    }
+
+    public BrowserActionExecutionResult
+    executeViewerCoordinateScroll(
+            String sessionId,
+            int x,
+            int y,
+            int deltaX,
+            int deltaY
+    ) {
+        requireCoordinateExecutor();
+
+        return executeInternal(
+                sessionId,
+                () ->
+                        coordinateActionExecutor
+                                .executeScroll(
+                                        sessionId,
+                                        x,
+                                        y,
+                                        deltaX,
+                                        deltaY
+                                )
+        );
+    }
+
     public BrowserActionExecutionResult
     executeAiElementAction(
             String sessionId,
@@ -267,8 +346,7 @@ public final class BrowserActionExecutionService {
             result =
                     execution.get();
 
-        } catch (RuntimeException
-                executionException) {
+        } catch (RuntimeException executionException) {
 
             updateExecutionErrorStatusSafely(
                     session
@@ -312,9 +390,6 @@ public final class BrowserActionExecutionService {
                 message
         );
 
-        /*
-         * EXECUTED일 때만 새 Frame.
-         */
         refreshFrameAfterExecutedActionSafely(
                 sessionId,
                 result
@@ -358,14 +433,13 @@ public final class BrowserActionExecutionService {
                     sessionId
             );
 
-        } catch (RuntimeException
-                frameException) {
+        } catch (RuntimeException frameException) {
 
             /*
-             * 실제 Action은 이미 성공했다.
+             * Action 자체는 이미 실행됐다.
              *
-             * Frame 실패 때문에 Action을
-             * 재실행해서는 안 된다.
+             * Frame 전송 실패 때문에
+             * CLICK/SCROLL을 다시 실행하면 안 된다.
              */
             log.warn(
                     "Browser Viewer Frame 갱신 실패. "
@@ -381,8 +455,16 @@ public final class BrowserActionExecutionService {
         if (elementIdActionExecutor == null) {
 
             throw new IllegalStateException(
-                    "elementId Action 실행기가 "
-                            + "구성되지 않았습니다."
+                    "elementId Action 실행기가 구성되지 않았습니다."
+            );
+        }
+    }
+
+    private void requireCoordinateExecutor() {
+        if (coordinateActionExecutor == null) {
+
+            throw new IllegalStateException(
+                    "좌표 Browser Action 실행기가 구성되지 않았습니다."
             );
         }
     }
@@ -423,8 +505,7 @@ public final class BrowserActionExecutionService {
                     session
             );
 
-        } catch (RuntimeException
-                updateException) {
+        } catch (RuntimeException updateException) {
 
             log.warn(
                     "브라우저 실행 오류 상태 저장 실패. "
@@ -449,12 +530,10 @@ public final class BrowserActionExecutionService {
                     EXECUTION_ERROR_MESSAGE
             );
 
-        } catch (RuntimeException
-                publishException) {
+        } catch (RuntimeException publishException) {
 
             log.warn(
-                    "WebSocket 오류 상태 이벤트 "
-                            + "발행 실패. "
+                    "WebSocket 오류 상태 이벤트 발행 실패. "
                             + "sessionId={}, "
                             + "exceptionType={}",
                     sessionId,

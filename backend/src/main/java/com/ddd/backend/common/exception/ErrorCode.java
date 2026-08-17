@@ -40,6 +40,18 @@ public enum ErrorCode {
             "이미 처리된 Browser Action 요청입니다."
     ),
 
+    ACTION_BUSY(
+            HttpStatus.CONFLICT,
+            "ACTION_409_BUSY",
+            "현재 다른 Browser Action이 처리 중입니다."
+    ),
+
+    ACTION_RATE_LIMITED(
+            HttpStatus.TOO_MANY_REQUESTS,
+            "ACTION_429_RATE_LIMITED",
+            "Browser Action 요청이 너무 빠릅니다."
+    ),
+
     INTERNAL_SERVER_ERROR(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "COMMON_500",

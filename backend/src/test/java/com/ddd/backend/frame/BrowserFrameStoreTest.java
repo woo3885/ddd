@@ -400,4 +400,42 @@ class BrowserFrameStoreTest {
                 2L
         );
     }
+
+    @Test
+    void Action성공후_Frame은_동일PNG여도_sequence를_증가시킨다() {
+        CapturedBrowserFrame same =
+                createFrame(
+                        "same-action-frame"
+                );
+
+        BrowserFramePayload first =
+                store.publish(
+                        "session-1",
+                        same
+                );
+
+        BrowserFramePayload afterAction =
+                store.publishAfterAction(
+                        "session-1",
+                        same
+                );
+
+        assertThat(
+                first.metadata().sequence()
+        ).isEqualTo(
+                1L
+        );
+
+        assertThat(
+                afterAction.metadata().sequence()
+        ).isEqualTo(
+                2L
+        );
+
+        assertThat(
+                afterAction.metadata().frameId()
+        ).isNotEqualTo(
+                first.metadata().frameId()
+        );
+    }
 }
