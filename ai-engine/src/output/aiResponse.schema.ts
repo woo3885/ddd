@@ -115,6 +115,9 @@ export const aiResponseSchema = {
   },
 
   allOf: [
+    /*
+     * CLICK
+     */
     {
       if: {
         properties: {
@@ -122,14 +125,18 @@ export const aiResponseSchema = {
             const: "CLICK",
           },
         },
-        required: ["action"],
+        required: [
+          "action",
+        ],
       },
+
       then: {
         properties: {
           targetElementId: {
             type: "string",
             minLength: 1,
           },
+
           inputValue: {
             type: "null",
           },
@@ -137,6 +144,9 @@ export const aiResponseSchema = {
       },
     },
 
+    /*
+     * TYPE
+     */
     {
       if: {
         properties: {
@@ -144,21 +154,32 @@ export const aiResponseSchema = {
             const: "TYPE",
           },
         },
-        required: ["action"],
+        required: [
+          "action",
+        ],
       },
+
       then: {
         properties: {
           targetElementId: {
             type: "string",
             minLength: 1,
           },
+
           inputValue: {
-            type: ["string", "number"],
+            type: [
+              "string",
+              "number",
+            ],
           },
         },
       },
     },
 
+    /*
+     * targetElementId와 inputValue가
+     * 필요하지 않은 일반 Action
+     */
     {
       if: {
         properties: {
@@ -167,22 +188,151 @@ export const aiResponseSchema = {
               "NONE",
               "SCROLL",
               "WAIT",
-              "WAIT_FOR_USER",
               "GO_BACK",
               "REFRESH",
               "STOP",
             ],
           },
         },
-        required: ["action"],
+
+        required: [
+          "action",
+        ],
       },
+
       then: {
         properties: {
           targetElementId: {
             type: "null",
           },
+
           inputValue: {
             type: "null",
+          },
+        },
+      },
+    },
+
+    /*
+     * USER_DECISION
+     *
+     * 상품, 수취인, 약관 등
+     * 사용자의 직접 선택이 필요한 경우
+     */
+    {
+      if: {
+        properties: {
+          action: {
+            const: "WAIT_FOR_USER",
+          },
+        },
+
+        required: [
+          "action",
+        ],
+      },
+
+      then: {
+        properties: {
+          status: {
+            const:
+              "USER_DECISION_REQUIRED",
+          },
+
+          targetElementId: {
+            type: "null",
+          },
+
+          inputValue: {
+            type: "null",
+          },
+
+          requiresUserAction: {
+            const: true,
+          },
+        },
+      },
+    },
+
+    /*
+     * SECURE_INPUT
+     *
+     * 비밀번호, OTP, 인증번호 등
+     * 민감정보는 AI가 입력하지 않습니다.
+     */
+    {
+      if: {
+        properties: {
+          action: {
+            const:
+              "PAUSE_FOR_SECURE_INPUT",
+          },
+        },
+
+        required: [
+          "action",
+        ],
+      },
+
+      then: {
+        properties: {
+          status: {
+            const:
+              "SECURE_INPUT_REQUIRED",
+          },
+
+          targetElementId: {
+            type: "null",
+          },
+
+          inputValue: {
+            type: "null",
+          },
+
+          requiresUserAction: {
+            const: true,
+          },
+        },
+      },
+    },
+
+    /*
+     * FINAL_CONFIRMATION
+     *
+     * 송금, 가입, 해지 등
+     * 최종 실행은 사용자 승인을 요구합니다.
+     */
+    {
+      if: {
+        properties: {
+          action: {
+            const:
+              "REQUEST_FINAL_CONFIRMATION",
+          },
+        },
+
+        required: [
+          "action",
+        ],
+      },
+
+      then: {
+        properties: {
+          status: {
+            const:
+              "FINAL_CONFIRMATION_REQUIRED",
+          },
+
+          targetElementId: {
+            type: "null",
+          },
+
+          inputValue: {
+            type: "null",
+          },
+
+          requiresUserAction: {
+            const: true,
           },
         },
       },
