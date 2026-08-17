@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -68,6 +68,29 @@ function createFrame(
   };
 }
 
+class MockPointerEvent extends MouseEvent {
+  readonly isPrimary: boolean;
+  readonly pointerType: string;
+
+  constructor(type: string, init: PointerEventInit = {}) {
+    super(type, init);
+    this.isPrimary = init.isPrimary ?? true;
+    this.pointerType = init.pointerType ?? 'mouse';
+  }
+}
+
+function createInteractiveFrame(): ViewerFrame {
+  const base = createFrame();
+  return {
+    ...base,
+    metadata: {
+      ...base.metadata,
+      frameId: 'frm-current',
+      sequence: 7
+    }
+  } as ViewerFrame;
+}
+
 function completeImageLoad(
   image = MockImage.instances[MockImage.instances.length - 1]
 ) {
@@ -83,6 +106,7 @@ beforeEach(() => {
   resizeObserverRecords.length = 0;
   canvasDisplaySize = { width: 640, height: 360 };
   vi.stubGlobal('Image', MockImage);
+  vi.stubGlobal('PointerEvent', MockPointerEvent);
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
     canvasContext
@@ -452,5 +476,171 @@ describe('F2_StreamViewer', () => {
     expect(screen.getByTestId('test-overlay-frame-context')).toHaveTextContent(
       'LOADING:/next-frame.png'
     );
+  });
+
+  it('READY frame의 primary pointer를 현재 metadata CLICK으로 한 번 전달한다', () => {
+    const onRemoteAction = vi.fn();
+    render(
+      <F2_StreamViewer
+        frame={createInteractiveFrame()}
+        onRemoteAction={onRemoteAction}
+      />
+    );
+    completeImageLoad();
+
+    fireEvent.pointerUp(screen.getByTestId('canvas-remote-screen'), {
+      clientX: 320,
+      clientY: 180,
+      button: 0,
+      isPrimary: true,
+      pointerType: 'mouse'
+    });
+
+    expect(onRemoteAction).toHaveBeenCalledTimes(1);
+    expect(onRemoteAction).toHaveBeenCalledWith({
+      type: 'CLICK',
+      x: 640,
+      y: 360,
+      frameId: 'frm-current',
+      sequence: 7
+    });
+  });
+
+  it('touch primary pointer도 중복 없이 CLICK 한 번만 전달한다', () => {
+    const onRemoteAction = vi.fn();
+    render(
+      <F2_StreamViewer
+        frame={createInteractiveFrame()}
+        onRemoteAction={onRemoteAction}
+      />
+    );
+    completeImageLoad();
+
+    fireEvent.pointerUp(screen.getByTestId('canvas-remote-screen'), {
+      clientX: 160,
+      clientY: 90,
+      button: 0,
+      isPrimary: true,
+      pointerType: 'touch'
+    });
+
+    expect(onRemoteAction).toHaveBeenCalledTimes(1);
+    expect(onRemoteAction).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'CLICK', x: 320, y: 180 })
+    );
+  });
+
+  it('pixel wheel을 SCROLL 한 번으로 전달하고 그때만 기본 scroll을 막는다', () => {
+    const onRemoteAction = vi.fn();
+    render(
+      <F2_StreamViewer
+        frame={createInteractiveFrame()}
+        onRemoteAction={onRemoteAction}
+      />
+    );
+    completeImageLoad();
+    const canvas = screen.getByTestId('canvas-remote-screen');
+    const wheel = new WheelEvent('wheel', {
+      clientX: 320,
+      clientY: 180,
+      deltaX: -20,
+      deltaY: 120,
+      deltaMode: 0,
+      cancelable: true
+    });
+
+    canvas.dispatchEvent(wheel);
+
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(onRemoteAction).toHaveBeenCalledTimes(1);
+    expect(onRemoteAction).toHaveBeenCalledWith({
+      type: 'SCROLL',
+      x: 640,
+      y: 360,
+      deltaX: -20,
+      deltaY: 120,
+      frameId: 'frm-current',
+      sequence: 7
+    });
+  });
+
+  it('disabled·busy·LOADING에서는 callback과 page scroll을 막지 않는다', () => {
+    const onRemoteAction = vi.fn();
+    const { rerender } = render(
+      <F2_StreamViewer
+        frame={createInteractiveFrame()}
+        interactionDisabled
+        onRemoteAction={onRemoteAction}
+      />
+    );
+    completeImageLoad();
+    const canvas = screen.getByTestId('canvas-remote-screen');
+    const disabledWheel = new WheelEvent('wheel', {
+      clientX: 320,
+      clientY: 180,
+      deltaY: 100,
+      deltaMode: 0,
+      cancelable: true
+    });
+    canvas.dispatchEvent(disabledWheel);
+    fireEvent.pointerUp(canvas, {
+      clientX: 320,
+      clientY: 180,
+      button: 0,
+      isPrimary: true
+    });
+
+    expect(disabledWheel.defaultPrevented).toBe(false);
+    expect(onRemoteAction).not.toHaveBeenCalled();
+
+    rerender(
+      <F2_StreamViewer
+        frame={createInteractiveFrame()}
+        interactionBusy
+        onRemoteAction={onRemoteAction}
+      />
+    );
+    fireEvent.pointerUp(canvas, {
+      clientX: 320,
+      clientY: 180,
+      button: 0,
+      isPrimary: true
+    });
+    expect(onRemoteAction).not.toHaveBeenCalled();
+  });
+
+  it('Canvas 밖·letterbox·보조 pointer와 mount만으로 callback하지 않는다', () => {
+    canvasDisplaySize = { width: 1000, height: 700 };
+    const onRemoteAction = vi.fn();
+    render(
+      <F2_StreamViewer
+        frame={createInteractiveFrame()}
+        onRemoteAction={onRemoteAction}
+      />
+    );
+    completeImageLoad();
+    const canvas = screen.getByTestId('canvas-remote-screen');
+
+    expect(onRemoteAction).not.toHaveBeenCalled();
+    fireEvent.pointerUp(canvas, {
+      clientX: 500,
+      clientY: 10,
+      button: 0,
+      isPrimary: true
+    });
+    fireEvent.pointerUp(canvas, {
+      clientX: 500,
+      clientY: 350,
+      button: 2,
+      isPrimary: true
+    });
+    fireEvent.pointerUp(canvas, {
+      clientX: 1001,
+      clientY: 350,
+      button: 0,
+      isPrimary: true
+    });
+
+    expect(onRemoteAction).not.toHaveBeenCalled();
   });
 });

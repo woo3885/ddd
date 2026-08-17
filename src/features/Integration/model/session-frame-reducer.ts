@@ -25,6 +25,27 @@ export type SessionFrameAction =
   | (ScopedAction & { type: 'MANUAL_RETRY_STARTED' })
   | (ScopedAction & { type: 'RECOVERY_FAILED'; message?: string })
   | (ScopedAction & {
+      type: 'ACTION_REQUESTED';
+      actionType: 'CLICK' | 'SCROLL';
+    })
+  | (ScopedAction & {
+      type: 'ACTION_FRAME_EXPECTED';
+      frameId: string;
+      sequence: number;
+    })
+  | (ScopedAction & {
+      type: 'ACTION_COMPLETED';
+      message: string;
+    })
+  | (ScopedAction & {
+      type: 'ACTION_FINISHED_WITHOUT_FRAME';
+      message: string;
+    })
+  | (ScopedAction & {
+      type: 'ACTION_FAILED';
+      message: string;
+    })
+  | (ScopedAction & {
       type: 'SAFE_ERROR';
       message?: string;
       canRetryManually?: boolean;
@@ -80,7 +101,10 @@ export function sessionFrameReducer(
         recoveryPending: false,
         canRetryManually: false
       };
-    case 'FRAME_RECEIVED':
+    case 'FRAME_RECEIVED': {
+      const completesPendingAction =
+        state.expectedActionFrame?.frameId === action.frame.metadata.frameId &&
+        state.expectedActionFrame.sequence === action.frame.metadata.sequence;
       return {
         ...state,
         phase: 'FRAME_READY',
@@ -90,8 +114,18 @@ export function sessionFrameReducer(
         canReset: true,
         recoveryAttempt: 0,
         canRetryManually: false,
-        recoveryPending: false
+        recoveryPending: false,
+        actionPending: completesPendingAction ? false : state.actionPending,
+        pendingActionType: completesPendingAction ? null : state.pendingActionType,
+        expectedActionFrame: completesPendingAction
+          ? null
+          : state.expectedActionFrame,
+        actionMessage: completesPendingAction
+          ? '요청한 화면 동작이 새 화면에 반영되었습니다.'
+          : state.actionMessage,
+        actionError: completesPendingAction ? null : state.actionError
       };
+    }
     case 'DISCONNECTED':
       return {
         ...state,
@@ -100,7 +134,10 @@ export function sessionFrameReducer(
         frame: undefined,
         canReset: true,
         canRetryManually: action.canRetryManually ?? false,
-        recoveryPending: false
+        recoveryPending: false,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null
       };
     case 'RECONNECT_SCHEDULED':
       return {
@@ -112,7 +149,10 @@ export function sessionFrameReducer(
         recoveryAttempt: action.attempt,
         recoveryMaxAttempts: action.maxAttempts,
         canRetryManually: false,
-        recoveryPending: true
+        recoveryPending: true,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null
       };
     case 'MANUAL_RETRY_STARTED':
       return {
@@ -122,7 +162,10 @@ export function sessionFrameReducer(
         frame: undefined,
         canReset: true,
         canRetryManually: false,
-        recoveryPending: true
+        recoveryPending: true,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null
       };
     case 'RECOVERY_FAILED':
       return {
@@ -134,7 +177,10 @@ export function sessionFrameReducer(
         frame: undefined,
         canReset: true,
         canRetryManually: true,
-        recoveryPending: false
+        recoveryPending: false,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null
       };
     case 'SAFE_ERROR':
       return {
@@ -144,7 +190,60 @@ export function sessionFrameReducer(
         frame: undefined,
         canReset: true,
         canRetryManually: action.canRetryManually ?? false,
-        recoveryPending: false
+        recoveryPending: false,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null
+      };
+    case 'ACTION_REQUESTED':
+      return {
+        ...state,
+        actionPending: true,
+        pendingActionType: action.actionType,
+        expectedActionFrame: null,
+        actionMessage:
+          action.actionType === 'CLICK'
+            ? '클릭 동작을 처리하고 있습니다.'
+            : '스크롤 동작을 처리하고 있습니다.',
+        actionError: null
+      };
+    case 'ACTION_FRAME_EXPECTED':
+      return {
+        ...state,
+        actionPending: true,
+        expectedActionFrame: {
+          frameId: action.frameId,
+          sequence: action.sequence
+        },
+        actionMessage: '동작이 반영된 새 화면을 기다리고 있습니다.',
+        actionError: null
+      };
+    case 'ACTION_COMPLETED':
+      return {
+        ...state,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null,
+        actionMessage: action.message,
+        actionError: null
+      };
+    case 'ACTION_FINISHED_WITHOUT_FRAME':
+      return {
+        ...state,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null,
+        actionMessage: action.message,
+        actionError: null
+      };
+    case 'ACTION_FAILED':
+      return {
+        ...state,
+        actionPending: false,
+        pendingActionType: null,
+        expectedActionFrame: null,
+        actionMessage: '원격 화면 동작을 완료하지 못했습니다.',
+        actionError: action.message
       };
     case 'RESET':
       return createInitialSessionFrameState(action.nextRunId);

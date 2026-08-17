@@ -11,9 +11,11 @@ import { Text } from '@/shared/ui/Text';
 export const SESSION_FRAME_PREVIEW_SELECTORS = {
   root: 'preview-session-frame-d17',
   notice: 'notice-session-frame-scope',
+  interactionNotice: 'notice-session-frame-interaction',
   phaseStatus: 'status-session-frame-phase',
   messageStatus: 'status-session-frame-message',
   recoveryStatus: 'status-session-frame-recovery',
+  actionStatus: 'status-session-frame-action',
   startButton: 'btn-session-frame-start',
   retryButton: 'btn-session-frame-retry',
   resetButton: 'btn-session-frame-reset'
@@ -54,7 +56,8 @@ export default function SessionFramePreview() {
     integration.phase === 'CONNECTING_FRAME' ||
     integration.phase === 'WAITING_FIRST_FRAME' ||
     integration.phase === 'RECONNECTING' ||
-    integration.recoveryPending;
+    integration.recoveryPending ||
+    integration.actionPending;
   const isRecoveryFailure =
     integration.phase === 'ERROR' && integration.canRetryManually;
   const recoveryMessage =
@@ -76,10 +79,10 @@ export default function SessionFramePreview() {
     >
       <header>
         <Text as="h1" variant="title">
-          D21 실제 세션 화면 연결·복구 Preview
+          D22 Viewer 원격 CLICK·SCROLL Preview
         </Text>
         <Text variant="guide" className="mt-3 text-text-secondary">
-          Backend가 연 데모뱅크의 첫 화면을 Viewer에서 확인합니다.
+          Backend가 연 데모뱅크 화면을 사용자가 직접 클릭하고 스크롤합니다.
         </Text>
       </header>
 
@@ -91,7 +94,7 @@ export default function SessionFramePreview() {
         title="표시 전용 개발 화면입니다."
       >
         <p>계좌 선택 시작 화면만 열며 실제 금융거래는 발생하지 않습니다.</p>
-        <p>AI Engine, 사용자 Action, Target, 보안 입력은 연결하지 않았습니다.</p>
+        <p>사용자 CLICK·SCROLL만 연결하며 AI Engine, Target, 보안 입력은 연결하지 않았습니다.</p>
         <p>자동 복구 지연값은 이 Preview와 테스트에서만 사용하는 Mock 정책입니다.</p>
       </NoticeBox>
 
@@ -161,9 +164,60 @@ export default function SessionFramePreview() {
         </div>
       </Panel>
 
+      <NoticeBox
+        {...elementIdentity(SESSION_FRAME_PREVIEW_SELECTORS.interactionNotice)}
+        variant={integration.canSubmitViewerAction ? 'info' : 'warning'}
+        announce="polite"
+        role="status"
+        title={
+          integration.canSubmitViewerAction
+            ? '원격 화면을 직접 조작할 수 있습니다.'
+            : '현재 원격 화면 조작이 차단되어 있습니다.'
+        }
+      >
+        Viewer에서 직접 클릭하거나 스크롤해 주세요. 좌표 기반 키보드 조작은
+        Target 정보가 연결되는 D23에서 제공합니다.
+      </NoticeBox>
+
       <section aria-label="실제 원격 화면 Viewer">
-        <F2_StreamViewer frame={integration.frame} />
+        <F2_StreamViewer
+          frame={integration.frame}
+          interactionDisabled={!integration.canSubmitViewerAction}
+          interactionBusy={integration.actionPending}
+          onRemoteAction={(action) => void integration.submitViewerAction(action)}
+        />
       </section>
+
+      <div
+        {...elementIdentity(SESSION_FRAME_PREVIEW_SELECTORS.actionStatus)}
+        role={integration.actionError ? 'alert' : 'status'}
+        aria-live={integration.actionError ? undefined : 'polite'}
+        aria-atomic="true"
+        className="rounded-xl border-2 border-current bg-white p-4 text-base leading-relaxed"
+      >
+        <StatusBadge
+          variant={
+            integration.actionError
+              ? 'danger'
+              : integration.actionPending
+                ? 'progress'
+                : integration.canSubmitViewerAction
+                  ? 'success'
+                  : 'neutral'
+          }
+        >
+          {integration.actionPending
+            ? integration.pendingActionType === 'CLICK'
+              ? '클릭 처리 중'
+              : '스크롤 처리 중'
+            : integration.actionError
+              ? '동작 오류'
+              : '동작 상태'}
+        </StatusBadge>
+        <p className="mt-2">
+          {integration.actionError ?? integration.actionMessage}
+        </p>
+      </div>
     </main>
   );
 }

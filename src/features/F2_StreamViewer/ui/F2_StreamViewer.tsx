@@ -3,11 +3,18 @@ import {
   useEffect,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react';
 
 import { useCanvasDisplaySize } from '@/features/F2_StreamViewer/hooks/useCanvasDisplaySize';
 import type { ViewerSize } from '@/features/F2_StreamViewer/model/coordinate-transform';
+import {
+  createViewerClickAction,
+  createViewerScrollAction,
+  type ViewerInteractionFrameMetadata,
+  type ViewerRemoteAction
+} from '@/features/F2_StreamViewer/model/viewer-interaction';
 import {
   VIEWER_FRAME_ASPECT_RATIO,
   VIEWER_FRAME_HEIGHT,
@@ -24,6 +31,9 @@ import { Text } from '@/shared/ui/Text';
 export interface F2StreamViewerProps {
   frame?: ViewerFrame;
   renderOverlay?: (context: ViewerOverlayRenderContext) => ReactNode;
+  interactionDisabled?: boolean;
+  interactionBusy?: boolean;
+  onRemoteAction?: (action: ViewerRemoteAction) => void;
 }
 
 export interface ViewerOverlayRenderContext {
@@ -46,9 +56,37 @@ const STATUS_VARIANTS: Record<ViewerFrameStatus, StatusBadgeVariant> = {
   ERROR: 'danger'
 };
 
+function getInteractionFrame(
+  frame?: ViewerFrame
+): ViewerInteractionFrameMetadata | null {
+  if (!frame || typeof frame.metadata !== 'object' || frame.metadata === null) {
+    return null;
+  }
+
+  const metadata = frame.metadata as unknown as Record<string, unknown>;
+  if (
+    typeof metadata.frameId !== 'string' ||
+    !Number.isSafeInteger(metadata.sequence) ||
+    metadata.width !== VIEWER_FRAME_WIDTH ||
+    metadata.height !== VIEWER_FRAME_HEIGHT
+  ) {
+    return null;
+  }
+
+  return {
+    frameId: metadata.frameId,
+    sequence: Number(metadata.sequence),
+    width: VIEWER_FRAME_WIDTH,
+    height: VIEWER_FRAME_HEIGHT
+  };
+}
+
 export default function F2_StreamViewer({
   frame,
-  renderOverlay
+  renderOverlay,
+  interactionDisabled = false,
+  interactionBusy = false,
+  onRemoteAction
 }: F2StreamViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [canvasElement, setCanvasElement] =
@@ -161,6 +199,77 @@ export default function F2_StreamViewer({
         ? 'LOADING'
         : 'EMPTY';
 
+  const interactionFrame = getInteractionFrame(frame);
+  const canInteract =
+    overlayFrameStatus === 'READY' &&
+    interactionFrame !== null &&
+    !interactionDisabled &&
+    !interactionBusy &&
+    onRemoteAction !== undefined;
+
+  const handlePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+      if (
+        !canInteract ||
+        event.isPrimary === false ||
+        (typeof event.button === 'number' && event.button !== 0)
+      ) {
+        return;
+      }
+
+      const canvas = canvasRef.current;
+      if (!canvas || !interactionFrame) {
+        return;
+      }
+
+      const action = createViewerClickAction({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        displayBounds: canvas.getBoundingClientRect(),
+        frame: interactionFrame
+      });
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+      onRemoteAction?.(action);
+    },
+    [canInteract, interactionFrame, onRemoteAction]
+  );
+
+  useEffect(() => {
+    const canvas = canvasElement;
+    if (!canvas) {
+      return;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!canInteract || !interactionFrame) {
+        return;
+      }
+
+      const action = createViewerScrollAction({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        displayBounds: canvas.getBoundingClientRect(),
+        frame: interactionFrame,
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode
+      });
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+      onRemoteAction?.(action);
+    };
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [canInteract, canvasElement, interactionFrame, onRemoteAction]);
+
   return (
     <Panel
       id="viewer-remote-screen"
@@ -171,6 +280,7 @@ export default function F2_StreamViewer({
       <div
         className="w-full overflow-hidden rounded-xl border-2 border-border bg-slate-950"
         style={{ aspectRatio: VIEWER_FRAME_ASPECT_RATIO }}
+        aria-busy={interactionBusy}
       >
         <div className="relative h-full w-full">
           <canvas
@@ -181,6 +291,8 @@ export default function F2_StreamViewer({
             height={VIEWER_FRAME_HEIGHT}
             className="block h-auto w-full"
             role="img"
+            aria-disabled={!canInteract}
+            onPointerUp={handlePointerUp}
             aria-label="1280 × 720 원격 브라우저 화면"
           >
             Canvas를 지원하지 않는 환경에서는 원격 화면을 표시할 수 없습니다.

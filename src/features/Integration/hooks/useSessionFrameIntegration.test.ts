@@ -6,6 +6,7 @@ import type {
   SessionFrameTransport,
   SessionFrameTransportEvent
 } from '@/features/Integration/api/session-frame-transport';
+import type { BrowserActionResponse } from '@/features/Integration/api/browser-action-client';
 import type { BackendSession } from '@/features/Integration/api/session-rest-client';
 import { createFrameReconnectPolicy } from '@/features/Integration/model/frame-reconnect-policy';
 import { useSessionFrameIntegration } from './useSessionFrameIntegration';
@@ -32,6 +33,39 @@ const frame: SessionViewerFrame = {
   },
   imageSrc: 'blob:frame-1'
 };
+
+const nextFrame: SessionViewerFrame = {
+  ...frame,
+  metadata: {
+    ...frame.metadata,
+    frameId: 'frm-124',
+    sequence: 2
+  },
+  imageSrc: 'blob:frame-2'
+};
+
+const clickAction = {
+  type: 'CLICK' as const,
+  x: 640,
+  y: 360,
+  frameId: frame.metadata.frameId,
+  sequence: frame.metadata.sequence
+};
+
+function actionResponse(
+  overrides: Partial<BrowserActionResponse> = {}
+): BrowserActionResponse {
+  return {
+    requestId: 'viewer_request_1',
+    actionType: 'CLICK',
+    status: 'EXECUTED',
+    message: '처리되었습니다.',
+    frameId: nextFrame.metadata.frameId,
+    sequence: nextFrame.metadata.sequence,
+    frameAdvanced: true,
+    ...overrides
+  };
+}
 
 function createFakeTransport(order: string[] = []) {
   const listeners = new Set<(event: SessionFrameTransportEvent) => void>();
@@ -562,5 +596,261 @@ describe('useSessionFrameIntegration', () => {
 
     expect(transportFactory).toHaveBeenCalledTimes(1);
     expect(sessionClient.cancelSession).toHaveBeenCalledWith(session.sessionId);
+  });
+
+  it('FRAME_READY에서 좌표 CLICK을 정확히 한 번 보내고 matching frame에서 완료한다', async () => {
+    const transport = createFakeTransport();
+    const sessionClient = {
+      createSession: vi.fn().mockResolvedValue(session),
+      cancelSession: vi.fn().mockResolvedValue(session)
+    };
+    const response = deferred<BrowserActionResponse>();
+    const actionClient = { submitBrowserAction: vi.fn(() => response.promise) };
+    const { result } = renderHook(() =>
+      useSessionFrameIntegration({
+        sessionClient,
+        actionClient,
+        transportFactory: () => transport,
+        requestIdFactory: () => 'viewer_request_1'
+      })
+    );
+    await act(async () => result.current.start());
+    act(() => transport.emit({ type: 'CONNECTED' }));
+    act(() => transport.emit({ type: 'FRAME_RECEIVED', frame }));
+
+    let actionPromise!: Promise<void>;
+    act(() => {
+      actionPromise = result.current.submitViewerAction(clickAction);
+      void result.current.submitViewerAction(clickAction);
+    });
+
+    expect(actionClient.submitBrowserAction).toHaveBeenCalledTimes(1);
+    expect(actionClient.submitBrowserAction).toHaveBeenCalledWith({
+      sessionId: session.sessionId,
+      request: {
+        requestId: 'viewer_request_1',
+        actionType: 'CLICK',
+        source: 'USER_VIEWER',
+        x: 640,
+        y: 360,
+        expectedFrameId: frame.metadata.frameId,
+        expectedSequence: frame.metadata.sequence
+      },
+      signal: expect.any(AbortSignal)
+    });
+    expect(result.current.actionPending).toBe(true);
+    expect(result.current.canSubmitViewerAction).toBe(false);
+
+    await act(async () => {
+      response.resolve(actionResponse());
+      await actionPromise;
+    });
+    expect(result.current.actionPending).toBe(true);
+
+    act(() => transport.emit({ type: 'FRAME_RECEIVED', frame: nextFrame }));
+    expect(result.current.actionPending).toBe(false);
+    expect(result.current.canSubmitViewerAction).toBe(true);
+  });
+
+  it('matching frame이 HTTP 응답보다 먼저 도착해도 완료한다', async () => {
+    const transport = createFakeTransport();
+    const response = deferred<BrowserActionResponse>();
+    const actionClient = { submitBrowserAction: vi.fn(() => response.promise) };
+    const sessionClient = {
+      createSession: vi.fn().mockResolvedValue(session),
+      cancelSession: vi.fn().mockResolvedValue(session)
+    };
+    const { result } = renderHook(() =>
+      useSessionFrameIntegration({
+        sessionClient,
+        actionClient,
+        transportFactory: () => transport,
+        requestIdFactory: () => 'viewer_request_1'
+      })
+    );
+    await act(async () => result.current.start());
+    act(() => {
+      transport.emit({ type: 'CONNECTED' });
+      transport.emit({ type: 'FRAME_RECEIVED', frame });
+    });
+
+    let actionPromise!: Promise<void>;
+    act(() => {
+      actionPromise = result.current.submitViewerAction(clickAction);
+    });
+    act(() => transport.emit({ type: 'FRAME_RECEIVED', frame: nextFrame }));
+    await act(async () => {
+      response.resolve(actionResponse());
+      await actionPromise;
+    });
+
+    expect(result.current.actionPending).toBe(false);
+    expect(result.current.actionError).toBeNull();
+  });
+
+  it('non-advanced 보안 결과는 matching frame 없이 안전하게 해제한다', async () => {
+    const transport = createFakeTransport();
+    const sessionClient = {
+      createSession: vi.fn().mockResolvedValue(session),
+      cancelSession: vi.fn().mockResolvedValue(session)
+    };
+    const actionClient = {
+      submitBrowserAction: vi.fn().mockResolvedValue(
+        actionResponse({
+          status: 'SECURE_INPUT_REQUIRED',
+          frameId: frame.metadata.frameId,
+          sequence: frame.metadata.sequence,
+          frameAdvanced: false
+        })
+      )
+    };
+    const { result } = renderHook(() =>
+      useSessionFrameIntegration({
+        sessionClient,
+        actionClient,
+        transportFactory: () => transport,
+        requestIdFactory: () => 'viewer_request_1'
+      })
+    );
+    await act(async () => result.current.start());
+    act(() => transport.emit({ type: 'CONNECTED' }));
+    act(() => transport.emit({ type: 'FRAME_RECEIVED', frame }));
+    expect(result.current.canSubmitViewerAction).toBe(true);
+    await act(async () => result.current.submitViewerAction(clickAction));
+
+    expect(actionClient.submitBrowserAction).toHaveBeenCalledTimes(1);
+    expect(result.current.actionPending).toBe(false);
+    expect(result.current.actionMessage).toContain('보안 입력');
+    expect(actionClient.submitBrowserAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('reset은 진행 중 Action을 abort하고 상태를 초기화한다', async () => {
+    const transport = createFakeTransport();
+    const sessionClient = {
+      createSession: vi.fn().mockResolvedValue(session),
+      cancelSession: vi.fn().mockResolvedValue(session)
+    };
+    let actionSignal: AbortSignal | undefined;
+    const actionClient = {
+      submitBrowserAction: vi.fn(
+        ({ signal }: { signal?: AbortSignal }) => {
+          actionSignal = signal;
+          return new Promise<BrowserActionResponse>(() => undefined);
+        }
+      )
+    };
+    const { result } = renderHook(() =>
+      useSessionFrameIntegration({
+        sessionClient,
+        actionClient,
+        transportFactory: () => transport,
+        requestIdFactory: () => 'viewer_request_1'
+      })
+    );
+    await act(async () => result.current.start());
+    act(() => transport.emit({ type: 'CONNECTED' }));
+    act(() => transport.emit({ type: 'FRAME_RECEIVED', frame }));
+    expect(result.current.canSubmitViewerAction).toBe(true);
+    act(() => void result.current.submitViewerAction(clickAction));
+    expect(actionClient.submitBrowserAction).toHaveBeenCalledTimes(1);
+
+    await act(async () => result.current.reset());
+
+    expect(actionSignal?.aborted).toBe(true);
+    expect(result.current).toMatchObject({
+      phase: 'IDLE',
+      actionPending: false,
+      actionError: null
+    });
+  });
+
+  it('SCROLL Action을 공개 계약의 정확한 필드로 한 번 전송한다', async () => {
+    const transport = createFakeTransport();
+    const sessionClient = {
+      createSession: vi.fn().mockResolvedValue(session),
+      cancelSession: vi.fn().mockResolvedValue(session)
+    };
+    const actionClient = {
+      submitBrowserAction: vi.fn().mockResolvedValue(
+        actionResponse({
+          actionType: 'SCROLL',
+          frameId: frame.metadata.frameId,
+          sequence: frame.metadata.sequence,
+          frameAdvanced: false
+        })
+      )
+    };
+    const { result } = renderHook(() =>
+      useSessionFrameIntegration({
+        sessionClient,
+        actionClient,
+        transportFactory: () => transport,
+        requestIdFactory: () => 'viewer_scroll_1'
+      })
+    );
+    await act(async () => result.current.start());
+    act(() => {
+      transport.emit({ type: 'CONNECTED' });
+      transport.emit({ type: 'FRAME_RECEIVED', frame });
+    });
+
+    await act(async () =>
+      result.current.submitViewerAction({
+        type: 'SCROLL',
+        x: 320,
+        y: 180,
+        deltaX: -20,
+        deltaY: 120,
+        frameId: frame.metadata.frameId,
+        sequence: frame.metadata.sequence
+      })
+    );
+
+    expect(actionClient.submitBrowserAction).toHaveBeenCalledTimes(1);
+    expect(actionClient.submitBrowserAction).toHaveBeenCalledWith({
+      sessionId: session.sessionId,
+      request: {
+        requestId: 'viewer_scroll_1',
+        actionType: 'SCROLL',
+        source: 'USER_VIEWER',
+        x: 320,
+        y: 180,
+        deltaX: -20,
+        deltaY: 120,
+        expectedFrameId: frame.metadata.frameId,
+        expectedSequence: frame.metadata.sequence
+      },
+      signal: expect.any(AbortSignal)
+    });
+  });
+
+  it('현재 Viewer frame과 일치하지 않는 stale Action은 전송하지 않는다', async () => {
+    const transport = createFakeTransport();
+    const sessionClient = {
+      createSession: vi.fn().mockResolvedValue(session),
+      cancelSession: vi.fn().mockResolvedValue(session)
+    };
+    const actionClient = { submitBrowserAction: vi.fn() };
+    const { result } = renderHook(() =>
+      useSessionFrameIntegration({
+        sessionClient,
+        actionClient,
+        transportFactory: () => transport
+      })
+    );
+    await act(async () => result.current.start());
+    act(() => {
+      transport.emit({ type: 'CONNECTED' });
+      transport.emit({ type: 'FRAME_RECEIVED', frame });
+    });
+
+    await act(async () =>
+      result.current.submitViewerAction({
+        ...clickAction,
+        frameId: 'frm-stale'
+      })
+    );
+
+    expect(actionClient.submitBrowserAction).not.toHaveBeenCalled();
   });
 });
