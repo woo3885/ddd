@@ -3,6 +3,7 @@ package com.ddd.backend.frame;
 import com.ddd.backend.security.capture.CapturedBrowserFrame;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -13,19 +14,33 @@ import java.util.concurrent.ConcurrentHashMap;
 public class BrowserFrameStore {
 
     /*
-     * 세션마다:
+     * D22
+     *
+     * Session마다:
      *
      * - 현재 sequence
      * - 최신 Frame 1개
      *
      * 만 유지한다.
      *
-     * 과거 Frame을 계속 쌓지 않으므로
-     * 메모리가 무한 증가하지 않는다.
+     * 과거 Frame Queue를 만들지 않는다.
      */
     private final Map<String, SessionFrameState> states =
             new ConcurrentHashMap<>();
 
+    /*
+     * Frame을 publish한다.
+     *
+     * D22 Change Detection:
+     *
+     * 직전 Frame과 PNG byte[]가 완전히 같다면
+     *
+     * - 새 frameId 생성 X
+     * - sequence 증가 X
+     * - latest 교체 X
+     *
+     * 기존 최신 Payload를 그대로 반환한다.
+     */
     public BrowserFramePayload publish(
             String sessionId,
             CapturedBrowserFrame frame
@@ -71,9 +86,6 @@ public class BrowserFrameStore {
         return state.latest();
     }
 
-    /*
-     * 세션 cancel / failure / cleanup 때 호출한다.
-     */
     public void removeSession(
             String sessionId
     ) {
@@ -119,27 +131,40 @@ public class BrowserFrameStore {
                 + UUID.randomUUID();
     }
 
-    /*
-     * 하나의 Session 안에서는
-     * sequence 생성 + latest 교체를
-     * 하나의 synchronized 영역에서 수행한다.
-     *
-     * 따라서 같은 세션에서
-     *
-     * sequence 3
-     * sequence 2
-     *
-     * 순으로 뒤집히는 일을 막는다.
-     */
     private static final class SessionFrameState {
 
         private long sequence;
+
         private BrowserFramePayload latest;
+
+        /*
+         * Change Detection 비교용.
+         *
+         * Store 외부에는 노출하지 않는다.
+         */
+        private byte[] latestFrameBytes;
 
         private synchronized BrowserFramePayload publish(
                 String sessionId,
                 CapturedBrowserFrame frame
         ) {
+            byte[] incomingBytes =
+                    frame.bytes();
+
+            /*
+             * 동일 Frame이면
+             * 기존 sequence / frameId를 그대로 유지한다.
+             */
+            if (latest != null
+                    && latestFrameBytes != null
+                    && Arrays.equals(
+                    latestFrameBytes,
+                    incomingBytes
+            )) {
+
+                return latest;
+            }
+
             long nextSequence =
                     ++sequence;
 
@@ -159,16 +184,25 @@ public class BrowserFrameStore {
             BrowserFramePayload payload =
                     new BrowserFramePayload(
                             metadata,
-                            frame.bytes()
+                            incomingBytes
                     );
 
             latest =
                     payload;
 
+            /*
+             * 외부 Frame 배열 변경과 독립되도록
+             * 별도 복사본 유지.
+             */
+            latestFrameBytes =
+                    incomingBytes.clone();
+
             return payload;
         }
 
-        private synchronized Optional<BrowserFramePayload> latest() {
+        private synchronized Optional<BrowserFramePayload>
+        latest() {
+
             return Optional.ofNullable(
                     latest
             );
