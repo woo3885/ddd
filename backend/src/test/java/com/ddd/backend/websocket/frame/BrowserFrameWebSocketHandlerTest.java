@@ -505,4 +505,53 @@ class BrowserFrameWebSocketHandlerTest {
                 "image/png"
         );
     }
+
+    @Test
+    void 같은_sequence를_sendLatest해도_중복전송하지_않는다()
+            throws Exception {
+
+        String sessionId =
+                "session-duplicate";
+
+        browserFrameStore.publish(
+                sessionId,
+                createFrame()
+        );
+
+        WebSocketSession session =
+                createOpenSession(
+                        "ws-duplicate",
+                        sessionId,
+                        BrowserFrameWebSocketHandler
+                                .SUB_PROTOCOL
+                );
+
+        /*
+         * 연결 시 sequence=1
+         *
+         * metadata + binary
+         */
+        handler.afterConnectionEstablished(
+                session
+        );
+
+        /*
+         * Store에 새 Frame이 없는 상태에서
+         * 다시 sendLatest 호출.
+         */
+        handler.sendLatest(
+                sessionId
+        );
+
+        /*
+         * 동일 sequence이므로
+         * 최초 2개 메시지만 존재해야 한다.
+         */
+        verify(
+                session,
+                times(2)
+        ).sendMessage(
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
 }
