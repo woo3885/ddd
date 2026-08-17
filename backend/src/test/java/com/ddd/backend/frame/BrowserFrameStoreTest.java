@@ -337,4 +337,67 @@ class BrowserFrameStoreTest {
                 "image/png"
         );
     }
+
+    @Test
+    void 동일한_Frame을_publish하면_sequence가_증가하지_않는다() {
+        CapturedBrowserFrame frame =
+                createFrame(
+                        "same-frame"
+                );
+
+        BrowserFramePayload first =
+                store.publish(
+                        "session-1",
+                        frame
+                );
+
+        BrowserFramePayload second =
+                store.publish(
+                        "session-1",
+                        frame
+                );
+
+        assertThat(
+                second.metadata().sequence()
+        ).isEqualTo(
+                1L
+        );
+
+        assertThat(
+                second.metadata().frameId()
+        ).isEqualTo(
+                first.metadata().frameId()
+        );
+    }
+
+    @Test
+    void 동일_Frame_다음에_변경_Frame이_오면_sequence는_2가_된다() {
+        store.publish(
+                "session-1",
+                createFrame(
+                        "same"
+                )
+        );
+
+        store.publish(
+                "session-1",
+                createFrame(
+                        "same"
+                )
+        );
+
+        BrowserFramePayload changed =
+                store.publish(
+                        "session-1",
+                        createFrame(
+                                "changed"
+                        )
+                );
+
+        assertThat(
+                changed.metadata().sequence()
+        ).isEqualTo(
+                2L
+        );
+    }
 }
