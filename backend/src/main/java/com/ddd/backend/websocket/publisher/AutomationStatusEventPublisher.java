@@ -2,10 +2,19 @@ package com.ddd.backend.websocket.publisher;
 
 import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.websocket.dto.AutomationStatusEvent;
+import com.ddd.backend.websocket.dto.AutomationTarget;
+import com.ddd.backend.websocket.dto.AutomationUiEvent;
+import com.ddd.backend.websocket.dto.AutomationUiEventSnapshot;
+import com.ddd.backend.websocket.dto.AutomationUiEventType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 @Component
@@ -17,10 +26,16 @@ public final class AutomationStatusEventPublisher {
     public static final String DESTINATION_SUFFIX =
             "/status";
 
+    public static final String UI_DESTINATION_SUFFIX =
+            "/events";
+
     private static final Pattern SAFE_SESSION_ID =
             Pattern.compile("^[a-zA-Z0-9-]{1,100}$");
 
     private final SimpMessagingTemplate messagingTemplate;
+
+    private final ConcurrentMap<String, SessionUiState> uiStates =
+            new ConcurrentHashMap<>();
 
     public AutomationStatusEventPublisher(
             SimpMessagingTemplate messagingTemplate
@@ -58,6 +73,83 @@ public final class AutomationStatusEventPublisher {
                 destination(event.sessionId()),
                 event
         );
+
+        publishUiEvent(
+                event.sessionId(),
+                AutomationUiEventType.STATE,
+                event.status(),
+                event.message(),
+                requiresUserAction(event.status()),
+                null
+        );
+
+        if (event.message() != null) {
+            publishGuide(
+                    event.sessionId(),
+                    event.message(),
+                    requiresUserAction(event.status())
+            );
+        }
+
+        if (clearsTarget(event.status())) {
+            publishTargetClear(event.sessionId(), event.message());
+        }
+    }
+
+    public AutomationUiEvent publishGuide(
+            String sessionId,
+            String message,
+            boolean actionRequired
+    ) {
+        return publishUiEvent(sessionId, AutomationUiEventType.GUIDE,
+                null, message, actionRequired, null);
+    }
+
+    public AutomationUiEvent publishTarget(
+            String sessionId,
+            AutomationTarget target,
+            String message
+    ) {
+        Objects.requireNonNull(target, "Target은 필수입니다.");
+        return publishUiEvent(sessionId, AutomationUiEventType.TARGET,
+                null, message, false, target);
+    }
+
+    public AutomationUiEvent publishTargetClear(
+            String sessionId,
+            String message
+    ) {
+        return publishUiEvent(sessionId, AutomationUiEventType.TARGET_CLEAR,
+                null, message, false, null);
+    }
+
+    public Optional<AutomationUiEventSnapshot> latestSnapshot(String sessionId) {
+        destination(sessionId);
+        SessionUiState state = uiStates.get(sessionId);
+        return state == null ? Optional.empty() : Optional.of(state.snapshot(sessionId));
+    }
+
+    public void removeSession(String sessionId) {
+        if (sessionId != null) {
+            uiStates.remove(sessionId);
+        }
+    }
+
+    private AutomationUiEvent publishUiEvent(
+            String sessionId,
+            AutomationUiEventType type,
+            WorkflowStatus status,
+            String message,
+            boolean actionRequired,
+            AutomationTarget target
+    ) {
+        String uiDestination = uiDestination(sessionId);
+        SessionUiState state = uiStates.computeIfAbsent(
+                sessionId, ignored -> new SessionUiState());
+        AutomationUiEvent event = state.next(
+                sessionId, type, status, message, actionRequired, target);
+        messagingTemplate.convertAndSend(uiDestination, event);
+        return event;
     }
 
     String destination(
@@ -76,5 +168,57 @@ public final class AutomationStatusEventPublisher {
         return DESTINATION_PREFIX
                 + sessionId
                 + DESTINATION_SUFFIX;
+    }
+
+    String uiDestination(String sessionId) {
+        destination(sessionId);
+        return DESTINATION_PREFIX + sessionId + UI_DESTINATION_SUFFIX;
+    }
+
+    private boolean requiresUserAction(WorkflowStatus status) {
+        return status == WorkflowStatus.USER_DECISION_REQUIRED
+                || status == WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED
+                || status == WorkflowStatus.SECURE_INPUT_REQUIRED
+                || status == WorkflowStatus.FINAL_CONFIRMATION_REQUIRED
+                || status == WorkflowStatus.RISK_WARNING;
+    }
+
+    private boolean clearsTarget(WorkflowStatus status) {
+        return status == WorkflowStatus.AI_EXECUTING
+                || requiresUserAction(status)
+                || status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.ERROR
+                || status == WorkflowStatus.TERMINATED;
+    }
+
+    private static final class SessionUiState {
+        private final AtomicLong sequence = new AtomicLong();
+        private AutomationUiEvent state;
+        private AutomationUiEvent guide;
+        private AutomationUiEvent target;
+
+        private synchronized AutomationUiEvent next(
+                String sessionId, AutomationUiEventType type,
+                WorkflowStatus status, String message,
+                boolean actionRequired, AutomationTarget targetValue
+        ) {
+            long next = sequence.incrementAndGet();
+            AutomationUiEvent event = new AutomationUiEvent(
+                    "evt-" + UUID.randomUUID(), next, type, sessionId,
+                    status, message, actionRequired, targetValue, java.time.Instant.now());
+            switch (type) {
+                case STATE -> state = event;
+                case GUIDE -> guide = event;
+                case TARGET -> target = event;
+                case TARGET_CLEAR -> target = null;
+            }
+            return event;
+        }
+
+        private synchronized AutomationUiEventSnapshot snapshot(String sessionId) {
+            return new AutomationUiEventSnapshot(
+                    sessionId, sequence.get(), state, guide, target);
+        }
     }
 }

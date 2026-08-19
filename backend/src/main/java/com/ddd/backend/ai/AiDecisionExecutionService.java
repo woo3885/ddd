@@ -13,6 +13,8 @@ import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.service.BrowserActionExecutionService;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.websocket.publisher.AutomationTargetEventService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -45,13 +47,17 @@ public final class AiDecisionExecutionService {
     private final AutomationStatusEventPublisher
             statusEventPublisher;
 
+    private final AutomationTargetEventService targetEventService;
+
+    @Autowired
     public AiDecisionExecutionService(
             AutomationSessionRepository sessionRepository,
             SanitizedDomSnapshotService snapshotService,
             AiDecisionClient aiDecisionClient,
             AiDecisionResponseValidator responseValidator,
             BrowserActionExecutionService actionExecutionService,
-            AutomationStatusEventPublisher statusEventPublisher
+            AutomationStatusEventPublisher statusEventPublisher,
+            AutomationTargetEventService targetEventService
     ) {
         this.sessionRepository =
                 Objects.requireNonNull(
@@ -88,6 +94,28 @@ public final class AiDecisionExecutionService {
                         statusEventPublisher,
                         "AutomationStatusEventPublisher는 필수입니다."
                 );
+
+        this.targetEventService = Objects.requireNonNull(
+                targetEventService,
+                "AutomationTargetEventService는 필수입니다."
+        );
+    }
+
+    public AiDecisionExecutionService(
+            AutomationSessionRepository sessionRepository,
+            SanitizedDomSnapshotService snapshotService,
+            AiDecisionClient aiDecisionClient,
+            AiDecisionResponseValidator responseValidator,
+            BrowserActionExecutionService actionExecutionService,
+            AutomationStatusEventPublisher statusEventPublisher
+    ) {
+        this.sessionRepository = Objects.requireNonNull(sessionRepository);
+        this.snapshotService = Objects.requireNonNull(snapshotService);
+        this.aiDecisionClient = Objects.requireNonNull(aiDecisionClient);
+        this.responseValidator = Objects.requireNonNull(responseValidator);
+        this.actionExecutionService = Objects.requireNonNull(actionExecutionService);
+        this.statusEventPublisher = Objects.requireNonNull(statusEventPublisher);
+        this.targetEventService = null;
     }
 
     /*
@@ -186,8 +214,9 @@ public final class AiDecisionExecutionService {
 
         BrowserActionExecutionResult
                 executionResult =
-                executeValidatedResponse(
+                publishTargetThenExecute(
                         sessionId,
+                        snapshot,
                         validatedResponse
                 );
 
@@ -196,6 +225,28 @@ public final class AiDecisionExecutionService {
                 response,
                 executionResult
         );
+    }
+
+    private BrowserActionExecutionResult publishTargetThenExecute(
+            String sessionId,
+            SanitizedDomSnapshot snapshot,
+            AiDecisionResponse validatedResponse
+    ) {
+        if (targetEventService != null) {
+            try {
+                targetEventService.publishCurrentTarget(
+                        sessionId, snapshot, validatedResponse.elementId());
+            } catch (RuntimeException targetException) {
+                targetEventService.clearSafely(
+                        sessionId, "대상 좌표를 안전하게 확인할 수 없습니다.");
+            }
+        }
+
+        return
+                executeValidatedResponse(
+                        sessionId,
+                        validatedResponse
+                );
     }
 
     private BrowserActionExecutionResult

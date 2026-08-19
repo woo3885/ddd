@@ -2,6 +2,7 @@ package com.ddd.backend.websocket.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.messaging.simp.config.SimpleBrokerRegistration;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration;
 
@@ -35,12 +36,27 @@ class WebSocketConfigTest {
         verify(registry).addEndpoint(
                 WebSocketConfig.STOMP_ENDPOINT
         );
+
+        verify(registration).setAllowedOrigins(
+                "http://127.0.0.1:5173"
+        );
     }
 
     @Test
     void 애플리케이션과_브로커_주소를_설정한다() {
         MessageBrokerRegistry registry =
                 mock(MessageBrokerRegistry.class);
+
+        SimpleBrokerRegistration brokerRegistration =
+                mock(SimpleBrokerRegistration.class);
+
+        when(registry.enableSimpleBroker(
+                WebSocketConfig.BROKER_PREFIX
+        )).thenReturn(brokerRegistration);
+
+        when(brokerRegistration.setHeartbeatValue(
+                org.mockito.ArgumentMatchers.any(long[].class)
+        )).thenReturn(brokerRegistration);
 
         config.configureMessageBroker(registry);
 
@@ -53,5 +69,9 @@ class WebSocketConfigTest {
                 .enableSimpleBroker(
                         WebSocketConfig.BROKER_PREFIX
                 );
+
+        verify(brokerRegistration).setHeartbeatValue(
+                new long[]{10_000L, 10_000L}
+        );
     }
 }
