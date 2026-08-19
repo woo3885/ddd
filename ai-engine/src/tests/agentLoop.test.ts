@@ -121,7 +121,8 @@ const decisions:
 
   createResponse(
     "req-3",
-    "STOP",
+    // Agent Loop internal completion fixture; not a Production wire response.
+    "NONE",
     "COMPLETED",
   ),
 ];

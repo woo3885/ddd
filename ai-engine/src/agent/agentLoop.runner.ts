@@ -52,11 +52,25 @@ function isFinalConfirmationRequired(
 function isCompleted(
   response: StructuredAIResponse,
 ): boolean {
+  /*
+   * COMPLETED remains an internal result only. The current Backend wire
+   * contract has no normal-completion Action, so STOP must not be used as a
+   * substitute: Backend maps STOP to TERMINATED.
+   */
+  return response.status ===
+    "COMPLETED" &&
+    response.action !==
+      "STOP";
+}
+
+function isStopped(
+  response: StructuredAIResponse,
+): boolean {
   return (
-    response.status ===
-      "COMPLETED" ||
     response.action ===
-      "STOP"
+      "STOP" ||
+    response.status ===
+      "TERMINATED"
   );
 }
 
@@ -181,6 +195,25 @@ export async function runAgentLoop(
       return {
         status:
           "WAITING_FOR_FINAL_CONFIRMATION",
+
+        steps,
+
+        finalSnapshot:
+          currentSnapshot,
+
+        finalResponse:
+          response,
+      };
+    }
+
+    if (
+      isStopped(
+        response,
+      )
+    ) {
+      return {
+        status:
+          "STOPPED",
 
         steps,
 

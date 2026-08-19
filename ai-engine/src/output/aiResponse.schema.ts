@@ -1,3 +1,7 @@
+import {
+  PRODUCTION_STRUCTURED_ACTIONS,
+} from "./aiResponse.types.js";
+
 export const aiResponseSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://financial-guide.local/schemas/ai-response.json",
@@ -40,7 +44,6 @@ export const aiResponseSchema = {
         "FINAL_CONFIRMATION_REQUIRED",
         "ADDITIONAL_INFORMATION_REQUIRED",
         "RISK_WARNING",
-        "COMPLETED",
         "CANCELLED",
         "ERROR",
         "TERMINATED",
@@ -49,21 +52,7 @@ export const aiResponseSchema = {
 
     action: {
       type: "string",
-      enum: [
-        "NONE",
-        "CLICK",
-        "TYPE",
-        "SELECT",
-        "SCROLL",
-        "PRESS_KEY",
-        "GO_BACK",
-        "REFRESH",
-        "WAIT",
-        "WAIT_FOR_USER",
-        "PAUSE_FOR_SECURE_INPUT",
-        "REQUEST_FINAL_CONFIRMATION",
-        "STOP",
-      ],
+      enum: PRODUCTION_STRUCTURED_ACTIONS,
     },
 
     targetElementId: {
@@ -186,10 +175,6 @@ export const aiResponseSchema = {
           action: {
             enum: [
               "NONE",
-              "SCROLL",
-              "WAIT",
-              "GO_BACK",
-              "REFRESH",
               "STOP",
             ],
           },
@@ -208,6 +193,31 @@ export const aiResponseSchema = {
 
           inputValue: {
             type: "null",
+          },
+        },
+      },
+    },
+
+    /*
+     * STOP is termination only. It must never be interpreted as normal
+     * completion by the C Agent Loop.
+     */
+    {
+      if: {
+        properties: {
+          action: {
+            const: "STOP",
+          },
+        },
+        required: [
+          "action",
+        ],
+      },
+
+      then: {
+        properties: {
+          status: {
+            const: "TERMINATED",
           },
         },
       },

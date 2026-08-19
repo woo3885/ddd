@@ -10,6 +10,10 @@ import {
   serializeDomModelInput,
 } from "../dom/domSerializer.js";
 
+import {
+  PRODUCTION_STRUCTURED_ACTIONS,
+} from "../output/aiResponse.types.js";
+
 /**
  * UserGoal과 현재 DOM을 기반으로
  * 다음 행동 하나를 선택하도록 LLM Prompt를 생성합니다.
@@ -21,6 +25,9 @@ export function createNextActionPrompt(
 ): string {
   const domText =
     serializeDomModelInput(dom);
+
+  const productionActionList =
+    PRODUCTION_STRUCTURED_ACTIONS.join(" | ");
 
   return `
 당신은 금융 웹사이트 사용을 돕는 AI 내비게이터입니다.
@@ -138,16 +145,23 @@ SECURITY_POLICY:BLOCKED 요소에는
 - 비밀번호, OTP, 인증번호 등 SECURE_INPUT 요소에는 절대 사용하지 않습니다.
 - targetElementId와 inputValue를 함께 반환합니다.
 
-3. SCROLL
-- 현재 화면에서 적절한 요소를 찾지 못해
-  아래 또는 위 내용을 더 탐색해야 할 때 사용합니다.
-- targetElementId는 null입니다.
-- inputValue는 null입니다.
-
-4. NONE
+3. NONE
 - 안전하거나 적절한 행동을 결정할 수 없을 때 사용합니다.
 - targetElementId는 null입니다.
 - inputValue는 null입니다.
+
+4. STOP
+- 사용자가 자동화를 명시적으로 종료하거나 중단하려는 경우에만 사용합니다.
+- 정상 완료를 의미하지 않습니다.
+- status는 반드시 "TERMINATED"로 반환합니다.
+- targetElementId와 inputValue는 null입니다.
+
+## 정상 완료 제한
+
+- 현재 Backend wire 계약에는 정상 완료를 나타내는 Action이 없습니다.
+- Production 응답에서 status "COMPLETED"를 반환하지 마십시오.
+- NONE은 현재 실행할 안전한 Action이 없다는 의미이며 정상 완료가 아닙니다.
+- STOP을 정상 완료 대신 사용하지 마십시오. STOP은 종료 또는 중단 전용입니다.
 
 ## 출력 형식
 
@@ -157,7 +171,7 @@ JSON 이외의 설명이나 Markdown 코드 블록은 추가하지 마십시오.
 {
   "requestId": "${requestId}",
   "status": "AI_EXECUTING",
-  "action": "CLICK | TYPE | SCROLL | NONE | WAIT_FOR_USER | PAUSE_FOR_SECURE_INPUT | REQUEST_FINAL_CONFIRMATION",
+  "action": "${productionActionList}",
   "targetElementId": "요소 ID 또는 null",
   "inputValue": "입력값 또는 null",
   "message": "사용자에게 보여줄 짧고 쉬운 안내",

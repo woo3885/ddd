@@ -12,6 +12,12 @@ export type NextActionType =
   | "SCROLL"
   | "NONE";
 
+/*
+ * SCROLL is retained for internal target-search planning. The Production
+ * /api/ai/action structured-output path excludes it until the Backend pixel
+ * payload (scrollX/scrollY) has an agreed C-side mapping.
+ */
+
 export type ScrollDirection = "UP" | "DOWN";
 
 /**
