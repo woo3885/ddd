@@ -55,6 +55,8 @@ export interface UseSessionFrameIntegrationOptions {
   transportFactory?: TransportFactory;
   reconnectPolicy?: FrameReconnectPolicy;
   requestIdFactory?: () => string;
+  /** App이 정확히 한 번 생성한 production session을 재사용한다. */
+  existingSession?: BackendSession;
 }
 
 function createViewerActionRequestId(): string {
@@ -594,6 +596,45 @@ export function useSessionFrameIntegration(
     cancelPendingAction,
     cancelSessionBestEffort,
     clearScheduledRetry,
+    releaseConnection
+  ]);
+
+  useEffect(() => {
+    const session = options.existingSession;
+    if (!session || runningRef.current) return;
+
+    clearScheduledRetry();
+    releaseConnection();
+    cancelPendingAction();
+    mountedRef.current = true;
+    runningRef.current = true;
+    recoveryAttemptRef.current = 0;
+    recoveryPendingRef.current = false;
+    canRetryManuallyRef.current = false;
+    manualRetryInFlightRef.current = false;
+    lastAcceptedSequenceRef.current = 0;
+    latestFrameRef.current = undefined;
+    sessionRef.current = session;
+    const runId = ++runIdRef.current;
+
+    dispatch({ type: 'START_REQUESTED', runId });
+    dispatch({ type: 'SESSION_CREATED', runId });
+
+    try {
+      connectFrameTransportRef.current(runId);
+    } catch {
+      runningRef.current = false;
+      releaseConnection();
+      dispatch({
+        type: 'SAFE_ERROR',
+        runId,
+        message: '실제 데모 화면 연결을 시작하지 못했습니다.'
+      });
+    }
+  }, [
+    cancelPendingAction,
+    clearScheduledRetry,
+    options.existingSession,
     releaseConnection
   ]);
 

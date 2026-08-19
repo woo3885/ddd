@@ -11,9 +11,12 @@ import {
 import {
   calculateTargetPointerPosition
 } from '@/features/F3_SmartOverlay/model/target-highlight';
-import type { TargetHighlightEvent } from '@/types/websocket-events';
+import type { ViewerRect } from '@/features/F2_StreamViewer/model/coordinate-transform';
 
-export type TargetHighlightTarget = TargetHighlightEvent['target'];
+export interface TargetHighlightTarget extends ViewerRect {
+  elementId: string;
+  label?: string;
+}
 
 export interface F3SmartOverlayProps {
   target: TargetHighlightTarget | null;
@@ -99,9 +102,12 @@ export default function F3_SmartOverlay({
     : null;
 
   const normalizedMessage = message.trim();
+  const normalizedLabel = target.label?.trim();
   const statusMessage = normalizedMessage
-    ? `${normalizedMessage} 대상 요소: ${target.elementId}`
-    : `대상 요소를 안내하고 있습니다. 대상 요소: ${target.elementId}`;
+    ? normalizedMessage
+    : normalizedLabel
+      ? `${normalizedLabel} 위치를 안내하고 있습니다.`
+      : '현재 화면의 안내 대상을 표시하고 있습니다.';
 
   return (
     <div
@@ -204,8 +210,6 @@ export default function F3_SmartOverlay({
         id="status-target-highlight"
         data-testid="status-target-highlight"
         className="sr-only"
-        role="status"
-        aria-live="polite"
       >
         {statusMessage}
       </span>

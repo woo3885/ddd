@@ -8,6 +8,7 @@ const SERVER_SIZE = { width: 1280, height: 720 };
 const DISPLAY_SIZE = { width: 1280, height: 720 };
 const TARGET = {
   elementId: 'el-d9-target',
+  label: '정기예금 메뉴',
   x: 420,
   y: 310,
   width: 180,
@@ -203,18 +204,18 @@ describe('F3_SmartOverlay', () => {
       />
     );
 
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '변경된 대상을 확인해 주세요. 대상 요소: el-d9-target'
-    );
-    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+    const status = screen.getByTestId('status-target-highlight');
+    expect(status).toHaveTextContent('변경된 대상을 확인해 주세요.');
+    expect(status).not.toHaveAttribute('aria-live');
+    expect(status).not.toHaveTextContent('el-d9-target');
   });
 
-  it('빈 message에는 elementId를 포함한 안전한 기본 문구를 표시한다', () => {
+  it('빈 message에는 안전한 label을 사용하고 elementId를 노출하지 않는다', () => {
     renderOverlay({ message: '   ' });
 
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '대상 요소를 안내하고 있습니다. 대상 요소: el-d9-target'
-    );
+    const status = screen.getByTestId('status-target-highlight');
+    expect(status).toHaveTextContent('정기예금 메뉴 위치를 안내하고 있습니다.');
+    expect(status).not.toHaveTextContent('el-d9-target');
   });
 
   it('border와 pointer를 접근성 트리에서 숨긴다', () => {
@@ -454,7 +455,7 @@ describe('F3_SmartOverlay', () => {
     const magnifier = screen.getByTestId('magnifier-target-highlight');
     expect(magnifier).toHaveAttribute('aria-hidden', 'true');
     expect(magnifier).not.toHaveAttribute('tabindex');
-    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.queryAllByRole('status')).toHaveLength(0);
   });
 
   it('target 제거 시 dim과 magnifier를 포함한 overlay 전체를 제거한다', () => {
