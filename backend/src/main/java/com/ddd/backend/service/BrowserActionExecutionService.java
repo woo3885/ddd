@@ -424,7 +424,7 @@ public final class BrowserActionExecutionService {
                 return;
             }
 
-            browserFrameStore.publish(
+            browserFrameStore.publishAfterAction(
                     sessionId,
                     captureAttempt.frame()
             );

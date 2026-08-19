@@ -176,7 +176,7 @@ class BrowserActionExecutionServiceTest {
          */
         verify(
                 browserFrameStore
-        ).publish(
+        ).publishAfterAction(
                 session.getSessionId(),
                 capturedFrame
         );
@@ -184,6 +184,76 @@ class BrowserActionExecutionServiceTest {
         /*
          * 연결된 Viewer로 최신 Frame 전송.
          */
+        verify(
+                frameWebSocketHandler
+        ).sendLatest(
+                session.getSessionId()
+        );
+    }
+
+    @Test
+    void Action_성공후_동일_PNG도_Frame_sequence를_증가시킨다() {
+        AutomationSession session =
+                createSession();
+
+        BrowserAction action =
+                createClickAction(
+                        "#btn-next"
+                );
+
+        when(
+                actionExecutor.execute(
+                        session.getSessionId(),
+                        action
+                )
+        ).thenReturn(
+                BrowserActionExecutionResult.executed(
+                        BrowserActionType.CLICK
+                )
+        );
+
+        when(
+                browserFrameCaptureService.capture(
+                        session.getSessionId()
+                )
+        ).thenReturn(
+                FrameCaptureAttempt.captured(
+                        capturedFrame
+                )
+        );
+
+        BrowserFrameStore realFrameStore =
+                new BrowserFrameStore();
+
+        realFrameStore.publish(
+                session.getSessionId(),
+                capturedFrame
+        );
+
+        BrowserActionExecutionService integratedService =
+                new BrowserActionExecutionService(
+                        actionExecutor,
+                        new BrowserActionStatusEventMapper(),
+                        sessionRepository,
+                        statusEventPublisher,
+                        browserFrameCaptureService,
+                        realFrameStore,
+                        frameWebSocketHandler
+                );
+
+        integratedService.execute(
+                session.getSessionId(),
+                action
+        );
+
+        assertThat(
+                realFrameStore.latest(
+                        session.getSessionId()
+                ).orElseThrow().metadata().sequence()
+        ).isEqualTo(
+                2L
+        );
+
         verify(
                 frameWebSocketHandler
         ).sendLatest(
@@ -436,7 +506,7 @@ class BrowserActionExecutionServiceTest {
         verify(
                 browserFrameStore,
                 never()
-        ).publish(
+        ).publishAfterAction(
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.any()
         );
@@ -508,7 +578,7 @@ class BrowserActionExecutionServiceTest {
         verify(
                 browserFrameStore,
                 never()
-        ).publish(
+        ).publishAfterAction(
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.any()
         );
@@ -593,7 +663,7 @@ class BrowserActionExecutionServiceTest {
          */
         verify(
                 browserFrameStore
-        ).publish(
+        ).publishAfterAction(
                 session.getSessionId(),
                 capturedFrame
         );
