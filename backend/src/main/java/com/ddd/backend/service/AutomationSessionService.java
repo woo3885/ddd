@@ -453,6 +453,8 @@ public class AutomationSessionService {
                 "자동화 세션이 취소되었습니다."
         );
 
+        statusEventPublisher.removeSession(sessionId);
+
         return savedSession;
     }
 
@@ -519,6 +521,12 @@ public class AutomationSessionService {
              * Frame cleanup 실패 역시
              * 원래 예외를 덮어쓰지 않는다.
              */
+        }
+
+        try {
+            statusEventPublisher.removeSession(sessionId);
+        } catch (RuntimeException ignored) {
+            // UI event cleanup failure must not hide the original failure.
         }
     }
 

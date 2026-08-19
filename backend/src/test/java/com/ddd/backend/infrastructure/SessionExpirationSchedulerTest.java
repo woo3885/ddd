@@ -4,6 +4,7 @@ import com.ddd.backend.automation.session.BrowserSessionManager;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.frame.BrowserFrameStore;
+import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -355,5 +356,30 @@ class SessionExpirationSchedulerTest {
                 sessionRepository,
                 browserFrameStore
         );
+    }
+
+    @Test
+    void Redis에서_만료되면_UI_Event_상태도_정리한다() {
+        String sessionId = "expired-ui-session";
+        AutomationStatusEventPublisher eventPublisher =
+                mock(AutomationStatusEventPublisher.class);
+        SessionExpirationScheduler schedulerWithUiEvents =
+                new SessionExpirationScheduler(
+                        sessionRepository,
+                        browserSessionManager,
+                        browserFrameStore,
+                        null,
+                        null,
+                        eventPublisher
+                );
+
+        when(browserSessionManager.activeSessionIds()).thenReturn(Set.of(sessionId));
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
+        when(browserSessionManager.exists(sessionId)).thenReturn(false);
+        when(browserFrameStore.containsSession(sessionId)).thenReturn(false);
+
+        schedulerWithUiEvents.cleanupExpiredSessions();
+
+        verify(eventPublisher).removeSession(sessionId);
     }
 }

@@ -50,6 +50,19 @@ class AutomationStatusEventTest {
     }
 
     @Test
+    void 상태_메시지의_민감정보를_masking한다() {
+        AutomationStatusEvent event = new AutomationStatusEvent(
+                "session-001",
+                WorkflowStatus.SECURE_INPUT_REQUIRED,
+                "인증번호 123456을 입력하세요",
+                Instant.now()
+        );
+
+        assertThat(event.message()).doesNotContain("123456");
+        assertThat(event.message()).contains("[SECURE_CODE]");
+    }
+
+    @Test
     void 세션_ID가_비어_있으면_생성할_수_없다() {
         assertThatThrownBy(
                 () -> new AutomationStatusEvent(

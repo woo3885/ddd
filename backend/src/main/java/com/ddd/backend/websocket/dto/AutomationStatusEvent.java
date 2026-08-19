@@ -1,6 +1,7 @@
 package com.ddd.backend.websocket.dto;
 
 import com.ddd.backend.domain.session.WorkflowStatus;
+import com.ddd.backend.security.SensitiveDataMasker;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -52,6 +53,7 @@ public record AutomationStatusEvent(
             return null;
         }
 
-        return message.trim();
+        String masked = SensitiveDataMasker.maskFreeText(message.trim());
+        return masked.substring(0, Math.min(masked.length(), 500));
     }
 }
