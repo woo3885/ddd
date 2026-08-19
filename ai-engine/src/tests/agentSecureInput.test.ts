@@ -98,6 +98,7 @@ const secureInputResponse:
 
 const completedResponse:
   StructuredAIResponse = {
+  /* Agent Loop internal completion fixture; not a Production wire response. */
   requestId:
     "req-after-secure-input",
 
@@ -105,7 +106,7 @@ const completedResponse:
     "COMPLETED",
 
   action:
-    "STOP",
+    "NONE",
 
   targetElementId:
     null,

@@ -2,6 +2,10 @@ import type {
   StructuredAIResponse,
 } from "../output/aiResponse.types.js";
 
+import {
+  isProductionStructuredAction,
+} from "../output/aiResponse.types.js";
+
 export interface BackendAiDecisionResponse {
   actionType: string;
 
@@ -19,6 +23,12 @@ export interface BackendAiDecisionResponse {
 export function adaptStructuredResponseToBackend(
   response: StructuredAIResponse,
 ): BackendAiDecisionResponse {
+  if (!isProductionStructuredAction(response.action)) {
+    throw new Error(
+      `[AI Engine] Production에서 지원하지 않는 Action입니다: ${response.action}`,
+    );
+  }
+
   return {
     actionType: response.action,
 

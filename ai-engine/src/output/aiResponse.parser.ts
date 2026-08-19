@@ -41,3 +41,19 @@ export function parseStructuredAIResponse(
 
   return parsed;
 }
+
+export function bindTrustedRequestId(
+  response: StructuredAIResponse,
+  trustedRequestId: string,
+): StructuredAIResponse {
+  if (!trustedRequestId.trim()) {
+    throw new Error(
+      "[AI Engine] C requestId는 비어 있을 수 없습니다.",
+    );
+  }
+
+  return {
+    ...response,
+    requestId: trustedRequestId,
+  };
+}
