@@ -5,6 +5,7 @@ import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.service.action.PublicBrowserActionSessionState;
 import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
+import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +55,8 @@ public class SessionExpirationScheduler {
     private final PublicBrowserActionSessionState
             publicBrowserActionSessionState;
 
+    private final AutomationStatusEventPublisher uiEventPublisher;
+
     /*
      * 실제 Spring 실행용 생성자.
      */
@@ -64,7 +67,8 @@ public class SessionExpirationScheduler {
             BrowserFrameStore browserFrameStore,
             BrowserFrameWebSocketHandler frameWebSocketHandler,
             PublicBrowserActionSessionState
-                    publicBrowserActionSessionState
+                    publicBrowserActionSessionState,
+            AutomationStatusEventPublisher uiEventPublisher
     ) {
         this.sessionRepository =
                 sessionRepository;
@@ -80,6 +84,8 @@ public class SessionExpirationScheduler {
 
         this.publicBrowserActionSessionState =
                 publicBrowserActionSessionState;
+
+        this.uiEventPublisher = uiEventPublisher;
     }
 
     /*
@@ -96,6 +102,7 @@ public class SessionExpirationScheduler {
                 browserSessionManager,
                 browserFrameStore,
                 frameWebSocketHandler,
+                null,
                 null
         );
     }
@@ -112,6 +119,7 @@ public class SessionExpirationScheduler {
                 sessionRepository,
                 browserSessionManager,
                 browserFrameStore,
+                null,
                 null,
                 null
         );
@@ -301,6 +309,17 @@ public class SessionExpirationScheduler {
                     exception
                             .getClass()
                             .getSimpleName()
+            );
+        }
+
+        try {
+            if (uiEventPublisher != null) {
+                uiEventPublisher.removeSession(sessionId);
+            }
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "만료 UI Event 상태 정리 실패. exceptionType={}",
+                    exception.getClass().getSimpleName()
             );
         }
     }
