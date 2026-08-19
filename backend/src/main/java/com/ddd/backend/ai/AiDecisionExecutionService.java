@@ -14,6 +14,7 @@ import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.service.BrowserActionExecutionService;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.websocket.publisher.AutomationTargetEventService;
+import com.ddd.backend.service.decision.UserDecisionPromptService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,7 @@ public final class AiDecisionExecutionService {
             statusEventPublisher;
 
     private final AutomationTargetEventService targetEventService;
+    private final UserDecisionPromptService userDecisionPromptService;
 
     @Autowired
     public AiDecisionExecutionService(
@@ -57,7 +59,8 @@ public final class AiDecisionExecutionService {
             AiDecisionResponseValidator responseValidator,
             BrowserActionExecutionService actionExecutionService,
             AutomationStatusEventPublisher statusEventPublisher,
-            AutomationTargetEventService targetEventService
+            AutomationTargetEventService targetEventService,
+            UserDecisionPromptService userDecisionPromptService
     ) {
         this.sessionRepository =
                 Objects.requireNonNull(
@@ -99,6 +102,10 @@ public final class AiDecisionExecutionService {
                 targetEventService,
                 "AutomationTargetEventService는 필수입니다."
         );
+        this.userDecisionPromptService = Objects.requireNonNull(
+                userDecisionPromptService,
+                "UserDecisionPromptService는 필수입니다."
+        );
     }
 
     public AiDecisionExecutionService(
@@ -116,6 +123,7 @@ public final class AiDecisionExecutionService {
         this.actionExecutionService = Objects.requireNonNull(actionExecutionService);
         this.statusEventPublisher = Objects.requireNonNull(statusEventPublisher);
         this.targetEventService = null;
+        this.userDecisionPromptService = null;
     }
 
     /*
@@ -315,17 +323,15 @@ public final class AiDecisionExecutionService {
 
         switch (exception.code()) {
 
-            case USER_DECISION_REQUIRED ->
-
-                    result =
-                            actionExecutionService
-                                    .execute(
-                                            sessionId,
-                                            controlAction(
-                                                    BrowserActionType
-                                                            .WAIT_FOR_USER
-                                            )
-                                    );
+            case USER_DECISION_REQUIRED -> {
+                result = actionExecutionService.execute(
+                        sessionId,
+                        controlAction(BrowserActionType.WAIT_FOR_USER)
+                );
+                if (userDecisionPromptService != null) {
+                    userDecisionPromptService.publish(sessionId, snapshot);
+                }
+            }
 
             case SECURE_INPUT_REQUIRED ->
 

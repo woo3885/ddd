@@ -101,8 +101,7 @@ public class AutomationSessionController {
         AutomationSession session =
                 userDecisionService.submitDecision(
                         sessionId,
-                        request.decisionType(),
-                        request.selectedOptionIds()
+                        request
                 );
 
         return ApiResponse.success(

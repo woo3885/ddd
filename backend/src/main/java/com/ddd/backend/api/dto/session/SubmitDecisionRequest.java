@@ -11,6 +11,14 @@ import java.util.List;
 
 public record SubmitDecisionRequest(
 
+        @NotBlank(message = "requestId는 필수입니다.")
+        @Size(max = 100, message = "requestId는 100자를 초과할 수 없습니다.")
+        String requestId,
+
+        @NotBlank(message = "decisionId는 필수입니다.")
+        @Size(max = 100, message = "decisionId는 100자를 초과할 수 없습니다.")
+        String decisionId,
+
         @NotNull(
                 message = "사용자 결정 유형은 필수입니다."
         )
@@ -33,10 +41,23 @@ public record SubmitDecisionRequest(
                         message = "선택 항목 ID는 100자를 초과할 수 없습니다."
                 )
                         String
-                > selectedOptionIds
+                > selectedOptionIds,
+
+        @NotBlank(message = "expectedFrameId는 필수입니다.")
+        @Size(max = 100, message = "expectedFrameId는 100자를 초과할 수 없습니다.")
+        String expectedFrameId,
+
+        @NotNull(message = "expectedSequence는 필수입니다.")
+        @jakarta.validation.constraints.Positive(
+                message = "expectedSequence는 1 이상이어야 합니다."
+        )
+        Long expectedSequence
 ) {
 
     public SubmitDecisionRequest {
+        requestId = normalize(requestId);
+        decisionId = normalize(decisionId);
+        expectedFrameId = normalize(expectedFrameId);
         if (selectedOptionIds != null) {
             List<String> normalizedOptionIds =
                     new ArrayList<>(
@@ -56,5 +77,23 @@ public record SubmitDecisionRequest(
                             normalizedOptionIds
                     );
         }
+    }
+
+    public SubmitDecisionRequest(
+            DecisionType decisionType,
+            List<String> selectedOptionIds
+    ) {
+        this(
+                "legacy-request",
+                "legacy-decision",
+                decisionType,
+                selectedOptionIds,
+                "legacy-frame",
+                1L
+        );
+    }
+
+    private static String normalize(String value) {
+        return value == null ? null : value.trim();
     }
 }

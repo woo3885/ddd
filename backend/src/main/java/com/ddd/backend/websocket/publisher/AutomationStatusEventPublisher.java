@@ -3,6 +3,7 @@ package com.ddd.backend.websocket.publisher;
 import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.websocket.dto.AutomationStatusEvent;
 import com.ddd.backend.websocket.dto.AutomationTarget;
+import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
 import com.ddd.backend.websocket.dto.AutomationUiEvent;
 import com.ddd.backend.websocket.dto.AutomationUiEventSnapshot;
 import com.ddd.backend.websocket.dto.AutomationUiEventType;
@@ -80,6 +81,7 @@ public final class AutomationStatusEventPublisher {
                 event.status(),
                 event.message(),
                 requiresUserAction(event.status()),
+                null,
                 null
         );
 
@@ -102,7 +104,7 @@ public final class AutomationStatusEventPublisher {
             boolean actionRequired
     ) {
         return publishUiEvent(sessionId, AutomationUiEventType.GUIDE,
-                null, message, actionRequired, null);
+                null, message, actionRequired, null, null);
     }
 
     public AutomationUiEvent publishTarget(
@@ -112,7 +114,7 @@ public final class AutomationStatusEventPublisher {
     ) {
         Objects.requireNonNull(target, "Target은 필수입니다.");
         return publishUiEvent(sessionId, AutomationUiEventType.TARGET,
-                null, message, false, target);
+                null, message, false, target, null);
     }
 
     public AutomationUiEvent publishTargetClear(
@@ -120,7 +122,29 @@ public final class AutomationStatusEventPublisher {
             String message
     ) {
         return publishUiEvent(sessionId, AutomationUiEventType.TARGET_CLEAR,
-                null, message, false, null);
+                null, message, false, null, null);
+    }
+
+    public AutomationUiEvent publishDecisionRequired(
+            String sessionId,
+            AutomationDecisionPrompt decision,
+            String message
+    ) {
+        Objects.requireNonNull(decision, "Decision Prompt는 필수입니다.");
+        return publishUiEvent(
+                sessionId, AutomationUiEventType.DECISION_REQUIRED,
+                null, message, true, null, decision
+        );
+    }
+
+    public AutomationUiEvent publishDecisionResolved(
+            String sessionId,
+            String message
+    ) {
+        return publishUiEvent(
+                sessionId, AutomationUiEventType.DECISION_RESOLVED,
+                null, message, false, null, null
+        );
     }
 
     public Optional<AutomationUiEventSnapshot> latestSnapshot(String sessionId) {
@@ -141,13 +165,14 @@ public final class AutomationStatusEventPublisher {
             WorkflowStatus status,
             String message,
             boolean actionRequired,
-            AutomationTarget target
+            AutomationTarget target,
+            AutomationDecisionPrompt decision
     ) {
         String uiDestination = uiDestination(sessionId);
         SessionUiState state = uiStates.computeIfAbsent(
                 sessionId, ignored -> new SessionUiState());
         AutomationUiEvent event = state.next(
-                sessionId, type, status, message, actionRequired, target);
+                sessionId, type, status, message, actionRequired, target, decision);
         messagingTemplate.convertAndSend(uiDestination, event);
         return event;
     }
@@ -197,28 +222,33 @@ public final class AutomationStatusEventPublisher {
         private AutomationUiEvent state;
         private AutomationUiEvent guide;
         private AutomationUiEvent target;
+        private AutomationUiEvent decision;
 
         private synchronized AutomationUiEvent next(
                 String sessionId, AutomationUiEventType type,
                 WorkflowStatus status, String message,
-                boolean actionRequired, AutomationTarget targetValue
+                boolean actionRequired, AutomationTarget targetValue,
+                AutomationDecisionPrompt decisionValue
         ) {
             long next = sequence.incrementAndGet();
             AutomationUiEvent event = new AutomationUiEvent(
                     "evt-" + UUID.randomUUID(), next, type, sessionId,
-                    status, message, actionRequired, targetValue, java.time.Instant.now());
+                    status, message, actionRequired, targetValue, decisionValue,
+                    java.time.Instant.now());
             switch (type) {
                 case STATE -> state = event;
                 case GUIDE -> guide = event;
                 case TARGET -> target = event;
                 case TARGET_CLEAR -> target = null;
+                case DECISION_REQUIRED -> decision = event;
+                case DECISION_RESOLVED -> decision = null;
             }
             return event;
         }
 
         private synchronized AutomationUiEventSnapshot snapshot(String sessionId) {
             return new AutomationUiEventSnapshot(
-                    sessionId, sequence.get(), state, guide, target);
+                    sessionId, sequence.get(), state, guide, target, decision);
         }
     }
 }

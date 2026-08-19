@@ -8,6 +8,12 @@ import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.infrastructure.session.InMemoryAutomationSessionRepository;
 import com.ddd.backend.service.validation.UserDecisionValidator;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
+import com.ddd.backend.frame.BrowserFrameStore;
+import com.ddd.backend.security.capture.CapturedBrowserFrame;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
+import com.ddd.backend.websocket.dto.AutomationDecisionOption;
+import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -73,6 +79,45 @@ class UserDecisionServiceTest {
                         WorkflowStatus.AI_EXECUTING,
                         "사용자 선택이 제출되었습니다."
                 );
+    }
+
+    @Test
+    void 발급된_Decision과_현재_Frame이_일치할_때만_재개한다() {
+        AutomationSession session = createSession(
+                WorkflowStatus.USER_DECISION_REQUIRED);
+        BrowserFrameStore frameStore = new BrowserFrameStore();
+        var frame = frameStore.publish(
+                session.getSessionId(),
+                new CapturedBrowserFrame(
+                        new byte[]{1, 2, 3}, 1280, 720, "image/png"));
+        UserDecisionSessionState decisionState = new UserDecisionSessionState();
+        decisionState.register(
+                session.getSessionId(),
+                new AutomationDecisionPrompt(
+                        "req-001", "dec-001", DecisionType.PRODUCT_SELECTION,
+                        List.of(new AutomationDecisionOption("product-001", "정기예금")),
+                        frame.metadata().frameId(), frame.metadata().sequence()));
+
+        UserDecisionService securedService = new UserDecisionService(
+                sessionRepository,
+                new UserDecisionValidator(),
+                browserSessionManager,
+                statusEventPublisher,
+                decisionState,
+                frameStore);
+        SubmitDecisionRequest request = new SubmitDecisionRequest(
+                "req-001", "dec-001", DecisionType.PRODUCT_SELECTION,
+                List.of("product-001"),
+                frame.metadata().frameId(), frame.metadata().sequence());
+
+        AutomationSession result = securedService.submitDecision(
+                session.getSessionId(), request);
+
+        assertThat(result.getStatus()).isEqualTo(WorkflowStatus.AI_EXECUTING);
+        assertThatThrownBy(() -> securedService.submitDecision(
+                session.getSessionId(), request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("이미 처리된 사용자 결정 요청입니다.");
     }
 
     @Test

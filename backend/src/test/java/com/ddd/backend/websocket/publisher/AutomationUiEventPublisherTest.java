@@ -120,4 +120,26 @@ class AutomationUiEventPublisherTest {
                     .isNull();
         }
     }
+
+    @Test
+    void Decision_required와_resolved를_snapshot에_반영한다() {
+        com.ddd.backend.websocket.dto.AutomationDecisionPrompt prompt =
+                new com.ddd.backend.websocket.dto.AutomationDecisionPrompt(
+                        "req-001", "dec-001",
+                        com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
+                        java.util.List.of(
+                                new com.ddd.backend.websocket.dto.AutomationDecisionOption(
+                                        "product-001", "정기예금")),
+                        "frm-001", 1L);
+
+        publisher.publishDecisionRequired(
+                "session-001", prompt, "상품을 선택하세요.");
+        assertThat(publisher.latestSnapshot("session-001")
+                .orElseThrow().decision().decision()).isEqualTo(prompt);
+
+        publisher.publishDecisionResolved(
+                "session-001", "선택이 처리되었습니다.");
+        assertThat(publisher.latestSnapshot("session-001")
+                .orElseThrow().decision()).isNull();
+    }
 }
