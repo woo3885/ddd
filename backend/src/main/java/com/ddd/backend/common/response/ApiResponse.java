@@ -1,11 +1,8 @@
 package com.ddd.backend.common.response;
 
-import com.ddd.backend.common.exception.ErrorCode;
-
 public record ApiResponse<T>(
         boolean success,
         T data,
-        String errorCode,
         String message
 ) {
 
@@ -13,7 +10,6 @@ public record ApiResponse<T>(
         return new ApiResponse<>(
                 true,
                 data,
-                null,
                 null
         );
     }
@@ -22,28 +18,14 @@ public record ApiResponse<T>(
         return new ApiResponse<>(
                 true,
                 data,
-                null,
                 message
         );
     }
 
-    public static <T> ApiResponse<T> failure(ErrorCode errorCode) {
+    public static <T> ApiResponse<T> failure(String message) {
         return new ApiResponse<>(
                 false,
                 null,
-                errorCode.getCode(),
-                errorCode.getMessage()
-        );
-    }
-
-    public static <T> ApiResponse<T> failure(
-            ErrorCode errorCode,
-            String message
-    ) {
-        return new ApiResponse<>(
-                false,
-                null,
-                errorCode.getCode(),
                 message
         );
     }
