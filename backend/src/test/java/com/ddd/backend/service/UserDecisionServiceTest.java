@@ -4,6 +4,7 @@ import com.ddd.backend.automation.session.BrowserSessionManager;
 import com.ddd.backend.ai.AiDecisionExecutionService;
 import com.ddd.backend.automation.BrowserActionExecutionResult;
 import com.ddd.backend.automation.BrowserActionType;
+import com.ddd.backend.automation.dom.ElementLocatorResolver;
 import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.DecisionType;
@@ -149,6 +150,82 @@ class UserDecisionServiceTest {
 
         verify(actionService).executeElementClick(session.getSessionId(), "term-required");
         verify(aiService).execute(session.getSessionId());
+    }
+
+    @Test
+    void 약관은_제출된_최종_선택집합과_다른_항목만_토글한다() {
+        AutomationSession session = createSession(WorkflowStatus.USER_DECISION_REQUIRED);
+        BrowserFrameStore frameStore = new BrowserFrameStore();
+        var frame = frameStore.publish(session.getSessionId(),
+                new CapturedBrowserFrame(new byte[]{1}, 1280, 720, "image/png"));
+        UserDecisionSessionState state = new UserDecisionSessionState();
+        state.register(session.getSessionId(), new AutomationDecisionPrompt(
+                "req-sync", "dec-sync", DecisionType.TERMS_AGREEMENT,
+                List.of(
+                        new AutomationDecisionOption("keep", "[필수] 유지", true, true, false),
+                        new AutomationDecisionOption("uncheck", "[선택] 해제", false, true, false),
+                        new AutomationDecisionOption("check", "[선택] 선택", false, false, false)),
+                frame.metadata().frameId(), frame.metadata().sequence(), "snap-sync"));
+        BrowserActionExecutionService actions = mock(BrowserActionExecutionService.class);
+        when(actions.executeElementClick(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(BrowserActionExecutionResult.executed(BrowserActionType.CLICK));
+        ElementLocatorResolver resolver = mock(ElementLocatorResolver.class);
+        when(resolver.withLocator(org.mockito.ArgumentMatchers.eq(session.getSessionId()),
+                org.mockito.ArgumentMatchers.eq("keep"), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
+        when(resolver.withLocator(org.mockito.ArgumentMatchers.eq(session.getSessionId()),
+                org.mockito.ArgumentMatchers.eq("uncheck"), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(false);
+        when(resolver.withLocator(org.mockito.ArgumentMatchers.eq(session.getSessionId()),
+                org.mockito.ArgumentMatchers.eq("check"), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
+        AiDecisionExecutionService ai = mock(AiDecisionExecutionService.class);
+        UserDecisionService secured = new UserDecisionService(
+                sessionRepository, new UserDecisionValidator(), browserSessionManager,
+                statusEventPublisher, state, frameStore, actions, ai, resolver);
+
+        secured.submitDecision(session.getSessionId(), new SubmitDecisionRequest(
+                "req-sync", "dec-sync", DecisionType.TERMS_AGREEMENT,
+                List.of("keep", "check"), frame.metadata().frameId(),
+                frame.metadata().sequence()));
+
+        verify(actions, never()).executeElementClick(session.getSessionId(), "keep");
+        verify(actions).executeElementClick(session.getSessionId(), "uncheck");
+        verify(actions).executeElementClick(session.getSessionId(), "check");
+        verify(ai).execute(session.getSessionId());
+    }
+
+    @Test
+    void AI_재호출이_실패하면_active_Decision을_유지한다() {
+        AutomationSession session = createSession(WorkflowStatus.USER_DECISION_REQUIRED);
+        BrowserFrameStore frameStore = new BrowserFrameStore();
+        var frame = frameStore.publish(session.getSessionId(),
+                new CapturedBrowserFrame(new byte[]{1}, 1280, 720, "image/png"));
+        UserDecisionSessionState state = new UserDecisionSessionState();
+        state.register(session.getSessionId(), new AutomationDecisionPrompt(
+                "req-retry", "dec-retry", DecisionType.PRODUCT_SELECTION,
+                List.of(new AutomationDecisionOption("product", "상품")),
+                frame.metadata().frameId(), frame.metadata().sequence(), "snap-retry"));
+        BrowserActionExecutionService actions = mock(BrowserActionExecutionService.class);
+        when(actions.executeElementClick(session.getSessionId(), "product"))
+                .thenReturn(BrowserActionExecutionResult.executed(BrowserActionType.CLICK));
+        AiDecisionExecutionService ai = mock(AiDecisionExecutionService.class);
+        when(ai.execute(session.getSessionId())).thenThrow(new IllegalStateException("C unavailable"));
+        UserDecisionService secured = new UserDecisionService(
+                sessionRepository, new UserDecisionValidator(), browserSessionManager,
+                statusEventPublisher, state, frameStore, actions, ai);
+        SubmitDecisionRequest request = new SubmitDecisionRequest(
+                "req-retry", "dec-retry", DecisionType.PRODUCT_SELECTION,
+                List.of("product"), frame.metadata().frameId(), frame.metadata().sequence());
+
+        assertThatThrownBy(() -> secured.submitDecision(session.getSessionId(), request))
+                .isInstanceOf(com.ddd.backend.common.exception.UserDecisionResumeException.class)
+                .hasMessage("사용자 결정 후속 처리에 실패했습니다.");
+
+        assertThat(state.pendingPrompt(session.getSessionId()).decisionId())
+                .isEqualTo("dec-retry");
+        assertThat(session.getStatus()).isEqualTo(WorkflowStatus.USER_DECISION_REQUIRED);
     }
 
     @Test

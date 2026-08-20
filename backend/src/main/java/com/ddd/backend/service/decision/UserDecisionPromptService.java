@@ -2,6 +2,8 @@ package com.ddd.backend.service.decision;
 
 import com.ddd.backend.automation.dom.SanitizedDomSnapshot;
 import com.ddd.backend.automation.dom.ElementLocatorResolver;
+import com.ddd.backend.ai.AiDecisionResponse;
+import com.ddd.backend.ai.AiDecisionOption;
 import com.ddd.backend.domain.session.DecisionType;
 import com.ddd.backend.frame.BrowserFramePayload;
 import com.ddd.backend.frame.BrowserFrameStore;
@@ -56,6 +58,49 @@ public final class UserDecisionPromptService {
                 snapshot,
                 inferDecisionType(snapshot)
         );
+    }
+
+    public AutomationDecisionPrompt publish(
+            String sessionId,
+            SanitizedDomSnapshot snapshot,
+            AiDecisionResponse response
+    ) {
+        Objects.requireNonNull(response, "AI Decision Response는 필수입니다.");
+        List<AiDecisionOption> richOptions = response.decisionType()
+                == DecisionType.TERMS_AGREEMENT && !response.terms().isEmpty()
+                ? response.terms() : response.options();
+        if (response.decisionType() == null || richOptions.isEmpty()) {
+            return publish(sessionId, snapshot);
+        }
+        BrowserFramePayload frame = frameStore.latest(sessionId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "사용자 결정과 연결할 Viewer Frame이 없습니다."));
+        java.util.Map<String, SanitizedDomSnapshot.ElementSnapshot> elements =
+                snapshot.elements().stream().collect(java.util.stream.Collectors.toMap(
+                        SanitizedDomSnapshot.ElementSnapshot::elementId,
+                        java.util.function.Function.identity(), (first, ignored) -> first));
+        List<AutomationDecisionOption> options = richOptions.stream().map(option -> {
+            SanitizedDomSnapshot.ElementSnapshot element = elements.get(option.id());
+            if (element == null) {
+                throw new IllegalStateException("Snapshot에 없는 Decision Option입니다.");
+            }
+            return new AutomationDecisionOption(
+                    option.id(),
+                    option.label() == null || option.label().isBlank()
+                            ? safeLabel(element) : option.label(),
+                    option.required() || isRequiredTerm(element),
+                    isChecked(sessionId, option.id()),
+                    !element.enabled());
+        }).toList();
+        AutomationDecisionPrompt prompt = new AutomationDecisionPrompt(
+                "req-" + UUID.randomUUID(), "dec-" + UUID.randomUUID(),
+                response.decisionType(), options, frame.metadata().frameId(),
+                frame.metadata().sequence(), snapshot.snapshotId());
+        decisionState.register(sessionId, prompt);
+        eventPublisher.publishDecisionRequired(
+                sessionId, prompt, response.message() == null
+                        ? "사용자가 항목을 선택해야 합니다." : response.message());
+        return prompt;
     }
 
     public AutomationDecisionPrompt publish(

@@ -2,6 +2,9 @@ package com.ddd.backend.service.decision;
 
 import com.ddd.backend.automation.dom.SanitizedDomSnapshot;
 import com.ddd.backend.automation.dom.ElementLocatorResolver;
+import com.ddd.backend.ai.AiDecisionResponse;
+import com.ddd.backend.ai.AiDecisionOption;
+import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.security.capture.CapturedBrowserFrame;
 import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
@@ -102,6 +105,34 @@ class UserDecisionPromptServiceTest {
 
         assertThat(prompt.sourceSnapshotId()).isEqualTo("snap-checked");
         assertThat(prompt.options().getFirst().checked()).isTrue();
+    }
+
+    @Test
+    void C가_전달한_계좌_수취인_Decision_유형을_보존한다() {
+        for (var type : List.of(
+                com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.SOURCE_ACCOUNT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.RECIPIENT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.ADDITIONAL_INFORMATION)) {
+            String sessionId = "session-" + type.name().toLowerCase();
+            BrowserFrameStore frameStore = new BrowserFrameStore();
+            frameStore.publish(sessionId, new CapturedBrowserFrame(
+                    new byte[]{1}, 1280, 720, "image/png"));
+            UserDecisionPromptService service = new UserDecisionPromptService(
+                    frameStore, new UserDecisionSessionState(),
+                    mock(AutomationStatusEventPublisher.class));
+            SanitizedDomSnapshot snapshot = new SanitizedDomSnapshot(
+                    "1.0", "snap-" + type.name().toLowerCase(),
+                    new SanitizedDomSnapshot.PageSnapshot("http://example.test", "선택"),
+                    List.of(element("choice", "선택항목", true)));
+            AiDecisionResponse response = new AiDecisionResponse(
+                    BrowserActionType.WAIT_FOR_USER, null, null, null, null, null,
+                    "WAIT_FOR_USER", "선택하세요", true, true, type,
+                    List.of(new AiDecisionOption("choice", "선택항목", false)), List.of());
+
+            assertThat(service.publish(sessionId, snapshot, response).decisionType())
+                    .isEqualTo(type);
+        }
     }
 
     private SanitizedDomSnapshot.ElementSnapshot element(

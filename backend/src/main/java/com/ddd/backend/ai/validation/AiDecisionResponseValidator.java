@@ -1,6 +1,7 @@
 package com.ddd.backend.ai.validation;
 
 import com.ddd.backend.ai.AiDecisionResponse;
+import com.ddd.backend.ai.AiDecisionOption;
 import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.automation.dom.SanitizedDomSnapshot;
 import org.springframework.stereotype.Component;
@@ -60,6 +61,8 @@ public final class AiDecisionResponseValidator {
                         "actionType은 필수입니다."
                 );
 
+        validateDecisionPayload(response, snapshot);
+
         switch (actionType) {
 
             case CLICK ->
@@ -102,6 +105,58 @@ public final class AiDecisionResponseValidator {
         }
 
         return response;
+    }
+
+    private void validateDecisionPayload(
+            AiDecisionResponse response,
+            SanitizedDomSnapshot snapshot
+    ) {
+        java.util.List<AiDecisionOption> choices = response.decisionType()
+                == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
+                && !response.terms().isEmpty()
+                ? response.terms() : response.options();
+        boolean hasDecision = response.decisionType() != null
+                || !response.options().isEmpty() || !response.terms().isEmpty();
+        if (!hasDecision) {
+            return;
+        }
+        if (response.decisionType() == null || choices.isEmpty()
+                || response.actionType() != BrowserActionType.WAIT_FOR_USER
+                || !Boolean.TRUE.equals(response.requiresUserAction())
+                || !Boolean.TRUE.equals(response.executionBlocked())) {
+            throw invalidPayload("사용자 결정 응답 계약이 올바르지 않습니다.");
+        }
+        Set<String> ids = new java.util.HashSet<>();
+        for (AiDecisionOption choice : choices) {
+            if (choice == null || choice.id() == null
+                    || !ids.add(choice.id())) {
+                throw invalidPayload("결정 Option ID가 비어 있거나 중복됩니다.");
+            }
+            SanitizedDomSnapshot.ElementSnapshot element = snapshot.elements().stream()
+                    .filter(candidate -> choice.id().equals(candidate.elementId()))
+                    .findFirst()
+                    .orElseThrow(() -> new AiDecisionValidationException(
+                            AiDecisionValidationException.Code.UNKNOWN_ELEMENT_ID,
+                            "현재 Snapshot에 없는 Decision Option입니다."));
+            if (!element.visible() || !element.enabled()
+                    || element.securityPolicy()
+                    != SanitizedDomSnapshot.SecurityPolicy.USER_DECISION) {
+                throw new AiDecisionValidationException(
+                        AiDecisionValidationException.Code.ELEMENT_NOT_INTERACTABLE,
+                        "안전하게 선택할 수 없는 Decision Option입니다.");
+            }
+            String sourceLabel = java.util.stream.Stream.of(
+                            element.ariaLabel(), element.text(), element.placeholder())
+                    .filter(java.util.Objects::nonNull)
+                    .map(String::toLowerCase)
+                    .reduce("", (left, right) -> left + " " + right);
+            if (response.decisionType()
+                    == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
+                    && (sourceLabel.contains("필수") || sourceLabel.contains("required"))
+                    && !choice.required()) {
+                throw invalidPayload("필수 약관 정보가 Snapshot과 일치하지 않습니다.");
+            }
+        }
     }
 
     private void validateClick(

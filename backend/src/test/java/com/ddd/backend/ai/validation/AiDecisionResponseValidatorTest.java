@@ -369,6 +369,24 @@ class AiDecisionResponseValidatorTest {
                 );
     }
 
+    @Test
+    void rich_Decision의_중복_option_ID를_차단한다() {
+        var option = new com.ddd.backend.ai.AiDecisionOption(
+                "el-test0001-001", "계좌", false);
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.WAIT_FOR_USER, null, null, null, null, null,
+                "WAIT_FOR_USER", "선택하세요", true, true,
+                com.ddd.backend.domain.session.DecisionType.SOURCE_ACCOUNT_SELECTION,
+                List.of(option, option), List.of());
+
+        assertThatThrownBy(() -> validator.validate(response, snapshot(
+                policyElement(SanitizedDomSnapshot.SecurityPolicy.USER_DECISION,
+                        true, true))))
+                .isInstanceOf(AiDecisionValidationException.class)
+                .extracting(exception -> ((AiDecisionValidationException) exception).code())
+                .isEqualTo(AiDecisionValidationException.Code.INVALID_PAYLOAD);
+    }
+
     private AiDecisionResponse response(
             BrowserActionType actionType,
             String elementId,

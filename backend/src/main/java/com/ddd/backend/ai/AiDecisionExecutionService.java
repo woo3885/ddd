@@ -160,6 +160,9 @@ public final class AiDecisionExecutionService {
                 session
         );
 
+        boolean resumingUserDecision = userDecisionState != null
+                && userDecisionState.latestResult(sessionId).isPresent();
+
         SanitizedDomSnapshot snapshot;
         AiDecisionResponse response;
 
@@ -204,9 +207,9 @@ public final class AiDecisionExecutionService {
 
         } catch (RuntimeException exception) {
 
-            markErrorSafely(
-                    session
-            );
+            if (!resumingUserDecision) {
+                markErrorSafely(session);
+            }
 
             throw exception;
         }
@@ -273,7 +276,16 @@ public final class AiDecisionExecutionService {
 
         if (validatedResponse.actionType() == BrowserActionType.WAIT_FOR_USER
                 && userDecisionPromptService != null) {
-            userDecisionPromptService.publish(sessionId, snapshot);
+            if (validatedResponse.decisionType()
+                    == com.ddd.backend.domain.session.DecisionType.ADDITIONAL_INFORMATION) {
+                AutomationSession session = getSession(sessionId);
+                session.transitionTo(WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED);
+                sessionRepository.save(session);
+                statusEventPublisher.publish(
+                        sessionId, WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED,
+                        "추가 정보가 필요합니다.");
+            }
+            userDecisionPromptService.publish(sessionId, snapshot, validatedResponse);
         }
 
         return result;
