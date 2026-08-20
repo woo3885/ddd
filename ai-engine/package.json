@@ -11,8 +11,9 @@
     "server:dev": "tsx watch src/server.ts",
     "build": "tsc",
     "check": "tsc --noEmit",
-    "test": "tsx --test src/tests/agentLoop.test.ts src/tests/agentSecureInput.test.ts src/tests/agentUserDecision.test.ts src/tests/aiResponseParser.test.ts src/tests/aiResponseValidator.test.ts src/tests/d23BackendContract.test.ts src/tests/secureInputPrompt.test.ts src/tests/stability.test.ts src/tests/structuredActionService.test.ts src/tests/targetAccuracy.test.ts",
+    "test": "tsx --test src/tests/agentLoop.test.ts src/tests/agentSecureInput.test.ts src/tests/agentUserDecision.test.ts src/tests/aiResponseParser.test.ts src/tests/aiResponseValidator.test.ts src/tests/d23BackendContract.test.ts src/tests/d24UserDecision.test.ts src/tests/secureInputPrompt.test.ts src/tests/stability.test.ts src/tests/structuredActionService.test.ts src/tests/targetAccuracy.test.ts",
     "test:d23": "tsx --test src/tests/d23BackendContract.test.ts",
+    "test:d24": "tsx --test src/tests/d24UserDecision.test.ts",
     "test:live": "tsx --test src/tests/geminiApi.test.ts src/tests/geminiStructuredOutput.test.ts"
   },
   "dependencies": {

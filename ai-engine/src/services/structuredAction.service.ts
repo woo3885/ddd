@@ -28,6 +28,10 @@ import type {
   StructuredAIResponse,
 } from "../output/aiResponse.types.js";
 
+import {
+  enforceUserDecisionPolicy,
+} from "../policy/userDecision.policy.js";
+
 export type StructuredActionTextGenerator = (
   input: GenerateTextInput,
 ) => Promise<GenerateTextResult>;
@@ -83,12 +87,18 @@ export async function generateStructuredAction(
         request.requestId,
       );
 
+    const policyChecked =
+      enforceUserDecisionPolicy(
+        structured,
+        request,
+      );
+
     validateTargetElementId(
-      structured,
+      policyChecked,
       request,
     );
 
-    return structured;
+    return policyChecked;
   } catch (error) {
     console.error(
       "[AI Engine] Structured Output 처리 실패. Fallback을 반환합니다.",

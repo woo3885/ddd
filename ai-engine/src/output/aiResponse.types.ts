@@ -1,3 +1,8 @@
+import type {
+  StructuredDecisionItem,
+  UserDecisionType,
+} from "../workflow/userDecision.types.js";
+
 export type WorkflowStatus =
   | "SESSION_CREATED"
   | "PAGE_LOADING"
@@ -68,10 +73,10 @@ export interface StructuredAIResponse {
   confidence: number | null;
   requiresUserAction: boolean;
 
-  decisionType: string | null;
+  decisionType: UserDecisionType | null;
   secureInputType: string | null;
   riskType: string | null;
-  options: unknown[] | null;
+  options: readonly StructuredDecisionItem[] | null;
   confirmationId: string | null;
   summary: Record<string, unknown> | null;
 }

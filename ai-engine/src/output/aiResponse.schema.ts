@@ -2,6 +2,10 @@ import {
   PRODUCTION_STRUCTURED_ACTIONS,
 } from "./aiResponse.types.js";
 
+import {
+  USER_DECISION_TYPES,
+} from "../workflow/userDecision.types.js";
+
 export const aiResponseSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://financial-guide.local/schemas/ai-response.json",
@@ -80,6 +84,10 @@ export const aiResponseSchema = {
 
     decisionType: {
       type: ["string", "null"],
+      enum: [
+        ...USER_DECISION_TYPES,
+        null,
+      ],
     },
 
     secureInputType: {
@@ -92,6 +100,34 @@ export const aiResponseSchema = {
 
     options: {
       type: ["array", "null"],
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "id",
+          "label",
+        ],
+        properties: {
+          id: {
+            type: "string",
+            minLength: 1,
+          },
+          label: {
+            type: "string",
+            minLength: 1,
+          },
+          description: {
+            type: "string",
+          },
+          disabled: {
+            type: "boolean",
+          },
+          required: {
+            type: "boolean",
+          },
+        },
+      },
     },
 
     confirmationId: {
@@ -218,6 +254,39 @@ export const aiResponseSchema = {
         properties: {
           status: {
             const: "TERMINATED",
+          },
+        },
+      },
+    },
+
+    /*
+     * TERMS_AGREEMENT items must explicitly distinguish required and
+     * optional terms. These are C-internal structured fields only.
+     */
+    {
+      if: {
+        properties: {
+          decisionType: {
+            const: "TERMS_AGREEMENT",
+          },
+          options: {
+            type: "array",
+          },
+        },
+        required: [
+          "decisionType",
+          "options",
+        ],
+      },
+      then: {
+        properties: {
+          options: {
+            type: "array",
+            items: {
+              required: [
+                "required",
+              ],
+            },
           },
         },
       },

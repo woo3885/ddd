@@ -1,3 +1,7 @@
+import type {
+  UserDecisionContext,
+} from "../workflow/userDecisionContext.store.js";
+
 export type BackendSecurityPolicy =
   | "NORMAL"
   | "USER_DECISION"
@@ -81,4 +85,10 @@ export interface AiActionRequest {
   };
 
   domSnapshot: BackendSanitizedDomSnapshot;
+
+  /**
+   * Backend-verified selection context for an internal resumed loop.
+   * The current B -> C HTTP DTO does not populate this field.
+   */
+  userDecisionContext?: UserDecisionContext;
 }

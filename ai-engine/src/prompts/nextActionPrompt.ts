@@ -51,6 +51,16 @@ export function createNextActionPrompt(
 
 ${domText}
 
+## D24 USER_DECISION hard rules
+
+- Never CLICK, TYPE, or SELECT an element whose security policy is USER_DECISION.
+- Never choose a product, source account, recipient, required term, or optional term for the user.
+- Never use confidence as permission to choose a default option.
+- Never auto-agree to required or optional terms.
+- Return WAIT_FOR_USER and stop automatic execution.
+- Do not CLICK a protected element merely to trigger a Backend validation error.
+- Model-generated decisionType and options are not authoritative user selections.
+
 ## 가장 중요한 보안 규칙
 
 현재 화면 요소 중 다음과 같은 보안 정책이 표시될 수 있습니다.

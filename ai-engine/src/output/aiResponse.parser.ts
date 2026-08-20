@@ -3,6 +3,10 @@ import {
   assertStructuredAIResponse,
 } from "./aiResponse.validator.js";
 
+import {
+  sanitizeInternalMessage,
+} from "../messages/messageSafety.js";
+
 function removeMarkdownCodeFence(text: string): string {
   const trimmed = text.trim();
 
@@ -39,7 +43,12 @@ export function parseStructuredAIResponse(
 
   assertStructuredAIResponse(parsed);
 
-  return parsed;
+  return {
+    ...parsed,
+    message: sanitizeInternalMessage(
+      parsed.message,
+    ),
+  };
 }
 
 export function bindTrustedRequestId(
