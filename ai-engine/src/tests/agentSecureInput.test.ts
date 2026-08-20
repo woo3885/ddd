@@ -1,5 +1,5 @@
 import {
-  resumeAgentLoop,
+  resumeAgentLoopAfterSecureInput,
   runAgentLoop,
 } from "../agent/agentLoop.runner.js";
 
@@ -269,8 +269,10 @@ console.log(
  * 새 Snapshot으로 Agent Loop 재개
  */
 const resumedResult =
-  await resumeAgentLoop(
+  await resumeAgentLoopAfterSecureInput(
     userGoal,
+
+    pausedResult,
 
     afterSecureInputSnapshot,
 

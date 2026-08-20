@@ -8,6 +8,14 @@ import type {
 } from "../output/aiResponse.types.js";
 
 import type {
+  UserDecisionContext,
+} from "../workflow/userDecisionContext.store.js";
+
+import {
+  UserDecisionContextStore,
+} from "../workflow/userDecisionContext.store.js";
+
+import type {
   AgentLoopDependencies,
   AgentLoopResult,
   AgentLoopStep,
@@ -21,7 +29,7 @@ function isUserDecisionRequired(
 ): boolean {
   return (
     response.status ===
-      "USER_DECISION_REQUIRED" ||
+      "USER_DECISION_REQUIRED" &&
     response.action ===
       "WAIT_FOR_USER"
   );
@@ -32,7 +40,7 @@ function isSecureInputRequired(
 ): boolean {
   return (
     response.status ===
-      "SECURE_INPUT_REQUIRED" ||
+      "SECURE_INPUT_REQUIRED" &&
     response.action ===
       "PAUSE_FOR_SECURE_INPUT"
   );
@@ -43,7 +51,7 @@ function isFinalConfirmationRequired(
 ): boolean {
   return (
     response.status ===
-      "FINAL_CONFIRMATION_REQUIRED" ||
+      "FINAL_CONFIRMATION_REQUIRED" &&
     response.action ===
       "REQUEST_FINAL_CONFIRMATION"
   );
@@ -61,6 +69,27 @@ function isCompleted(
     "COMPLETED" &&
     response.action !==
       "STOP";
+}
+
+function hasProtectedStateConflict(
+  response: StructuredAIResponse,
+): boolean {
+  const userSignal =
+    response.status === "USER_DECISION_REQUIRED" ||
+    response.action === "WAIT_FOR_USER";
+  const secureSignal =
+    response.status === "SECURE_INPUT_REQUIRED" ||
+    response.action === "PAUSE_FOR_SECURE_INPUT";
+  const finalSignal =
+    response.status === "FINAL_CONFIRMATION_REQUIRED" ||
+    response.action === "REQUEST_FINAL_CONFIRMATION";
+
+  return (
+    (userSignal && !isUserDecisionRequired(response)) ||
+    (secureSignal && !isSecureInputRequired(response)) ||
+    (finalSignal && !isFinalConfirmationRequired(response)) ||
+    response.status === "RISK_WARNING"
+  );
 }
 
 function isStopped(
@@ -87,19 +116,24 @@ function createRequest(
   requestId: string,
   userGoal: AgentLoopUserGoal,
   domSnapshot: BackendSanitizedDomSnapshot,
+  userDecisionContext?: UserDecisionContext,
 ): AiActionRequest {
   return {
     requestId,
     userGoal,
     domSnapshot,
+    ...(userDecisionContext
+      ? { userDecisionContext }
+      : {}),
   };
 }
 
-export async function runAgentLoop(
+async function runAgentLoopInternal(
   userGoal: AgentLoopUserGoal,
   initialSnapshot: BackendSanitizedDomSnapshot,
   dependencies: AgentLoopDependencies,
   maxSteps = DEFAULT_MAX_STEPS,
+  userDecisionContext?: UserDecisionContext,
 ): Promise<AgentLoopResult> {
   let currentSnapshot =
     initialSnapshot;
@@ -122,6 +156,7 @@ export async function runAgentLoop(
         requestId,
         userGoal,
         currentSnapshot,
+        userDecisionContext,
       );
 
     const response =
@@ -135,6 +170,15 @@ export async function runAgentLoop(
         currentSnapshot.snapshotId,
       response,
     });
+
+    if (hasProtectedStateConflict(response)) {
+      return {
+        status: "ERROR",
+        steps,
+        finalSnapshot: currentSnapshot,
+        finalResponse: response,
+      };
+    }
 
     /*
      * 사용자 선택이 필요한 경우에는
@@ -316,13 +360,86 @@ export async function runAgentLoop(
   };
 }
 
-export async function resumeAgentLoop(
+export async function runAgentLoop(
   userGoal: AgentLoopUserGoal,
+  initialSnapshot: BackendSanitizedDomSnapshot,
+  dependencies: AgentLoopDependencies,
+  maxSteps = DEFAULT_MAX_STEPS,
+): Promise<AgentLoopResult> {
+  return runAgentLoopInternal(
+    userGoal,
+    initialSnapshot,
+    dependencies,
+    maxSteps,
+  );
+}
+
+export async function resumeAgentLoopAfterUserDecision(
+  userGoal: AgentLoopUserGoal,
+  pausedResult: AgentLoopResult,
+  verifiedContext: UserDecisionContext,
+  resumedSnapshot: BackendSanitizedDomSnapshot,
+  contextStore: UserDecisionContextStore,
+  dependencies: AgentLoopDependencies,
+  maxSteps = DEFAULT_MAX_STEPS,
+): Promise<AgentLoopResult> {
+  const response = pausedResult.finalResponse;
+
+  if (
+    pausedResult.status !== "WAITING_FOR_USER" ||
+    !response ||
+    !isUserDecisionRequired(response) ||
+    !response.requiresUserAction ||
+    response.secureInputType !== null ||
+    response.riskType !== null ||
+    response.confirmationId !== null
+  ) {
+    throw new Error(
+      "[AI Engine] only a clean USER_DECISION pause can be resumed with a decision context.",
+    );
+  }
+
+  const context = contextStore.consumeVerified(
+    verifiedContext,
+    pausedResult.finalSnapshot.snapshotId,
+    resumedSnapshot.snapshotId,
+  );
+
+  return runAgentLoopInternal(
+    userGoal,
+    resumedSnapshot,
+    dependencies,
+    maxSteps,
+    context,
+  );
+}
+
+export async function resumeAgentLoopAfterSecureInput(
+  userGoal: AgentLoopUserGoal,
+  pausedResult: AgentLoopResult,
   resumedSnapshot: BackendSanitizedDomSnapshot,
   dependencies: AgentLoopDependencies,
   maxSteps = DEFAULT_MAX_STEPS,
 ): Promise<AgentLoopResult> {
-  return runAgentLoop(
+  const response = pausedResult.finalResponse;
+
+  if (
+    pausedResult.status !== "WAITING_FOR_SECURE_INPUT" ||
+    !response ||
+    !isSecureInputRequired(response) ||
+    !response.requiresUserAction ||
+    response.riskType !== null ||
+    response.confirmationId !== null ||
+    response.decisionType !== null ||
+    resumedSnapshot.snapshotId ===
+      pausedResult.finalSnapshot.snapshotId
+  ) {
+    throw new Error(
+      "[AI Engine] only a clean SECURE_INPUT pause can resume through the secure-input path.",
+    );
+  }
+
+  return runAgentLoopInternal(
     userGoal,
     resumedSnapshot,
     dependencies,

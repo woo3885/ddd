@@ -1,7 +1,11 @@
 import {
-  resumeAgentLoop,
+  resumeAgentLoopAfterUserDecision,
   runAgentLoop,
 } from "../agent/agentLoop.runner.js";
+
+import {
+  UserDecisionContextStore,
+} from "../workflow/userDecisionContext.store.js";
 
 import type {
   BackendSanitizedDomSnapshot,
@@ -270,16 +274,52 @@ console.log(
  * 새로운 Snapshot을 받은 뒤
  * Agent Loop를 재개합니다.
  */
+const contextStore =
+  new UserDecisionContextStore();
+
+contextStore.registerPending({
+  decisionId: "decision-product-1",
+  decisionType: "PRODUCT_SELECTION",
+  optionIds: [
+    "product-1",
+    "product-2",
+  ],
+  snapshotId:
+    beforeDecisionSnapshot.snapshotId,
+});
+
+let receivedSelectedOptionIds:
+  readonly string[] | undefined;
+
 const resumedResult =
-  await resumeAgentLoop(
+  await resumeAgentLoopAfterUserDecision(
     userGoal,
+
+    pausedResult,
+
+    {
+      decisionId: "decision-product-1",
+      decisionType: "PRODUCT_SELECTION",
+      selectedOptionIds: [
+        "product-2",
+      ],
+      sourceSnapshotId:
+        beforeDecisionSnapshot.snapshotId,
+    },
 
     afterDecisionSnapshot,
 
+    contextStore,
+
     {
       decide:
-        async () =>
-          completedResponse,
+        async (request) => {
+          receivedSelectedOptionIds =
+            request.userDecisionContext
+              ?.selectedOptionIds;
+
+          return completedResponse;
+        },
 
       execute:
         async () => {
@@ -339,6 +379,15 @@ if (
 ) {
   throw new Error(
     "사용자 선택 이후의 새 Snapshot으로 재개되지 않았습니다.",
+  );
+}
+
+if (
+  receivedSelectedOptionIds?.length !== 1 ||
+  receivedSelectedOptionIds[0] !== "product-2"
+) {
+  throw new Error(
+    "Verified user selection IDs were not preserved in the resumed request.",
   );
 }
 

@@ -170,7 +170,7 @@ function createEasySummary(
 export function detectTerms(
   elements: TermsSourceElement[],
 ): DetectedTerm[] {
-  return elements
+  const detected = elements
     .filter((element) => {
       const text = element.text.trim();
 
@@ -185,7 +185,7 @@ export function detectTerms(
         )
       );
     })
-    .map((element, index) => {
+    .map((element) => {
       const requirement =
         detectRequirement(element.text);
 
@@ -193,7 +193,9 @@ export function detectTerms(
         detectCategory(element.text);
 
       return {
-        termId: `term-${index + 1}`,
+        // Never invent a Production selection ID. Until Backend provides a
+        // dedicated term ID, the trusted snapshot elementId is preserved.
+        termId: element.elementId,
         elementId: element.elementId,
 
         title: createTitle(element.text),
@@ -209,4 +211,27 @@ export function detectTerms(
         disabled: element.disabled ?? false,
       };
     });
+
+  const seenIds = new Set<string>();
+
+  for (const term of detected) {
+    if (
+      !term.termId ||
+      term.termId !== term.termId.trim()
+    ) {
+      throw new Error(
+        "[AI Engine] detected term must preserve a non-blank exact elementId.",
+      );
+    }
+
+    if (seenIds.has(term.termId)) {
+      throw new Error(
+        `[AI Engine] duplicate detected term elementId: ${term.termId}`,
+      );
+    }
+
+    seenIds.add(term.termId);
+  }
+
+  return detected;
 }

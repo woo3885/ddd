@@ -28,6 +28,10 @@ import type {
   StructuredAIResponse,
 } from "../output/aiResponse.types.js";
 
+import {
+  enforceUserDecisionPolicy,
+} from "../policy/userDecision.policy.js";
+
 export type StructuredActionTextGenerator = (
   input: GenerateTextInput,
 ) => Promise<GenerateTextResult>;
@@ -54,14 +58,12 @@ export async function generateStructuredAction(
     request.requestId,
     request.userGoal,
     dom,
+    request.userDecisionContext,
   );
 
   const result = await generateText({
     prompt,
   });
-
-  console.log("\n[Structured Action Raw Gemini Response]");
-  console.log(result.text);
 
   if (result.source === "FALLBACK") {
     return createStructuredFallbackResponse(
@@ -83,16 +85,21 @@ export async function generateStructuredAction(
         request.requestId,
       );
 
+    const policyChecked =
+      enforceUserDecisionPolicy(
+        structured,
+        request,
+      );
+
     validateTargetElementId(
-      structured,
+      policyChecked,
       request,
     );
 
-    return structured;
-  } catch (error) {
+    return policyChecked;
+  } catch {
     console.error(
-      "[AI Engine] Structured Output 처리 실패. Fallback을 반환합니다.",
-      error,
+      "[AI Engine] Structured response validation failed. Fallback is returned.",
     );
 
     return createStructuredFallbackResponse(
