@@ -1,12 +1,15 @@
 package com.ddd.backend.ai;
 
 import com.ddd.backend.automation.dom.SanitizedDomSnapshot;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.Objects;
 
 public record AiDecisionRequest(
         String userRequest,
-        SanitizedDomSnapshot snapshot
+        SanitizedDomSnapshot snapshot,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        AiUserDecisionContext userDecision
 ) {
 
     public AiDecisionRequest {
@@ -26,5 +29,9 @@ public record AiDecisionRequest(
                 snapshot,
                 "Sanitized DOM Snapshot은 필수입니다."
         );
+    }
+
+    public AiDecisionRequest(String userRequest, SanitizedDomSnapshot snapshot) {
+        this(userRequest, snapshot, null);
     }
 }

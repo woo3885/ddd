@@ -93,7 +93,7 @@ class SubmitDecisionRequestTest {
     }
 
     @Test
-    void 선택_항목이_비어_있으면_검증에_실패한다() {
+    void 선택_항목이_비어_있어도_DTO_검증을_통과한다() {
         SubmitDecisionRequest request =
                 new SubmitDecisionRequest(
                         DecisionType.PRODUCT_SELECTION,
@@ -104,12 +104,7 @@ class SubmitDecisionRequestTest {
                 violations =
                 validator.validate(request);
 
-        assertTrue(
-                containsMessage(
-                        violations,
-                        "선택 항목은 1개 이상 20개 이하로 입력해야 합니다."
-                )
-        );
+        assertTrue(violations.isEmpty());
     }
 
     @Test
@@ -155,7 +150,7 @@ class SubmitDecisionRequestTest {
         assertTrue(
                 containsMessage(
                         violations,
-                        "선택 항목은 1개 이상 20개 이하로 입력해야 합니다."
+                        "선택 항목은 20개 이하로 입력해야 합니다."
                 )
         );
     }

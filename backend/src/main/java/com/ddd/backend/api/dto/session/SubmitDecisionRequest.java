@@ -28,9 +28,8 @@ public record SubmitDecisionRequest(
                 message = "선택 항목 목록은 필수입니다."
         )
         @Size(
-                min = 1,
                 max = 20,
-                message = "선택 항목은 1개 이상 20개 이하로 입력해야 합니다."
+                message = "선택 항목은 20개 이하로 입력해야 합니다."
         )
         List<
                 @NotBlank(

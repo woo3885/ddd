@@ -11,7 +11,8 @@ public record AutomationDecisionPrompt(
         DecisionType decisionType,
         List<AutomationDecisionOption> options,
         String frameId,
-        long frameSequence
+        long frameSequence,
+        String sourceSnapshotId
 ) {
     public AutomationDecisionPrompt {
         if (requestId == null || requestId.isBlank()
@@ -26,8 +27,20 @@ public record AutomationDecisionPrompt(
         if (frameId == null || frameId.isBlank() || frameSequence < 1) {
             throw new IllegalArgumentException("결정 Frame 정보가 올바르지 않습니다.");
         }
+        if (sourceSnapshotId == null || sourceSnapshotId.isBlank()) {
+            throw new IllegalArgumentException("원본 Snapshot ID는 필수입니다.");
+        }
         requestId = requestId.trim();
         decisionId = decisionId.trim();
         frameId = frameId.trim();
+        sourceSnapshotId = sourceSnapshotId.trim();
+    }
+
+    public AutomationDecisionPrompt(
+            String requestId, String decisionId, DecisionType decisionType,
+            List<AutomationDecisionOption> options, String frameId, long frameSequence
+    ) {
+        this(requestId, decisionId, decisionType, options, frameId,
+                frameSequence, "legacy-snapshot");
     }
 }

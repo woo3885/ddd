@@ -97,10 +97,19 @@ public final class UserDecisionSessionState {
             }
 
             Set<String> allowed = pending.options().stream()
+                    .filter(option -> !option.disabled())
                     .map(option -> option.id())
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
             if (!allowed.containsAll(request.selectedOptionIds())) {
                 throw new IllegalArgumentException("허용되지 않은 선택 항목입니다.");
+            }
+
+            Set<String> required = pending.options().stream()
+                    .filter(option -> option.required() && !option.disabled())
+                    .map(option -> option.id())
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            if (!request.selectedOptionIds().containsAll(required)) {
+                throw new IllegalArgumentException("필수 약관 선택이 누락되었습니다.");
             }
 
             acceptedAction.run();
@@ -111,6 +120,7 @@ public final class UserDecisionSessionState {
                     request.selectedOptionIds(),
                     request.expectedFrameId(),
                     request.expectedSequence(),
+                    pending.sourceSnapshotId(),
                     java.time.Instant.now()
             );
             consumedDecisionIds.add(pending.decisionId());

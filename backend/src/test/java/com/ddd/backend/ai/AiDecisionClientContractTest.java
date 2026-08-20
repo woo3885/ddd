@@ -109,7 +109,8 @@ class AiDecisionClientContractTest {
         )
                 .containsExactly(
                         "userRequest",
-                        "snapshot"
+                        "snapshot",
+                        "userDecision"
                 )
                 .doesNotContain(
                         "sessionId",

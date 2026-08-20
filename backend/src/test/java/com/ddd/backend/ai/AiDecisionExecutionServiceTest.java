@@ -13,6 +13,13 @@ import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.service.BrowserActionExecutionService;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.websocket.publisher.AutomationTargetEventService;
+import com.ddd.backend.service.decision.UserDecisionPromptService;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
+import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
+import com.ddd.backend.websocket.dto.AutomationDecisionOption;
+import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
+import com.ddd.backend.domain.session.DecisionType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -302,6 +309,43 @@ class AiDecisionExecutionServiceTest {
         ).isSameAs(
                 snapshot
         );
+    }
+
+    @Test
+    void 사용자_결정_후_C_재호출에_선택결과와_원본_Snapshot을_전달한다() {
+        UserDecisionSessionState decisionState = new UserDecisionSessionState();
+        decisionState.register(session.getSessionId(), new AutomationDecisionPrompt(
+                "req-001", "dec-001", DecisionType.TERMS_AGREEMENT,
+                List.of(new AutomationDecisionOption(
+                        "term-required", "[필수] 약관", true, false, false)),
+                "frm-001", 1L, "snap-before-decision"));
+        decisionState.consume(session.getSessionId(), new SubmitDecisionRequest(
+                "req-001", "dec-001", DecisionType.TERMS_AGREEMENT,
+                List.of("term-required"), "frm-001", 1L), () -> {});
+        AutomationTargetEventService targetService = mock(AutomationTargetEventService.class);
+        UserDecisionPromptService promptService = mock(UserDecisionPromptService.class);
+        AiDecisionExecutionService resumedService = new AiDecisionExecutionService(
+                sessionRepository, snapshotService, aiDecisionClient, responseValidator,
+                actionExecutionService, statusEventPublisher, targetService,
+                promptService, decisionState);
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.NONE, null, null, null, null, null);
+        when(aiDecisionClient.decide(any(AiDecisionRequest.class))).thenReturn(response);
+        when(responseValidator.validate(response, snapshot)).thenReturn(response);
+        when(actionExecutionService.execute(any(), any(BrowserAction.class)))
+                .thenReturn(BrowserActionExecutionResult.noAction());
+
+        resumedService.execute(session.getSessionId());
+
+        ArgumentCaptor<AiDecisionRequest> captor =
+                ArgumentCaptor.forClass(AiDecisionRequest.class);
+        verify(aiDecisionClient).decide(captor.capture());
+        assertThat(captor.getValue().userDecision().decisionId()).isEqualTo("dec-001");
+        assertThat(captor.getValue().userDecision().selectedOptionIds())
+                .containsExactly("term-required");
+        assertThat(captor.getValue().userDecision().sourceSnapshotId())
+                .isEqualTo("snap-before-decision");
+        assertThat(decisionState.latestResult(session.getSessionId())).isEmpty();
     }
 
     @Test

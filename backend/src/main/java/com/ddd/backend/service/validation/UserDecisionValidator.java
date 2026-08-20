@@ -47,7 +47,8 @@ public class UserDecisionValidator {
             );
         }
 
-        if (selectedOptionIds.isEmpty()) {
+        if (selectedOptionIds.isEmpty()
+                && decisionType != DecisionType.TERMS_AGREEMENT) {
             throw new IllegalArgumentException(
                     "선택 항목은 한 개 이상이어야 합니다."
             );

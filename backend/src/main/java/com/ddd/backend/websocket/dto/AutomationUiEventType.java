@@ -6,5 +6,6 @@ public enum AutomationUiEventType {
     TARGET,
     TARGET_CLEAR,
     DECISION_REQUIRED,
-    DECISION_RESOLVED
+    DECISION_RESOLVED,
+    DECISION_CLEAR
 }

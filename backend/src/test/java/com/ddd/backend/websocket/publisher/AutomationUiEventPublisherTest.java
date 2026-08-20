@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
 
 class AutomationUiEventPublisherTest {
 
@@ -141,5 +142,33 @@ class AutomationUiEventPublisherTest {
                 "session-001", "선택이 처리되었습니다.");
         assertThat(publisher.latestSnapshot("session-001")
                 .orElseThrow().decision()).isNull();
+    }
+
+    @Test
+    void 보안_위험_종료_상태는_Decision_UI와_대기상태를_정리한다() {
+        UserDecisionSessionState state = new UserDecisionSessionState();
+        AutomationStatusEventPublisher securedPublisher =
+                new AutomationStatusEventPublisher(messagingTemplate, state);
+        var prompt = new com.ddd.backend.websocket.dto.AutomationDecisionPrompt(
+                "req-001", "dec-001",
+                com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
+                java.util.List.of(new com.ddd.backend.websocket.dto.AutomationDecisionOption(
+                        "product-001", "정기예금")),
+                "frm-001", 1L, "snap-001");
+        state.register("session-001", prompt);
+        securedPublisher.publishDecisionRequired("session-001", prompt, "선택하세요.");
+
+        securedPublisher.publish("session-001", WorkflowStatus.RISK_WARNING, "위험 상태");
+
+        assertThat(securedPublisher.latestSnapshot("session-001").orElseThrow().decision())
+                .isNull();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> state.consume(
+                "session-001",
+                new com.ddd.backend.api.dto.session.SubmitDecisionRequest(
+                        "req-001", "dec-001",
+                        com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
+                        java.util.List.of("product-001"), "frm-001", 1L),
+                () -> {}))
+                .hasMessage("대기 중인 사용자 결정이 없습니다.");
     }
 }

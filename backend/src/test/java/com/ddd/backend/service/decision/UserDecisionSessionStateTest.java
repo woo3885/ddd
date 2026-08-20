@@ -82,6 +82,29 @@ class UserDecisionSessionStateTest {
         assertThat(executions.get()).isEqualTo(1);
     }
 
+    @Test
+    void 필수_약관을_누락하거나_비활성_항목을_선택하면_차단한다() {
+        state = new UserDecisionSessionState();
+        state.register("session-001", new AutomationDecisionPrompt(
+                "req-terms", "dec-terms", DecisionType.TERMS_AGREEMENT,
+                List.of(
+                        new AutomationDecisionOption("required", "[필수] 서비스", true, false, false),
+                        new AutomationDecisionOption("disabled", "[선택] 마케팅", false, false, true)),
+                "frm-001", 7L));
+
+        assertThatThrownBy(() -> state.consume("session-001", new SubmitDecisionRequest(
+                "req-terms", "dec-terms", DecisionType.TERMS_AGREEMENT,
+                List.of(), "frm-001", 7L), () -> {}))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("필수 약관 선택이 누락되었습니다.");
+
+        assertThatThrownBy(() -> state.consume("session-001", new SubmitDecisionRequest(
+                "req-terms", "dec-terms", DecisionType.TERMS_AGREEMENT,
+                List.of("required", "disabled"), "frm-001", 7L), () -> {}))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("허용되지 않은 선택 항목입니다.");
+    }
+
     private AutomationDecisionPrompt prompt() {
         return new AutomationDecisionPrompt(
                 "req-001", "dec-001", DecisionType.PRODUCT_SELECTION,

@@ -13,6 +13,8 @@ import com.ddd.backend.frame.BrowserFrameMetadata;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.ddd.backend.ai.AiDecisionExecutionService;
+import com.ddd.backend.automation.BrowserActionExecutionStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -28,6 +30,8 @@ public class UserDecisionService {
     private final AutomationStatusEventPublisher statusEventPublisher;
     private final UserDecisionSessionState decisionState;
     private final BrowserFrameStore frameStore;
+    private final BrowserActionExecutionService actionExecutionService;
+    private final AiDecisionExecutionService aiDecisionExecutionService;
 
     @Autowired
     public UserDecisionService(
@@ -36,7 +40,9 @@ public class UserDecisionService {
             BrowserSessionManager browserSessionManager,
             AutomationStatusEventPublisher statusEventPublisher,
             UserDecisionSessionState decisionState,
-            BrowserFrameStore frameStore
+            BrowserFrameStore frameStore,
+            BrowserActionExecutionService actionExecutionService,
+            AiDecisionExecutionService aiDecisionExecutionService
     ) {
         this.sessionRepository = sessionRepository;
         this.decisionValidator = decisionValidator;
@@ -44,6 +50,20 @@ public class UserDecisionService {
         this.statusEventPublisher = statusEventPublisher;
         this.decisionState = decisionState;
         this.frameStore = frameStore;
+        this.actionExecutionService = actionExecutionService;
+        this.aiDecisionExecutionService = aiDecisionExecutionService;
+    }
+
+    public UserDecisionService(
+            AutomationSessionRepository sessionRepository,
+            UserDecisionValidator decisionValidator,
+            BrowserSessionManager browserSessionManager,
+            AutomationStatusEventPublisher statusEventPublisher,
+            UserDecisionSessionState decisionState,
+            BrowserFrameStore frameStore
+    ) {
+        this(sessionRepository, decisionValidator, browserSessionManager,
+                statusEventPublisher, decisionState, frameStore, null, null);
     }
 
     public UserDecisionService(
@@ -53,7 +73,7 @@ public class UserDecisionService {
             AutomationStatusEventPublisher statusEventPublisher
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
-                statusEventPublisher, null, null);
+                statusEventPublisher, null, null, null, null);
     }
 
     public AutomationSession submitDecision(
@@ -79,18 +99,42 @@ public class UserDecisionService {
 
         java.util.concurrent.atomic.AtomicReference<AutomationSession> saved =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        decisionState.consume(sessionId, request, () -> saved.set(
-                applyDecision(
-                        sessionId,
-                        request.decisionType(),
-                        request.selectedOptionIds()
-                )
-        ));
+        decisionState.consume(sessionId, request, () -> {
+            executeSelectedOptions(sessionId, request.selectedOptionIds());
+            saved.set(applyDecision(
+                    sessionId,
+                    request.decisionType(),
+                    request.selectedOptionIds()
+            ));
+        });
         statusEventPublisher.publishDecisionResolved(
                 sessionId,
                 "사용자 결정이 처리되었습니다."
         );
+
+        if (aiDecisionExecutionService != null) {
+            aiDecisionExecutionService.execute(sessionId);
+        }
         return saved.get();
+    }
+
+    private void executeSelectedOptions(
+            String sessionId,
+            List<String> selectedOptionIds
+    ) {
+        if (actionExecutionService == null) {
+            return;
+        }
+
+        for (String elementId : selectedOptionIds) {
+            var result = actionExecutionService.executeElementClick(
+                    sessionId, elementId);
+            if (result.status() != BrowserActionExecutionStatus.EXECUTED) {
+                throw new IllegalStateException(
+                        "사용자가 선택한 항목을 안전하게 실행할 수 없습니다."
+                );
+            }
+        }
     }
 
     public AutomationSession submitDecision(

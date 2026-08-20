@@ -15,6 +15,7 @@ import com.ddd.backend.service.BrowserActionExecutionService;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.websocket.publisher.AutomationTargetEventService;
 import com.ddd.backend.service.decision.UserDecisionPromptService;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +51,7 @@ public final class AiDecisionExecutionService {
 
     private final AutomationTargetEventService targetEventService;
     private final UserDecisionPromptService userDecisionPromptService;
+    private final UserDecisionSessionState userDecisionState;
 
     @Autowired
     public AiDecisionExecutionService(
@@ -60,7 +62,8 @@ public final class AiDecisionExecutionService {
             BrowserActionExecutionService actionExecutionService,
             AutomationStatusEventPublisher statusEventPublisher,
             AutomationTargetEventService targetEventService,
-            UserDecisionPromptService userDecisionPromptService
+            UserDecisionPromptService userDecisionPromptService,
+            UserDecisionSessionState userDecisionState
     ) {
         this.sessionRepository =
                 Objects.requireNonNull(
@@ -106,6 +109,8 @@ public final class AiDecisionExecutionService {
                 userDecisionPromptService,
                 "UserDecisionPromptService는 필수입니다."
         );
+        this.userDecisionState = Objects.requireNonNull(
+                userDecisionState, "UserDecisionSessionState는 필수입니다.");
     }
 
     public AiDecisionExecutionService(
@@ -124,6 +129,7 @@ public final class AiDecisionExecutionService {
         this.statusEventPublisher = Objects.requireNonNull(statusEventPublisher);
         this.targetEventService = null;
         this.userDecisionPromptService = null;
+        this.userDecisionState = null;
     }
 
     /*
@@ -169,11 +175,18 @@ public final class AiDecisionExecutionService {
                                     sessionId
                             );
 
-            AiDecisionRequest request =
-                    new AiDecisionRequest(
-                            session.getUserRequest(),
-                            snapshot
-                    );
+            AiUserDecisionContext userDecision = userDecisionState == null
+                    ? null
+                    : userDecisionState.latestResult(sessionId)
+                            .map(result -> new AiUserDecisionContext(
+                                    result.decisionId(),
+                                    result.decisionType(),
+                                    result.selectedOptionIds(),
+                                    result.sourceSnapshotId()))
+                            .orElse(null);
+
+            AiDecisionRequest request = new AiDecisionRequest(
+                    session.getUserRequest(), snapshot, userDecision);
 
             /*
              * B → C
@@ -185,6 +198,9 @@ public final class AiDecisionExecutionService {
                             .decide(
                                     request
                             );
+            if (userDecision != null) {
+                userDecisionState.takeLatestResult(sessionId);
+            }
 
         } catch (RuntimeException exception) {
 
@@ -250,11 +266,17 @@ public final class AiDecisionExecutionService {
             }
         }
 
-        return
-                executeValidatedResponse(
-                        sessionId,
-                        validatedResponse
-                );
+        BrowserActionExecutionResult result = executeValidatedResponse(
+                sessionId,
+                validatedResponse
+        );
+
+        if (validatedResponse.actionType() == BrowserActionType.WAIT_FOR_USER
+                && userDecisionPromptService != null) {
+            userDecisionPromptService.publish(sessionId, snapshot);
+        }
+
+        return result;
     }
 
     private BrowserActionExecutionResult

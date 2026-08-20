@@ -9,6 +9,8 @@ import com.ddd.backend.websocket.dto.AutomationUiEventSnapshot;
 import com.ddd.backend.websocket.dto.AutomationUiEventType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -34,18 +36,28 @@ public final class AutomationStatusEventPublisher {
             Pattern.compile("^[a-zA-Z0-9-]{1,100}$");
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserDecisionSessionState decisionState;
 
     private final ConcurrentMap<String, SessionUiState> uiStates =
             new ConcurrentHashMap<>();
 
+    @Autowired
     public AutomationStatusEventPublisher(
-            SimpMessagingTemplate messagingTemplate
+            SimpMessagingTemplate messagingTemplate,
+            UserDecisionSessionState decisionState
     ) {
         this.messagingTemplate =
                 Objects.requireNonNull(
                         messagingTemplate,
                         "SimpMessagingTemplate은 필수입니다."
                 );
+        this.decisionState = Objects.requireNonNull(decisionState);
+    }
+
+    public AutomationStatusEventPublisher(SimpMessagingTemplate messagingTemplate) {
+        this.messagingTemplate = Objects.requireNonNull(
+                messagingTemplate, "SimpMessagingTemplate은 필수입니다.");
+        this.decisionState = null;
     }
 
     public void publish(
@@ -96,6 +108,12 @@ public final class AutomationStatusEventPublisher {
         if (clearsTarget(event.status())) {
             publishTargetClear(event.sessionId(), event.message());
         }
+        if (clearsDecision(event.status())) {
+            publishDecisionClear(event.sessionId(), event.message());
+            if (decisionState != null) {
+                decisionState.removeSession(event.sessionId());
+            }
+        }
     }
 
     public AutomationUiEvent publishGuide(
@@ -145,6 +163,12 @@ public final class AutomationStatusEventPublisher {
                 sessionId, AutomationUiEventType.DECISION_RESOLVED,
                 null, message, false, null, null
         );
+    }
+
+    public AutomationUiEvent publishDecisionClear(String sessionId, String message) {
+        return publishUiEvent(
+                sessionId, AutomationUiEventType.DECISION_CLEAR,
+                null, message, false, null, null);
     }
 
     public Optional<AutomationUiEventSnapshot> latestSnapshot(String sessionId) {
@@ -217,6 +241,16 @@ public final class AutomationStatusEventPublisher {
                 || status == WorkflowStatus.TERMINATED;
     }
 
+    private boolean clearsDecision(WorkflowStatus status) {
+        return status == WorkflowStatus.SECURE_INPUT_REQUIRED
+                || status == WorkflowStatus.FINAL_CONFIRMATION_REQUIRED
+                || status == WorkflowStatus.RISK_WARNING
+                || status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.ERROR
+                || status == WorkflowStatus.TERMINATED;
+    }
+
     private static final class SessionUiState {
         private final AtomicLong sequence = new AtomicLong();
         private AutomationUiEvent state;
@@ -242,6 +276,7 @@ public final class AutomationStatusEventPublisher {
                 case TARGET_CLEAR -> target = null;
                 case DECISION_REQUIRED -> decision = event;
                 case DECISION_RESOLVED -> decision = null;
+                case DECISION_CLEAR -> decision = null;
             }
             return event;
         }

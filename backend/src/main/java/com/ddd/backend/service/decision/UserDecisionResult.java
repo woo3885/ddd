@@ -12,6 +12,7 @@ public record UserDecisionResult(
         List<String> selectedOptionIds,
         String frameId,
         long frameSequence,
+        String sourceSnapshotId,
         Instant decidedAt
 ) {
     public UserDecisionResult {

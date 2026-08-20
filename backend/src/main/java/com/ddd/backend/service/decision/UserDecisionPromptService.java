@@ -1,6 +1,7 @@
 package com.ddd.backend.service.decision;
 
 import com.ddd.backend.automation.dom.SanitizedDomSnapshot;
+import com.ddd.backend.automation.dom.ElementLocatorResolver;
 import com.ddd.backend.domain.session.DecisionType;
 import com.ddd.backend.frame.BrowserFramePayload;
 import com.ddd.backend.frame.BrowserFrameStore;
@@ -8,6 +9,7 @@ import com.ddd.backend.websocket.dto.AutomationDecisionOption;
 import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 import java.util.Objects;
@@ -19,6 +21,20 @@ public final class UserDecisionPromptService {
     private final BrowserFrameStore frameStore;
     private final UserDecisionSessionState decisionState;
     private final AutomationStatusEventPublisher eventPublisher;
+    private final ElementLocatorResolver locatorResolver;
+
+    @Autowired
+    public UserDecisionPromptService(
+            BrowserFrameStore frameStore,
+            UserDecisionSessionState decisionState,
+            AutomationStatusEventPublisher eventPublisher,
+            ElementLocatorResolver locatorResolver
+    ) {
+        this.frameStore = Objects.requireNonNull(frameStore);
+        this.decisionState = Objects.requireNonNull(decisionState);
+        this.eventPublisher = Objects.requireNonNull(eventPublisher);
+        this.locatorResolver = Objects.requireNonNull(locatorResolver);
+    }
 
     public UserDecisionPromptService(
             BrowserFrameStore frameStore,
@@ -28,6 +44,7 @@ public final class UserDecisionPromptService {
         this.frameStore = Objects.requireNonNull(frameStore);
         this.decisionState = Objects.requireNonNull(decisionState);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
+        this.locatorResolver = null;
     }
 
     public AutomationDecisionPrompt publish(
@@ -37,7 +54,7 @@ public final class UserDecisionPromptService {
         return publish(
                 sessionId,
                 snapshot,
-                DecisionType.PRODUCT_SELECTION
+                inferDecisionType(snapshot)
         );
     }
 
@@ -56,7 +73,11 @@ public final class UserDecisionPromptService {
                 .filter(element -> element.securityPolicy()
                         == SanitizedDomSnapshot.SecurityPolicy.USER_DECISION)
                 .map(element -> new AutomationDecisionOption(
-                        element.elementId(), safeLabel(element)))
+                        element.elementId(),
+                        safeLabel(element),
+                        isRequiredTerm(element),
+                        isChecked(sessionId, element.elementId()),
+                        !element.enabled()))
                 .limit(20)
                 .toList();
 
@@ -70,7 +91,8 @@ public final class UserDecisionPromptService {
                 decisionType,
                 options,
                 frame.metadata().frameId(),
-                frame.metadata().sequence()
+                frame.metadata().sequence(),
+                snapshot.snapshotId()
         );
 
         decisionState.register(sessionId, prompt);
@@ -78,6 +100,41 @@ public final class UserDecisionPromptService {
                 sessionId, prompt, "사용자가 항목을 선택해야 합니다."
         );
         return prompt;
+    }
+
+    private boolean isChecked(String sessionId, String elementId) {
+        if (locatorResolver == null) {
+            return false;
+        }
+        try {
+            return locatorResolver.withLocator(
+                    sessionId, elementId, locator -> locator.isChecked());
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private DecisionType inferDecisionType(SanitizedDomSnapshot snapshot) {
+        boolean terms = snapshot.elements().stream().anyMatch(element ->
+                "checkbox".equalsIgnoreCase(element.inputType())
+                        && containsTermMarker(element));
+        return terms
+                ? DecisionType.TERMS_AGREEMENT
+                : DecisionType.PRODUCT_SELECTION;
+    }
+
+    private boolean isRequiredTerm(SanitizedDomSnapshot.ElementSnapshot element) {
+        String label = safeLabel(element).toLowerCase(java.util.Locale.ROOT);
+        return "checkbox".equalsIgnoreCase(element.inputType())
+                && (label.contains("필수") || label.contains("required"));
+    }
+
+    private boolean containsTermMarker(SanitizedDomSnapshot.ElementSnapshot element) {
+        String label = safeLabel(element).toLowerCase(java.util.Locale.ROOT);
+        return label.contains("약관")
+                || label.contains("동의")
+                || label.contains("agreement")
+                || label.contains("consent");
     }
 
     private String safeLabel(SanitizedDomSnapshot.ElementSnapshot element) {
