@@ -38,5 +38,8 @@ export function adaptBackendRequestToAiActionRequest(
 
     domSnapshot:
       request.snapshot,
+
+    userDecision:
+      request.userDecision,
   };
 }

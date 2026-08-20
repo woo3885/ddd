@@ -2,6 +2,7 @@ package com.ddd.backend.service;
 
 import com.ddd.backend.automation.session.BrowserSessionManager;
 import com.ddd.backend.common.exception.SessionNotFoundException;
+import com.ddd.backend.common.exception.UserDecisionResumeException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.domain.session.DecisionType;
@@ -15,6 +16,8 @@ import com.ddd.backend.service.decision.UserDecisionSessionState;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.ddd.backend.ai.AiDecisionExecutionService;
 import com.ddd.backend.automation.BrowserActionExecutionStatus;
+import com.ddd.backend.automation.dom.ElementLocatorResolver;
+import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -32,6 +35,7 @@ public class UserDecisionService {
     private final BrowserFrameStore frameStore;
     private final BrowserActionExecutionService actionExecutionService;
     private final AiDecisionExecutionService aiDecisionExecutionService;
+    private final ElementLocatorResolver locatorResolver;
 
     @Autowired
     public UserDecisionService(
@@ -42,7 +46,8 @@ public class UserDecisionService {
             UserDecisionSessionState decisionState,
             BrowserFrameStore frameStore,
             BrowserActionExecutionService actionExecutionService,
-            AiDecisionExecutionService aiDecisionExecutionService
+            AiDecisionExecutionService aiDecisionExecutionService,
+            ElementLocatorResolver locatorResolver
     ) {
         this.sessionRepository = sessionRepository;
         this.decisionValidator = decisionValidator;
@@ -52,6 +57,22 @@ public class UserDecisionService {
         this.frameStore = frameStore;
         this.actionExecutionService = actionExecutionService;
         this.aiDecisionExecutionService = aiDecisionExecutionService;
+        this.locatorResolver = locatorResolver;
+    }
+
+    public UserDecisionService(
+            AutomationSessionRepository sessionRepository,
+            UserDecisionValidator decisionValidator,
+            BrowserSessionManager browserSessionManager,
+            AutomationStatusEventPublisher statusEventPublisher,
+            UserDecisionSessionState decisionState,
+            BrowserFrameStore frameStore,
+            BrowserActionExecutionService actionExecutionService,
+            AiDecisionExecutionService aiDecisionExecutionService
+    ) {
+        this(sessionRepository, decisionValidator, browserSessionManager,
+                statusEventPublisher, decisionState, frameStore,
+                actionExecutionService, aiDecisionExecutionService, null);
     }
 
     public UserDecisionService(
@@ -63,7 +84,7 @@ public class UserDecisionService {
             BrowserFrameStore frameStore
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
-                statusEventPublisher, decisionState, frameStore, null, null);
+                statusEventPublisher, decisionState, frameStore, null, null, null);
     }
 
     public UserDecisionService(
@@ -73,7 +94,7 @@ public class UserDecisionService {
             AutomationStatusEventPublisher statusEventPublisher
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
-                statusEventPublisher, null, null, null, null);
+                statusEventPublisher, null, null, null, null, null);
     }
 
     public AutomationSession submitDecision(
@@ -99,23 +120,74 @@ public class UserDecisionService {
 
         java.util.concurrent.atomic.AtomicReference<AutomationSession> saved =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        decisionState.consume(sessionId, request, () -> {
-            executeSelectedOptions(sessionId, request.selectedOptionIds());
-            saved.set(applyDecision(
-                    sessionId,
-                    request.decisionType(),
-                    request.selectedOptionIds()
-            ));
-        });
+        AutomationDecisionPrompt prompt = decisionState.pendingPrompt(sessionId, request);
+        try {
+            decisionState.consume(sessionId, request, () -> {
+                applyFinalSelection(sessionId, prompt, request.selectedOptionIds());
+                saved.set(applyDecision(
+                        sessionId, request.decisionType(), request.selectedOptionIds()));
+                if (aiDecisionExecutionService != null) {
+                    aiDecisionExecutionService.execute(sessionId);
+                }
+            });
+        } catch (RuntimeException exception) {
+            restoreDecisionRequired(saved.get());
+            if (saved.get() != null) {
+                throw new UserDecisionResumeException(exception);
+            }
+            throw exception;
+        }
         statusEventPublisher.publishDecisionResolved(
                 sessionId,
                 "사용자 결정이 처리되었습니다."
         );
 
-        if (aiDecisionExecutionService != null) {
-            aiDecisionExecutionService.execute(sessionId);
-        }
         return saved.get();
+    }
+
+    private void restoreDecisionRequired(AutomationSession session) {
+        if (session == null || session.getStatus() != WorkflowStatus.AI_EXECUTING) {
+            return;
+        }
+        session.transitionTo(WorkflowStatus.USER_DECISION_REQUIRED);
+        sessionRepository.save(session);
+        statusEventPublisher.publish(session.getSessionId(),
+                WorkflowStatus.USER_DECISION_REQUIRED,
+                "사용자 결정 후속 처리를 다시 시도해야 합니다.");
+    }
+
+    private void applyFinalSelection(
+            String sessionId,
+            AutomationDecisionPrompt prompt,
+            List<String> selectedOptionIds
+    ) {
+        if (prompt.decisionType() != DecisionType.TERMS_AGREEMENT) {
+            executeSelectedOptions(sessionId, selectedOptionIds);
+            return;
+        }
+        java.util.Set<String> selected = java.util.Set.copyOf(selectedOptionIds);
+        for (var option : prompt.options()) {
+            if (option.disabled()) {
+                continue;
+            }
+            boolean shouldBeChecked = selected.contains(option.id());
+            if (shouldBeChecked != option.checked()) {
+                executeSelectedOptions(sessionId, List.of(option.id()));
+            }
+        }
+        if (locatorResolver != null) {
+            for (var option : prompt.options()) {
+                if (option.disabled()) {
+                    continue;
+                }
+                boolean actual = locatorResolver.withLocator(
+                        sessionId, option.id(), locator -> locator.isChecked());
+                if (actual != selected.contains(option.id())) {
+                    throw new IllegalStateException(
+                            "약관 선택 상태를 안전하게 적용하지 못했습니다.");
+                }
+            }
+        }
     }
 
     private void executeSelectedOptions(

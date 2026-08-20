@@ -52,6 +52,12 @@ public enum ErrorCode {
             "Browser Action 요청이 너무 빠릅니다."
     ),
 
+    USER_DECISION_RESUME_FAILED(
+            HttpStatus.CONFLICT,
+            "DECISION_409_RESUME_FAILED",
+            "사용자 결정 후속 처리에 실패했습니다."
+    ),
+
     INTERNAL_SERVER_ERROR(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "COMMON_500",

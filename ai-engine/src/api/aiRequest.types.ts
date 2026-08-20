@@ -62,6 +62,18 @@ export interface BackendAiDecisionRequest {
   userRequest: string;
 
   snapshot: BackendSanitizedDomSnapshot;
+
+  userDecision?: {
+    decisionId: string;
+    decisionType:
+      | "PRODUCT_SELECTION"
+      | "SOURCE_ACCOUNT_SELECTION"
+      | "RECIPIENT_SELECTION"
+      | "TERMS_AGREEMENT"
+      | "ADDITIONAL_INFORMATION";
+    selectedOptionIds: string[];
+    sourceSnapshotId: string;
+  };
 }
 
 /**
@@ -81,4 +93,6 @@ export interface AiActionRequest {
   };
 
   domSnapshot: BackendSanitizedDomSnapshot;
+
+  userDecision?: BackendAiDecisionRequest["userDecision"];
 }

@@ -1,7 +1,9 @@
 package com.ddd.backend.ai;
 
 import com.ddd.backend.automation.BrowserActionType;
+import com.ddd.backend.domain.session.DecisionType;
 
+import java.util.List;
 import java.util.Objects;
 
 public record AiDecisionResponse(
@@ -10,7 +12,14 @@ public record AiDecisionResponse(
         String value,
         Integer scrollX,
         Integer scrollY,
-        Integer waitMillis
+        Integer waitMillis,
+        String status,
+        String message,
+        Boolean requiresUserAction,
+        Boolean executionBlocked,
+        DecisionType decisionType,
+        List<AiDecisionOption> options,
+        List<AiDecisionOption> terms
 ) {
 
     public AiDecisionResponse {
@@ -29,6 +38,16 @@ public record AiDecisionResponse(
                 normalizeNullable(
                         value
                 );
+        options = options == null ? List.of() : List.copyOf(options);
+        terms = terms == null ? List.of() : List.copyOf(terms);
+    }
+
+    public AiDecisionResponse(
+            BrowserActionType actionType, String elementId, String value,
+            Integer scrollX, Integer scrollY, Integer waitMillis
+    ) {
+        this(actionType, elementId, value, scrollX, scrollY, waitMillis,
+                null, null, null, null, null, List.of(), List.of());
     }
 
     /*

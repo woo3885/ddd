@@ -53,6 +53,25 @@ public final class UserDecisionSessionState {
         return state == null ? Optional.empty() : state.takeLatestResult();
     }
 
+    public AutomationDecisionPrompt pendingPrompt(String sessionId) {
+        validateSessionId(sessionId);
+        SessionState state = sessions.get(sessionId);
+        if (state == null) {
+            throw new IllegalStateException("대기 중인 사용자 결정이 없습니다.");
+        }
+        return state.pendingPrompt();
+    }
+
+    public AutomationDecisionPrompt pendingPrompt(
+            String sessionId, SubmitDecisionRequest request) {
+        validateSessionId(sessionId);
+        SessionState state = sessions.get(sessionId);
+        if (state == null) {
+            throw new IllegalStateException("대기 중인 사용자 결정이 없습니다.");
+        }
+        return state.pendingPrompt(request);
+    }
+
     private void validateSessionId(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("세션 ID는 비어 있을 수 없습니다.");
@@ -112,7 +131,6 @@ public final class UserDecisionSessionState {
                 throw new IllegalArgumentException("필수 약관 선택이 누락되었습니다.");
             }
 
-            acceptedAction.run();
             latestResult = new UserDecisionResult(
                     request.requestId(),
                     request.decisionId(),
@@ -123,9 +141,31 @@ public final class UserDecisionSessionState {
                     pending.sourceSnapshotId(),
                     java.time.Instant.now()
             );
+            try {
+                acceptedAction.run();
+            } catch (RuntimeException exception) {
+                latestResult = null;
+                throw exception;
+            }
             consumedDecisionIds.add(pending.decisionId());
             consumedRequestIds.add(pending.requestId());
             pending = null;
+        }
+
+        private synchronized AutomationDecisionPrompt pendingPrompt() {
+            if (pending == null) {
+                throw new IllegalStateException("대기 중인 사용자 결정이 없습니다.");
+            }
+            return pending;
+        }
+
+        private synchronized AutomationDecisionPrompt pendingPrompt(
+                SubmitDecisionRequest request) {
+            if (consumedDecisionIds.contains(request.decisionId())
+                    || consumedRequestIds.contains(request.requestId())) {
+                throw new IllegalStateException("이미 처리된 사용자 결정 요청입니다.");
+            }
+            return pendingPrompt();
         }
 
         private synchronized Optional<UserDecisionResult> latestResult() {
