@@ -16,6 +16,7 @@ public record InteractiveElement(
         String explicitPolicy,
         boolean visible,
         boolean enabled,
+        Boolean checked,
         Double x,
         Double y,
         Double width,
@@ -142,11 +143,24 @@ public record InteractiveElement(
                 null,
                 visible,
                 enabled,
+                null,
                 x,
                 y,
                 width,
                 height
         );
+    }
+
+    public InteractiveElement(
+            int index, String tagName, String text, String role,
+            String ariaLabel, String placeholder, String inputType,
+            String domId, String name, String autocomplete,
+            String explicitPolicy, boolean visible, boolean enabled,
+            Double x, Double y, Double width, Double height
+    ) {
+        this(index, tagName, text, role, ariaLabel, placeholder, inputType,
+                domId, name, autocomplete, explicitPolicy, visible, enabled,
+                null, x, y, width, height);
     }
 
     public boolean hasBoundingBox() {

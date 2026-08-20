@@ -48,6 +48,7 @@ public record SanitizedDomSnapshot(
             String inputType,
             boolean visible,
             boolean enabled,
+            Boolean checked,
             BoundingBoxSnapshot boundingBox,
             SecurityPolicy securityPolicy
     ) {
@@ -67,6 +68,16 @@ public record SanitizedDomSnapshot(
                     securityPolicy,
                     "securityPolicy는 필수입니다."
             );
+        }
+
+        public ElementSnapshot(
+                String elementId, String tag, String role, String text,
+                String ariaLabel, String placeholder, String inputType,
+                boolean visible, boolean enabled,
+                BoundingBoxSnapshot boundingBox, SecurityPolicy securityPolicy
+        ) {
+            this(elementId, tag, role, text, ariaLabel, placeholder, inputType,
+                    visible, enabled, null, boundingBox, securityPolicy);
         }
     }
 

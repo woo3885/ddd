@@ -447,4 +447,23 @@ class SanitizedDomSnapshotServiceTest {
                 200
         );
     }
+
+    @Test
+    void B_to_C_Snapshot에_checkbox_checked_상태를_포함한다() {
+        manager.execute(SESSION_ID, Duration.ofSeconds(5), page -> {
+            page.setContent("""
+                    <label><input id="term-required" type="checkbox" checked>
+                    [필수] 이용약관</label>
+                    <label><input id="term-optional" type="checkbox">
+                    [선택] 마케팅</label>
+                    """);
+            return null;
+        });
+
+        SanitizedDomSnapshot snapshot = service.createSnapshot(SESSION_ID);
+
+        assertThat(snapshot.elements())
+                .extracting(SanitizedDomSnapshot.ElementSnapshot::checked)
+                .containsExactly(true, false);
+    }
 }

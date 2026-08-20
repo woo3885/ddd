@@ -401,4 +401,21 @@ class InteractiveElementExtractorTest {
                         2
                 );
     }
+
+    @Test
+    void checkbox와_aria_checkbox의_checked_상태를_추출한다() {
+        manager.execute(SESSION_ID, Duration.ofSeconds(5), page -> {
+            page.setContent("""
+                    <input id="required" type="checkbox" checked>
+                    <input id="optional" type="checkbox">
+                    <div id="custom" role="checkbox" aria-checked="true">custom</div>
+                    """);
+            return null;
+        });
+
+        List<InteractiveElement> elements = extractor.extract(SESSION_ID);
+
+        assertThat(elements).extracting(InteractiveElement::checked)
+                .containsExactly(true, false, true);
+    }
 }

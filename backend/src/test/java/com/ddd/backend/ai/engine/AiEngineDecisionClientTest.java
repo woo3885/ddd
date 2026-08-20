@@ -182,6 +182,31 @@ class AiEngineDecisionClientTest {
     }
 
     @Test
+    void B_to_C_실제_JSON_Snapshot에_checked를_포함한다()
+            throws Exception {
+        transport.response = """
+                {"actionType":"NONE"}
+                """;
+        AiDecisionRequest base = createRequest();
+        SanitizedDomSnapshot.ElementSnapshot source =
+                base.snapshot().elements().getFirst();
+        var checkedElement = new SanitizedDomSnapshot.ElementSnapshot(
+                source.elementId(), source.tag(), source.role(), source.text(),
+                source.ariaLabel(), source.placeholder(), source.inputType(),
+                source.visible(), source.enabled(), true,
+                source.boundingBox(), source.securityPolicy());
+        var snapshot = new SanitizedDomSnapshot(
+                base.snapshot().schemaVersion(), base.snapshot().snapshotId(),
+                base.snapshot().page(), List.of(checkedElement));
+
+        client.decide(new AiDecisionRequest(base.userRequest(), snapshot));
+
+        JsonNode element = objectMapper.readTree(transport.requestBody)
+                .get("snapshot").get("elements").get(0);
+        assertThat(element.get("checked").asBoolean()).isTrue();
+    }
+
+    @Test
     void 재개_요청은_userDecision을_실제_JSON으로_C에_전달한다()
             throws Exception {
         transport.response = """

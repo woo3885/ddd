@@ -401,7 +401,8 @@ class AiDecisionResponseValidatorTest {
     @Test
     void 구조화_Decision은_지원_유형과_sourceSnapshot을_검증한다() {
         SanitizedDomSnapshot snapshot = snapshot(policyElement(
-                SanitizedDomSnapshot.SecurityPolicy.USER_DECISION, true, true));
+                SanitizedDomSnapshot.SecurityPolicy.USER_DECISION,
+                true, true, false));
         for (var type : List.of(
                 com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
                 com.ddd.backend.domain.session.DecisionType.SOURCE_ACCOUNT_SELECTION,
@@ -479,6 +480,15 @@ class AiDecisionResponseValidatorTest {
             boolean visible,
             boolean enabled
     ) {
+        return policyElement(policy, visible, enabled, null);
+    }
+
+    private SanitizedDomSnapshot.ElementSnapshot policyElement(
+            SanitizedDomSnapshot.SecurityPolicy policy,
+            boolean visible,
+            boolean enabled,
+            Boolean checked
+    ) {
 
         return new SanitizedDomSnapshot.ElementSnapshot(
                 "el-test0001-001",
@@ -490,6 +500,7 @@ class AiDecisionResponseValidatorTest {
                 null,
                 visible,
                 enabled,
+                checked,
                 new SanitizedDomSnapshot
                         .BoundingBoxSnapshot(
                         100,

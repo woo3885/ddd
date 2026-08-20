@@ -179,6 +179,19 @@ public final class InteractiveElementExtractor {
             boolean enabled =
                     candidate.isEnabled();
 
+            Object checkedValue = candidate.evaluate(
+                    """
+                    element => {
+                      if (typeof element.checked === 'boolean') return element.checked;
+                      const ariaChecked = element.getAttribute('aria-checked');
+                      if (ariaChecked === 'true') return true;
+                      if (ariaChecked === 'false') return false;
+                      return null;
+                    }
+                    """);
+            Boolean checked = checkedValue instanceof Boolean value
+                    ? value : null;
+
             BoundingBox boundingBox =
                     candidate.boundingBox();
 
@@ -217,6 +230,7 @@ public final class InteractiveElementExtractor {
                             explicitPolicy,
                             visible,
                             enabled,
+                            checked,
                             x,
                             y,
                             width,

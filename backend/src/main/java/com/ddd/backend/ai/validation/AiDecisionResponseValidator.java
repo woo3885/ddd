@@ -161,7 +161,8 @@ public final class AiDecisionResponseValidator {
                     .reduce("", (left, right) -> left + " " + right);
             if (response.decisionType()
                     == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
-                    && choice.checked() == null) {
+                    && (choice.checked() == null || element.checked() == null
+                    || !choice.checked().equals(element.checked()))) {
                 throw invalidPayload("약관 checked 상태가 필요합니다.");
             }
             if (response.decisionType()

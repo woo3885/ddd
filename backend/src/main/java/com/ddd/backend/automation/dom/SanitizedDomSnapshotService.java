@@ -240,6 +240,7 @@ public final class SanitizedDomSnapshotService {
                                         sanitizedInputType,
                                         element.visible(),
                                         element.enabled(),
+                                        element.checked(),
                                         boundingBox,
                                         securityPolicy
                                 )
