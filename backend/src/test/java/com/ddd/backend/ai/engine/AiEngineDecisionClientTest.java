@@ -3,6 +3,8 @@ package com.ddd.backend.ai.engine;
 import com.ddd.backend.ai.AiDecisionClientException;
 import com.ddd.backend.ai.AiDecisionRequest;
 import com.ddd.backend.ai.AiDecisionResponse;
+import com.ddd.backend.ai.AiUserDecisionContext;
+import com.ddd.backend.domain.session.DecisionType;
 import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.automation.dom.SanitizedDomSnapshot;
 import org.junit.jupiter.api.BeforeEach;
@@ -123,6 +125,30 @@ class AiEngineDecisionClientTest {
                         "selector"
                 )
         ).isFalse();
+    }
+
+    @Test
+    void 재개_요청은_userDecision을_실제_JSON으로_C에_전달한다()
+            throws Exception {
+        transport.response = """
+                {"actionType":"NONE"}
+                """;
+        AiDecisionRequest base = createRequest();
+        client.decide(new AiDecisionRequest(
+                base.userRequest(), base.snapshot(),
+                new AiUserDecisionContext(
+                        "dec-001", DecisionType.TERMS_AGREEMENT,
+                        List.of("term-001"), "snap-before")));
+
+        JsonNode decision = objectMapper.readTree(transport.requestBody)
+                .get("userDecision");
+        assertThat(decision.get("decisionId").asText()).isEqualTo("dec-001");
+        assertThat(decision.get("decisionType").asText())
+                .isEqualTo("TERMS_AGREEMENT");
+        assertThat(decision.get("selectedOptionIds").get(0).asText())
+                .isEqualTo("term-001");
+        assertThat(decision.get("sourceSnapshotId").asText())
+                .isEqualTo("snap-before");
     }
 
     @Test

@@ -16,6 +16,17 @@ public class GlobalExceptionHandler {
                     GlobalExceptionHandler.class
             );
 
+    @ExceptionHandler(UserDecisionResumeException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUserDecisionResume(
+            UserDecisionResumeException exception
+    ) {
+        ErrorCode errorCode = ErrorCode.USER_DECISION_RESUME_FAILED;
+        log.warn("User decision resume failed. errorCode={}, exceptionType={}",
+                errorCode.getCode(), exception.getClass().getSimpleName());
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(ApiResponse.failure(errorCode));
+    }
+
     @ExceptionHandler(
             SessionNotFoundException.class
     )

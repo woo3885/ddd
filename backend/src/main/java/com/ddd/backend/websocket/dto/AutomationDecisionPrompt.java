@@ -24,6 +24,10 @@ public record AutomationDecisionPrompt(
         if (options.isEmpty() || options.size() > 20) {
             throw new IllegalArgumentException("결정 선택 항목은 1개 이상 20개 이하여야 합니다.");
         }
+        if (options.stream().map(AutomationDecisionOption::id).distinct().count()
+                != options.size()) {
+            throw new IllegalArgumentException("결정 선택 항목 ID는 중복될 수 없습니다.");
+        }
         if (frameId == null || frameId.isBlank() || frameSequence < 1) {
             throw new IllegalArgumentException("결정 Frame 정보가 올바르지 않습니다.");
         }
