@@ -39,6 +39,8 @@ export interface BackendSanitizedDomElement {
 
   enabled: boolean;
 
+  checked: boolean | null;
+
   boundingBox: BackendBoundingBox | null;
 
   securityPolicy: BackendSecurityPolicy;

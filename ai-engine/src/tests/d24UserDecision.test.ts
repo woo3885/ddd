@@ -73,6 +73,7 @@ function createElement(
     inputType: null,
     visible: true,
     enabled: true,
+    checked: null,
     boundingBox: null,
     securityPolicy,
   };
@@ -154,7 +155,7 @@ function createBackendRequest(
   };
 }
 
-test("Production runtime blocks automatic selection of every USER_DECISION category", () => {
+test("Production runtime rejects protected actions without rich decision metadata", () => {
   const protectedElements = [
     createElement("el-product", "상품 선택"),
     createElement("el-source-account", "출금 계좌 선택"),
@@ -165,37 +166,32 @@ test("Production runtime blocks automatic selection of every USER_DECISION categ
   const request = createRequest(protectedElements);
 
   for (const element of protectedElements) {
-    const result = enforceUserDecisionPolicy(
-      createResponse({
-        targetElementId: element.elementId,
-        confidence: 1,
-      }),
-      request,
+    assert.throws(
+      () => enforceUserDecisionPolicy(
+        createResponse({
+          targetElementId: element.elementId,
+          confidence: 1,
+        }),
+        request,
+      ),
+      /requires validated decision metadata/,
     );
-
-    assert.equal(result.action, "WAIT_FOR_USER");
-    assert.equal(result.status, "USER_DECISION_REQUIRED");
-    assert.equal(result.targetElementId, null);
-    assert.equal(result.inputValue, null);
-    assert.equal(result.requiresUserAction, true);
-    assert.equal(result.decisionType, null);
-    assert.equal(result.options, null);
   }
 
-  const selectResult = enforceUserDecisionPolicy(
-    createResponse({
-      action: "SELECT",
-      targetElementId: "el-source-account",
-      inputValue: "account-1",
-    }),
-    request,
+  assert.throws(
+    () => enforceUserDecisionPolicy(
+      createResponse({
+        action: "SELECT",
+        targetElementId: "el-source-account",
+        inputValue: "account-1",
+      }),
+      request,
+    ),
+    /requires validated decision metadata/,
   );
-
-  assert.equal(selectResult.action, "WAIT_FOR_USER");
-  assert.equal(selectResult.inputValue, null);
 });
 
-test("Production structured service applies the USER_DECISION runtime policy", async () => {
+test("Production structured service safely falls back when decision metadata is missing", async () => {
   const request = createRequest([
     createElement("el-product", "상품 선택"),
   ]);
@@ -215,7 +211,8 @@ test("Production structured service applies the USER_DECISION runtime policy", a
   );
 
   assert.equal(result.requestId, request.requestId);
-  assert.equal(result.action, "WAIT_FOR_USER");
+  assert.equal(result.status, "ERROR");
+  assert.equal(result.action, "NONE");
   assert.equal(result.targetElementId, null);
 });
 
@@ -247,6 +244,11 @@ test("D24 prompt forbids automatic choices and validation-error CLICK workaround
   assert.match(prompt, /Never auto-agree/);
   assert.match(prompt, /Return WAIT_FOR_USER/);
   assert.match(prompt, /validation error/);
+  assert.doesNotMatch(
+    prompt,
+    /decisionType must be one of[^\n]*ADDITIONAL_INFORMATION/,
+  );
+  assert.match(prompt, /Never generate checked/);
 });
 
 test("internal decision types reject blank and duplicate IDs while preserving order", () => {
@@ -646,14 +648,9 @@ test("Agent Loop maxSteps prevents an unbounded repeated-action loop", async () 
   assert.equal(executeCount, 3);
 });
 
-test("D23 C-to-B adapter remains the exact six-field wire contract", () => {
+test("D23 action fields remain unchanged inside the 14-field Backend contract", () => {
   const response = adaptStructuredResponseToBackend(
-    createResponse({
-      status: "USER_DECISION_REQUIRED",
-      action: "WAIT_FOR_USER",
-      targetElementId: null,
-      requiresUserAction: true,
-    }),
+    createResponse(),
   );
 
   assert.deepEqual(
@@ -665,7 +662,34 @@ test("D23 C-to-B adapter remains the exact six-field wire contract", () => {
       "scrollX",
       "scrollY",
       "waitMillis",
+      "status",
+      "message",
+      "requiresUserAction",
+      "executionBlocked",
+      "decisionType",
+      "sourceSnapshotId",
+      "options",
+      "terms",
     ],
+  );
+
+  assert.deepEqual(
+    {
+      actionType: response.actionType,
+      elementId: response.elementId,
+      value: response.value,
+      scrollX: response.scrollX,
+      scrollY: response.scrollY,
+      waitMillis: response.waitMillis,
+    },
+    {
+      actionType: "CLICK",
+      elementId: "el-product",
+      value: null,
+      scrollX: null,
+      scrollY: null,
+      waitMillis: null,
+    },
   );
 });
 
@@ -957,6 +981,13 @@ test("Verified context still allows a separate new USER_DECISION wait", async ()
           action: "WAIT_FOR_USER",
           targetElementId: null,
           requiresUserAction: true,
+          decisionType: "RECIPIENT_SELECTION",
+          options: [
+            {
+              id: "new-decision",
+              label: "untrusted model label",
+            },
+          ],
         }),
       ),
     }),
@@ -964,6 +995,11 @@ test("Verified context still allows a separate new USER_DECISION wait", async ()
 
   assert.equal(result.status, "USER_DECISION_REQUIRED");
   assert.equal(result.action, "WAIT_FOR_USER");
+  assert.equal(result.decisionType, "RECIPIENT_SELECTION");
+  assert.deepEqual(
+    result.options?.map((option) => option.id),
+    ["new-decision"],
+  );
 });
 
 test("Verified context cannot bypass secure, final, or risk protection", () => {
@@ -1075,8 +1111,15 @@ test("Production does not log raw model output and sanitizes financial secrets",
   );
 });
 
-test("C-to-B response excludes every unagreed rich decision field", () => {
-  const response = adaptStructuredResponseToBackend(
+test("C-to-B response matches the exact 14-field rich decision contract", () => {
+  const currentRequest = createRequest([
+    {
+      ...createElement("term-1", "필수 약관"),
+      inputType: "checkbox",
+      checked: false,
+    },
+  ]);
+  const canonical = enforceUserDecisionPolicy(
     createResponse({
       status: "USER_DECISION_REQUIRED",
       action: "WAIT_FOR_USER",
@@ -1091,6 +1134,11 @@ test("C-to-B response excludes every unagreed rich decision field", () => {
         },
       ],
     }),
+    currentRequest,
+  );
+  const response = adaptStructuredResponseToBackend(
+    canonical,
+    currentRequest.domSnapshot.snapshotId,
   );
 
   assert.deepEqual(
@@ -1102,19 +1150,50 @@ test("C-to-B response excludes every unagreed rich decision field", () => {
       "scrollX",
       "scrollY",
       "waitMillis",
+      "status",
+      "message",
+      "requiresUserAction",
+      "executionBlocked",
+      "decisionType",
+      "sourceSnapshotId",
+      "options",
+      "terms",
     ],
   );
 
   for (const field of [
-    "status",
-    "message",
-    "requiresUserAction",
-    "executionBlocked",
     "decisionId",
-    "decisionType",
-    "options",
-    "terms",
+    "description",
+    "disabled",
   ]) {
     assert.equal(field in response, false);
   }
+
+  assert.equal(response.actionType, "WAIT_FOR_USER");
+  assert.equal(response.elementId, null);
+  assert.equal(response.value, null);
+  assert.equal(response.scrollX, null);
+  assert.equal(response.scrollY, null);
+  assert.equal(response.waitMillis, null);
+  assert.equal(response.status, "USER_DECISION_REQUIRED");
+  assert.equal(response.requiresUserAction, true);
+  assert.equal(response.executionBlocked, true);
+  assert.equal(response.decisionType, "TERMS_AGREEMENT");
+  assert.equal(
+    response.sourceSnapshotId,
+    "snap-before-decision",
+  );
+  assert.deepEqual(response.options, []);
+  assert.deepEqual(response.terms, [
+    {
+      id: "term-1",
+      label: "필수 약관",
+      required: true,
+      checked: false,
+    },
+  ]);
+  assert.deepEqual(
+    Object.keys(response.terms[0] ?? {}),
+    ["id", "label", "required", "checked"],
+  );
 });

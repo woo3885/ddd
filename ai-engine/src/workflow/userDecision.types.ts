@@ -9,6 +9,27 @@ export const USER_DECISION_TYPES = [
 export type UserDecisionType =
   (typeof USER_DECISION_TYPES)[number];
 
+export const PRODUCTION_DECISION_RESPONSE_TYPES = [
+  "PRODUCT_SELECTION",
+  "SOURCE_ACCOUNT_SELECTION",
+  "RECIPIENT_SELECTION",
+  "TERMS_AGREEMENT",
+] as const satisfies readonly UserDecisionType[];
+
+export type ProductionDecisionResponseType =
+  (typeof PRODUCTION_DECISION_RESPONSE_TYPES)[number];
+
+export function isProductionDecisionResponseType(
+  value: unknown,
+): value is ProductionDecisionResponseType {
+  return (
+    typeof value === "string" &&
+    (
+      PRODUCTION_DECISION_RESPONSE_TYPES as readonly string[]
+    ).includes(value)
+  );
+}
+
 export function isUserDecisionType(
   value: unknown,
 ): value is UserDecisionType {
@@ -25,6 +46,7 @@ export interface DecisionOption {
   label: string;
   description?: string;
   disabled?: boolean;
+  checked?: boolean | null;
 }
 
 export interface DecisionTerm extends DecisionOption {

@@ -227,7 +227,8 @@ C AI 판단
 
 ### Backend Production 응답 계약
 
-현재 C → B `/api/ai/action` 응답은 다음 6개 필드 계약을 유지한다.
+현재 C → B `/api/ai/action` 응답은 D23 Action 6필드를 보존하면서 D24 decision
+metadata 8필드를 추가한 Backend의 14필드 계약을 사용한다.
 
 ```text
 actionType
@@ -236,7 +237,19 @@ value
 scrollX
 scrollY
 waitMillis
+status
+message
+requiresUserAction
+executionBlocked
+decisionType
+sourceSnapshotId
+options
+terms
 ```
+
+`decisionId`는 Backend가 생성하므로 C → B 응답에 포함하지 않는다. option/term wire는
+`id`, `label`, `required`, `checked`만 사용한다. `checked`는 모델이 아니라 현재
+Backend snapshot에서 가져온다.
 
 D23에서는 Backend DTO를 확장하지 않고 현재 계약과의 정합성 확보를 우선했다.
 
@@ -345,7 +358,8 @@ npm run test:d23
 ### D23 C 파트 현재 상태
 
 ```text
-Backend 6필드 wire 계약 유지        완료
+Backend 14필드 wire 계약 연동        완료
+D23 Action 6필드 의미 보존           완료
 Production Action allowlist         완료
 SCROLL / WAIT Production 차단       완료
 STOP / TERMINATED 의미 정합화       완료
@@ -435,7 +449,9 @@ confirmationId
 summary
 ```
 
-이 정보 전체가 현재 Backend로 전달되는 것은 아니다.
+이 정보 중 Backend `AiDecisionResponse`에 정의된 필드만 Production wire로 전달한다.
+`confidence`, secure/final/risk 상세 metadata, `confirmationId`, `summary`는 현재
+Backend DTO에 없으므로 전달하지 않는다.
 
 ## 7.2 Production C → B wire response
 
@@ -446,6 +462,13 @@ value
 scrollX
 scrollY
 waitMillis
+status
+message
+requiresUserAction
+executionBlocked
+decisionType
+options
+terms
 ```
 
 예:
@@ -457,13 +480,25 @@ waitMillis
   "value": null,
   "scrollX": null,
   "scrollY": null,
-  "waitMillis": null
+  "waitMillis": null,
+  "status": "AI_EXECUTING",
+  "message": "다음 행동을 진행합니다.",
+  "requiresUserAction": false,
+  "executionBlocked": false,
+  "decisionType": null,
+  "sourceSnapshotId": null,
+  "options": [],
+  "terms": []
 }
 ```
 
-D23에서는 이 6필드 계약을 유지한다.
+D23의 Action 6필드는 같은 이름과 의미로 유지된다.
 
-message, decision/options, secure/final/risk metadata 등의 확장 계약은 후속 일정에서 Backend와 함께 확장한다.
+D24 USER_DECISION에서는 `status`, `message`, `requiresUserAction`,
+`executionBlocked`, `decisionType`, `sourceSnapshotId`, `options`, `terms`를 최신
+Backend DTO와 정확히 맞춘다. `decisionId`와 option의 `description`, `disabled`는
+추가하지 않는다. option의 `checked`는 DTO에 포함하되 모델이 만들지 않고 현재
+Backend snapshot 값만 사용한다.
 
 ---
 
@@ -538,7 +573,8 @@ Policy / Confidence
 
 낮은 Confidence나 불확실한 상황에서는 자동 실행보다 안전한 Fallback을 우선한다.
 
-현재 Production C → B wire response는 6필드 Action 중심 계약이므로 C 내부의 풍부한 Fallback metadata가 모두 Backend로 전달되는 구조는 아니다.
+현재 Production C → B wire response는 14필드이지만 Backend DTO에 정의되지 않은 C
+내부 confidence, secure/final/risk 상세값, confirmation/summary metadata는 전달하지 않는다.
 
 ---
 
@@ -727,6 +763,8 @@ cd C:\2026finance\ddd\ai-engine
 npm.cmd run check
 npm.cmd test
 npm.cmd run test:d23
+npm.cmd run test:d24
+npm.cmd run test:d24:response
 npm.cmd run test:live
 ```
 
@@ -917,7 +955,7 @@ Prompt에는 `userRequest`에 이어 붙이는 자연어가 아니라 별도의 
 
 ## C → B 응답과 A UI 데이터
 
-C의 Production wire response는 다음 여섯 필드를 그대로 유지한다.
+C의 Production wire response는 다음 14필드다.
 
 ```text
 actionType
@@ -926,11 +964,56 @@ value
 scrollX
 scrollY
 waitMillis
+status
+message
+requiresUserAction
+executionBlocked
+decisionType
+sourceSnapshotId
+options
+terms
 ```
 
-`status`, `message`, `decisionId`, `decisionType`, `options`, `terms`, secure/final/risk
-metadata를 C → B wire에 추가하지 않는다. A가 사용하는 decision UI payload는
-Backend의 `DECISION_REQUIRED` 계열 UI event가 authoritative source다.
+USER_DECISION rich response는 `WAIT_FOR_USER`, null Action payload,
+`requiresUserAction=true`, `executionBlocked=true`를 사용한다. `TERMS_AGREEMENT`는
+`terms`에, 나머지 지원 DecisionType은 `options`에 매핑한다. 각 item은 `id`, `label`,
+`required`, `checked`를 정확히 포함한다. `sourceSnapshotId`에는 새 결정을 생성한 현재
+request의 `snapshot.snapshotId`를 사용한다. 일반 Action에서는 `sourceSnapshotId=null`이다.
+
+`decisionId`, option의 `description`/`disabled`, secure/final/risk 상세 metadata는
+C → B wire에 추가하지 않는다. Backend가 현재 snapshot과 ID를 검증하고 decisionId,
+disabled, frame 정보를 생성하여 `DECISION_REQUIRED` event를 authoritative하게 발행한다.
+
+C → B rich decision response에서 허용되는 유형은 다음 네 가지다.
+
+```text
+PRODUCT_SELECTION
+SOURCE_ACCOUNT_SELECTION
+RECIPIENT_SELECTION
+TERMS_AGREEMENT
+```
+
+`ADDITIONAL_INFORMATION`은 B → C의 검증된 재개 context에서는 허용되지만 새 C → B
+rich decision response에서는 Backend validator와 동일하게 거부한다.
+`ACCOUNT_SELECTION` alias는 양방향 모두 거부한다.
+
+C는 model option을 wire로 보내기 전에 각 ID가 현재 snapshot에 존재하고 해당 요소가
+visible/enabled이며 `securityPolicy=USER_DECISION`인지 교차 검증한다. ID와 배열 순서는
+변경하지 않는다. label은 모델 값을 사용하지 않고 snapshot의
+`ariaLabel → text → placeholder → role → tag` 순서로 재구성하여 sanitizer를 적용한다.
+약관 required 값도 snapshot label의 `필수`/`required` marker를 기준으로 만든다.
+`checked`는 B가 snapshot에 포함한 nullable Boolean에서만 가져온다. 약관은 snapshot의
+`checked`가 boolean이 아니면 안전하게 응답 생성을 거부하며, 모델의 checked 추정값은
+사용하지 않는다. Backend는 C 응답의 약관 checked와 동일 snapshot의 checked가 정확히
+일치하는지 재검증하고, UI event 발행 직전 현재 DOM 상태도 다시 확인한다.
+
+B → C `userDecision.sourceSnapshotId`는 사용자가 선택했던 이전 decision source를
+가리킨다. C → B `response.sourceSnapshotId`는 현재 새 결정을 만든 snapshot을 가리키므로
+둘을 재사용하거나 혼동하지 않는다.
+
+B → C `userDecision` 재개 요청은 기존과 동일하게 request-scoped context로만 소비한다.
+Production 전역 `UserDecisionContextStore`나 `resumeAgentLoopAfterUserDecision()` 직접
+호출은 사용하지 않는다.
 
 ## 보안과 검증 결과
 
@@ -942,9 +1025,10 @@ internal endpoint, password/OTP, 계좌·카드·전화번호 형태의 민감�
 
 ```text
 npm.cmd run check     PASS
-npm.cmd test          39/39 PASS
+npm.cmd test          47/47 PASS
 npm.cmd run test:d23   6/6 PASS
-npm.cmd run test:d24  23/23 PASS
+npm.cmd run test:d24  31/31 PASS
+npm.cmd run test:d24:response  8/8 PASS
 ```
 
 실제 Gemini API를 호출하는 `test:live`는 기본 회귀 테스트에서 분리되어 있다.
@@ -953,8 +1037,6 @@ npm.cmd run test:d24  23/23 PASS
 
 Backend:
 
-- Production에서 실제 발생시키는 decisionType 종류의 확대 시점
-- checkbox desired-state 동기화 방식
 - decision TTL 정책
 - AI 재호출 실패 시 복구 및 재시도 정책
 

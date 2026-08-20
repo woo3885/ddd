@@ -3,7 +3,7 @@ import {
 } from "./aiResponse.types.js";
 
 import {
-  USER_DECISION_TYPES,
+  PRODUCTION_DECISION_RESPONSE_TYPES,
 } from "../workflow/userDecision.types.js";
 
 export const aiResponseSchema = {
@@ -85,7 +85,7 @@ export const aiResponseSchema = {
     decisionType: {
       type: ["string", "null"],
       enum: [
-        ...USER_DECISION_TYPES,
+        ...PRODUCTION_DECISION_RESPONSE_TYPES,
         null,
       ],
     },
@@ -101,6 +101,7 @@ export const aiResponseSchema = {
     options: {
       type: ["array", "null"],
       minItems: 1,
+      maxItems: 20,
       items: {
         type: "object",
         additionalProperties: false,
@@ -326,6 +327,81 @@ export const aiResponseSchema = {
             type: "null",
           },
 
+          requiresUserAction: {
+            const: true,
+          },
+
+          decisionType: {
+            type: "string",
+            enum: PRODUCTION_DECISION_RESPONSE_TYPES,
+          },
+
+          options: {
+            type: "array",
+            minItems: 1,
+            maxItems: 20,
+          },
+        },
+      },
+    },
+
+    /*
+     * Decision metadata is only a candidate description for Backend to
+     * validate. It must never accompany an executable browser action.
+     */
+    {
+      if: {
+        properties: {
+          decisionType: {
+            type: "string",
+          },
+        },
+        required: [
+          "decisionType",
+        ],
+      },
+      then: {
+        properties: {
+          action: {
+            const: "WAIT_FOR_USER",
+          },
+          status: {
+            const: "USER_DECISION_REQUIRED",
+          },
+          requiresUserAction: {
+            const: true,
+          },
+          options: {
+            type: "array",
+            minItems: 1,
+            maxItems: 20,
+          },
+        },
+      },
+    },
+
+    {
+      if: {
+        properties: {
+          status: {
+            const: "USER_DECISION_REQUIRED",
+          },
+        },
+        required: [
+          "status",
+        ],
+      },
+      then: {
+        properties: {
+          action: {
+            const: "WAIT_FOR_USER",
+          },
+          targetElementId: {
+            type: "null",
+          },
+          inputValue: {
+            type: "null",
+          },
           requiresUserAction: {
             const: true,
           },

@@ -1,7 +1,11 @@
 const MAX_INTERNAL_MESSAGE_LENGTH = 160;
+const MAX_DECISION_LABEL_LENGTH = 120;
 
 export const SAFE_INTERNAL_MESSAGE =
   "사용자 확인이 필요한 단계입니다.";
+
+export const SAFE_DECISION_LABEL =
+  "선택 항목";
 
 const FORBIDDEN_TECHNICAL_CONTENT = [
   /chain[ -]?of[ -]?thought/i,
@@ -64,4 +68,23 @@ export function sanitizeInternalMessage(
   }
 
   return normalized || SAFE_INTERNAL_MESSAGE;
+}
+
+export function sanitizeDecisionLabel(
+  value: string,
+): string {
+  const sanitized = sanitizeInternalMessage(
+    value,
+  );
+
+  if (sanitized === SAFE_INTERNAL_MESSAGE) {
+    return SAFE_DECISION_LABEL;
+  }
+
+  const label = sanitized.slice(
+    0,
+    MAX_DECISION_LABEL_LENGTH,
+  ).trimEnd();
+
+  return label || SAFE_DECISION_LABEL;
 }
