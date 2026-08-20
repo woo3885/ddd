@@ -4,5 +4,8 @@ public enum AutomationUiEventType {
     STATE,
     GUIDE,
     TARGET,
-    TARGET_CLEAR
+    TARGET_CLEAR,
+    DECISION_REQUIRED,
+    DECISION_RESOLVED,
+    DECISION_CLEAR
 }

@@ -10,6 +10,7 @@ import com.ddd.backend.security.capture.FrameCaptureAttempt;
 import com.ddd.backend.security.navigation.DemoNavigationPolicy;
 import com.ddd.backend.security.navigation.DemoNavigationTarget;
 import com.ddd.backend.service.action.PublicBrowserActionSessionState;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
 import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,8 @@ public class AutomationSessionService {
     private final PublicBrowserActionSessionState
             publicBrowserActionSessionState;
 
+    private final UserDecisionSessionState userDecisionSessionState;
+
     /*
      * 실제 Spring 실행용 생성자.
      */
@@ -70,7 +73,8 @@ public class AutomationSessionService {
             BrowserFrameStore browserFrameStore,
             BrowserFrameWebSocketHandler frameWebSocketHandler,
             PublicBrowserActionSessionState
-                    publicBrowserActionSessionState
+                    publicBrowserActionSessionState,
+            UserDecisionSessionState userDecisionSessionState
     ) {
         this.sessionRepository =
                 sessionRepository;
@@ -95,6 +99,23 @@ public class AutomationSessionService {
 
         this.publicBrowserActionSessionState =
                 publicBrowserActionSessionState;
+
+        this.userDecisionSessionState = userDecisionSessionState;
+    }
+
+    public AutomationSessionService(
+            AutomationSessionRepository sessionRepository,
+            BrowserSessionManager browserSessionManager,
+            AutomationStatusEventPublisher statusEventPublisher,
+            DemoNavigationPolicy demoNavigationPolicy,
+            BrowserFrameCaptureService browserFrameCaptureService,
+            BrowserFrameStore browserFrameStore,
+            BrowserFrameWebSocketHandler frameWebSocketHandler,
+            PublicBrowserActionSessionState publicBrowserActionSessionState
+    ) {
+        this(sessionRepository, browserSessionManager, statusEventPublisher,
+                demoNavigationPolicy, browserFrameCaptureService, browserFrameStore,
+                frameWebSocketHandler, publicBrowserActionSessionState, null);
     }
 
     /*
@@ -120,6 +141,7 @@ public class AutomationSessionService {
                 browserFrameCaptureService,
                 browserFrameStore,
                 frameWebSocketHandler,
+                null,
                 null
         );
     }
@@ -142,6 +164,7 @@ public class AutomationSessionService {
                 demoNavigationPolicy,
                 browserFrameCaptureService,
                 browserFrameStore,
+                null,
                 null,
                 null
         );
@@ -392,6 +415,7 @@ public class AutomationSessionService {
         cleanupPublicBrowserActionStateSafely(
                 sessionId
         );
+        cleanupUserDecisionStateSafely(sessionId);
 
         /*
          * Playwright BrowserContext / Page 종료.
@@ -471,6 +495,7 @@ public class AutomationSessionService {
         cleanupPublicBrowserActionStateSafely(
                 sessionId
         );
+        cleanupUserDecisionStateSafely(sessionId);
 
         /*
          * BrowserContext / Page 종료.
@@ -560,6 +585,17 @@ public class AutomationSessionService {
              * Public Action 상태 cleanup 실패가
              * 전체 Session cleanup을 실패시키면 안 된다.
              */
+        }
+    }
+
+    private void cleanupUserDecisionStateSafely(String sessionId) {
+        if (userDecisionSessionState == null) {
+            return;
+        }
+        try {
+            userDecisionSessionState.removeSession(sessionId);
+        } catch (RuntimeException ignored) {
+            // Decision cleanup failure must not stop remaining resource cleanup.
         }
     }
 
