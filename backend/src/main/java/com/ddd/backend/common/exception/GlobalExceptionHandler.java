@@ -1,7 +1,8 @@
 package com.ddd.backend.common.exception;
 
 import com.ddd.backend.common.response.ApiResponse;
-import org.springframework.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -10,57 +11,225 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(SessionNotFoundException.class)
-    public ResponseEntity<ApiResponse<Void>> handleSessionNotFound(
+    private static final Logger log =
+            LoggerFactory.getLogger(
+                    GlobalExceptionHandler.class
+            );
+
+    @ExceptionHandler(UserDecisionResumeException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUserDecisionResume(
+            UserDecisionResumeException exception
+    ) {
+        ErrorCode errorCode = ErrorCode.USER_DECISION_RESUME_FAILED;
+        log.warn("User decision resume failed. errorCode={}, exceptionType={}",
+                errorCode.getCode(), exception.getClass().getSimpleName());
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(ApiResponse.failure(errorCode));
+    }
+
+    @ExceptionHandler(
+            SessionNotFoundException.class
+    )
+    public ResponseEntity<ApiResponse<Void>>
+    handleSessionNotFound(
             SessionNotFoundException exception
     ) {
+        ErrorCode errorCode =
+                ErrorCode.SESSION_NOT_FOUND;
+
+        log.warn(
+                "Application error handled. "
+                        + "errorCode={}, exceptionType={}",
+                errorCode.getCode(),
+                exception
+                        .getClass()
+                        .getSimpleName()
+        );
+
         return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.failure(exception.getMessage()));
+                .status(
+                        errorCode.getHttpStatus()
+                )
+                .body(
+                        ApiResponse.failure(
+                                errorCode,
+                                exception.getMessage()
+                        )
+                );
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidation(
+    @ExceptionHandler(
+            BrowserActionRequestException.class
+    )
+    public ResponseEntity<ApiResponse<Void>>
+    handleBrowserActionRequest(
+            BrowserActionRequestException exception
+    ) {
+        ErrorCode errorCode =
+                exception.getErrorCode();
+
+        /*
+         * requestId / elementId / sessionId는
+         * 로그에 남기지 않는다.
+         */
+        log.warn(
+                "Browser Action request rejected. "
+                        + "errorCode={}, exceptionType={}",
+                errorCode.getCode(),
+                exception
+                        .getClass()
+                        .getSimpleName()
+        );
+
+        return ResponseEntity
+                .status(
+                        errorCode.getHttpStatus()
+                )
+                .body(
+                        ApiResponse.failure(
+                                errorCode,
+                                exception.getMessage()
+                        )
+                );
+    }
+
+    @ExceptionHandler(
+            MethodArgumentNotValidException.class
+    )
+    public ResponseEntity<ApiResponse<Void>>
+    handleValidation(
             MethodArgumentNotValidException exception
     ) {
-        String message = exception.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .findFirst()
-                .map(error -> error.getDefaultMessage())
-                .orElse("요청값이 올바르지 않습니다.");
+        String message =
+                exception
+                        .getBindingResult()
+                        .getFieldErrors()
+                        .stream()
+                        .findFirst()
+                        .map(
+                                error ->
+                                        error.getDefaultMessage()
+                        )
+                        .orElse(
+                                ErrorCode
+                                        .INVALID_REQUEST
+                                        .getMessage()
+                        );
+
+        ErrorCode errorCode =
+                ErrorCode.INVALID_REQUEST;
+
+        log.warn(
+                "Request validation failed. "
+                        + "errorCode={}, "
+                        + "validationErrorCount={}",
+                errorCode.getCode(),
+                exception
+                        .getBindingResult()
+                        .getErrorCount()
+        );
 
         return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.failure(message));
+                .status(
+                        errorCode.getHttpStatus()
+                )
+                .body(
+                        ApiResponse.failure(
+                                errorCode,
+                                message
+                        )
+                );
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(
+    @ExceptionHandler(
+            IllegalArgumentException.class
+    )
+    public ResponseEntity<ApiResponse<Void>>
+    handleIllegalArgument(
             IllegalArgumentException exception
     ) {
+        ErrorCode errorCode =
+                ErrorCode.INVALID_REQUEST;
+
+        log.warn(
+                "Application error handled. "
+                        + "errorCode={}, exceptionType={}",
+                errorCode.getCode(),
+                exception
+                        .getClass()
+                        .getSimpleName()
+        );
+
         return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.failure(exception.getMessage()));
+                .status(
+                        errorCode.getHttpStatus()
+                )
+                .body(
+                        ApiResponse.failure(
+                                errorCode,
+                                exception.getMessage()
+                        )
+                );
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIllegalState(
+    @ExceptionHandler(
+            IllegalStateException.class
+    )
+    public ResponseEntity<ApiResponse<Void>>
+    handleIllegalState(
             IllegalStateException exception
     ) {
+        ErrorCode errorCode =
+                ErrorCode.INVALID_SESSION_STATE;
+
+        log.warn(
+                "Application error handled. "
+                        + "errorCode={}, exceptionType={}",
+                errorCode.getCode(),
+                exception
+                        .getClass()
+                        .getSimpleName()
+        );
+
         return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(ApiResponse.failure(exception.getMessage()));
+                .status(
+                        errorCode.getHttpStatus()
+                )
+                .body(
+                        ApiResponse.failure(
+                                errorCode,
+                                exception.getMessage()
+                        )
+                );
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(
+    @ExceptionHandler(
+            Exception.class
+    )
+    public ResponseEntity<ApiResponse<Void>>
+    handleUnexpectedException(
             Exception exception
     ) {
+        ErrorCode errorCode =
+                ErrorCode.INTERNAL_SERVER_ERROR;
+
+        log.error(
+                "Unexpected server error. "
+                        + "errorCode={}, exceptionType={}",
+                errorCode.getCode(),
+                exception
+                        .getClass()
+                        .getSimpleName()
+        );
+
         return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.failure(
-                        "서버 처리 중 오류가 발생했습니다."
-                ));
+                .status(
+                        errorCode.getHttpStatus()
+                )
+                .body(
+                        ApiResponse.failure(
+                                errorCode
+                        )
+                );
     }
 }
