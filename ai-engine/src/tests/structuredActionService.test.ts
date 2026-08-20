@@ -33,6 +33,7 @@ const request: AiActionRequest = {
         inputType: null,
         visible: true,
         enabled: true,
+        checked: null,
         boundingBox: {
           x: 10,
           y: 20,

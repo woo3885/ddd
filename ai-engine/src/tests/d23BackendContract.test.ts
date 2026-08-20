@@ -146,7 +146,7 @@ test("trusted C requestId replaces the model echo", () => {
   assert.equal(response.requestId, "req-generated-by-c");
 });
 
-test("CLICK, TYPE, and NONE keep the Backend six-field wire contract", () => {
+test("CLICK, TYPE, and NONE preserve D23 action fields in the Backend response", () => {
   const cases: Array<{
     response: StructuredAIResponse;
     expected: ReturnType<typeof adaptStructuredResponseToBackend>;
@@ -162,6 +162,14 @@ test("CLICK, TYPE, and NONE keep the Backend six-field wire contract", () => {
         scrollX: null,
         scrollY: null,
         waitMillis: null,
+        status: "AI_EXECUTING",
+        message: "next action",
+        requiresUserAction: false,
+        executionBlocked: false,
+        decisionType: null,
+        sourceSnapshotId: null,
+        options: [],
+        terms: [],
       },
     },
     {
@@ -176,6 +184,14 @@ test("CLICK, TYPE, and NONE keep the Backend six-field wire contract", () => {
         scrollX: null,
         scrollY: null,
         waitMillis: null,
+        status: "AI_EXECUTING",
+        message: "next action",
+        requiresUserAction: false,
+        executionBlocked: false,
+        decisionType: null,
+        sourceSnapshotId: null,
+        options: [],
+        terms: [],
       },
     },
     {
@@ -187,6 +203,14 @@ test("CLICK, TYPE, and NONE keep the Backend six-field wire contract", () => {
         scrollX: null,
         scrollY: null,
         waitMillis: null,
+        status: "AI_EXECUTING",
+        message: "next action",
+        requiresUserAction: false,
+        executionBlocked: false,
+        decisionType: null,
+        sourceSnapshotId: null,
+        options: [],
+        terms: [],
       },
     },
   ];
@@ -195,14 +219,22 @@ test("CLICK, TYPE, and NONE keep the Backend six-field wire contract", () => {
     const wire = adaptStructuredResponseToBackend(response);
     assert.deepEqual(wire, expected);
     assert.deepEqual(
-      Object.keys(wire).sort(),
+      Object.keys(wire),
       [
         "actionType",
         "elementId",
+        "value",
         "scrollX",
         "scrollY",
-        "value",
         "waitMillis",
+        "status",
+        "message",
+        "requiresUserAction",
+        "executionBlocked",
+        "decisionType",
+        "sourceSnapshotId",
+        "options",
+        "terms",
       ],
     );
   }

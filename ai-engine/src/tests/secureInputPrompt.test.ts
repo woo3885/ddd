@@ -66,6 +66,9 @@ const secureInputSnapshot:
       enabled:
         true,
 
+      checked:
+        null,
+
       boundingBox: {
         x: 100,
         y: 200,

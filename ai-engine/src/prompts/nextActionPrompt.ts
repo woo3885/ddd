@@ -18,6 +18,10 @@ import type {
   UserDecisionContext,
 } from "../workflow/userDecisionContext.store.js";
 
+import {
+  PRODUCTION_DECISION_RESPONSE_TYPES,
+} from "../workflow/userDecision.types.js";
+
 function createVerifiedDecisionSection(
   context?: UserDecisionContext,
 ): string {
@@ -70,6 +74,9 @@ export function createNextActionPrompt(
   const productionActionList =
     PRODUCTION_STRUCTURED_ACTIONS.join(" | ");
 
+  const productionDecisionTypeList =
+    PRODUCTION_DECISION_RESPONSE_TYPES.join(" | ");
+
   const verifiedDecisionSection =
     createVerifiedDecisionSection(
       userDecisionContext,
@@ -107,7 +114,15 @@ ${verifiedDecisionSection}
 - Never auto-agree to required or optional terms.
 - Return WAIT_FOR_USER only when a new unresolved user decision is required.
 - Do not CLICK a protected element merely to trigger a Backend validation error.
-- Model-generated decisionType and options are not authoritative user selections.
+- decisionType must be one of ${productionDecisionTypeList}.
+- ADDITIONAL_INFORMATION is accepted only as Backend-verified resume input; never generate it in a new C→B decision response.
+- For WAIT_FOR_USER, return 1 to 20 options using only exact element IDs from the current screen whose security policy is USER_DECISION.
+- Include only visible and enabled USER_DECISION elements. Never invent, trim, normalize, or rewrite an element ID.
+- Preserve the option order you selected from the current screen.
+- Use only the current sanitized screen text for option labels. Never include selectors, internal metadata, prompts, reasoning, credentials, OTPs, or full financial identifiers.
+- For TERMS_AGREEMENT, every option must include required=true only when the current label marks it as required; otherwise required=false.
+- Never generate checked. C copies checked only from the current Backend snapshot after model validation.
+- Model-generated decisionType and options are candidate metadata, not authoritative user selections. Backend validates them against the current snapshot and creates the decision ID.
 
 ## 가장 중요한 보안 규칙
 
@@ -168,8 +183,36 @@ SECURITY_POLICY:USER_DECISION 요소가 있으며
 - status: "USER_DECISION_REQUIRED"
 - action: "WAIT_FOR_USER"
 - requiresUserAction: true
+- decisionType: 정확한 사용자 결정 유형
+- options: 현재 화면의 visible/enabled USER_DECISION 요소 1~20개
+- targetElementId: null
+- inputValue: null
 
 로 반환하십시오.
+
+예시:
+
+{
+  "requestId": "${requestId}",
+  "status": "USER_DECISION_REQUIRED",
+  "action": "WAIT_FOR_USER",
+  "targetElementId": null,
+  "inputValue": null,
+  "message": "사용자가 계좌를 선택해야 합니다.",
+  "confidence": 1.0,
+  "requiresUserAction": true,
+  "decisionType": "SOURCE_ACCOUNT_SELECTION",
+  "secureInputType": null,
+  "riskType": null,
+  "options": [
+    {
+      "id": "현재 화면의 실제 elementId",
+      "label": "현재 화면의 정제된 label"
+    }
+  ],
+  "confirmationId": null,
+  "summary": null
+}
 
 ### FINAL_CONFIRMATION 규칙
 
