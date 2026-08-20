@@ -3,6 +3,7 @@ package com.ddd.backend.api.controller;
 import com.ddd.backend.common.exception.GlobalExceptionHandler;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.DecisionType;
+import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
 import com.ddd.backend.service.AutomationSessionService;
 import com.ddd.backend.service.UserDecisionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,9 +59,9 @@ class AutomationSessionUserDecisionControllerTest {
 
         when(
                 userDecisionService.submitDecision(
-                        "session-001",
-                        DecisionType.PRODUCT_SELECTION,
-                        List.of("product-001")
+                        org.mockito.ArgumentMatchers.eq("session-001"),
+                        org.mockito.ArgumentMatchers.any(
+                                SubmitDecisionRequest.class)
                 )
         ).thenReturn(
                 session
@@ -77,11 +78,15 @@ class AutomationSessionUserDecisionControllerTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-001",
+                                          "decisionId": "dec-001",
                                           "decisionType":
                                             "PRODUCT_SELECTION",
                                           "selectedOptionIds": [
                                             "product-001"
-                                          ]
+                                          ],
+                                          "expectedFrameId": "frm-001",
+                                          "expectedSequence": 1
                                         }
                                         """
                                 )
@@ -92,9 +97,13 @@ class AutomationSessionUserDecisionControllerTest {
 
         verify(userDecisionService)
                 .submitDecision(
-                        "session-001",
-                        DecisionType.PRODUCT_SELECTION,
-                        List.of("product-001")
+                        org.mockito.ArgumentMatchers.eq("session-001"),
+                        org.mockito.ArgumentMatchers.argThat(
+                                request -> request.decisionId().equals("dec-001")
+                                        && request.expectedSequence() == 1L
+                                        && request.selectedOptionIds()
+                                        .equals(List.of("product-001"))
+                        )
                 );
     }
 

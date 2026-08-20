@@ -6,6 +6,7 @@ import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.service.action.PublicBrowserActionSessionState;
 import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,7 @@ public class SessionExpirationScheduler {
             publicBrowserActionSessionState;
 
     private final AutomationStatusEventPublisher uiEventPublisher;
+    private final UserDecisionSessionState userDecisionSessionState;
 
     /*
      * 실제 Spring 실행용 생성자.
@@ -68,7 +70,8 @@ public class SessionExpirationScheduler {
             BrowserFrameWebSocketHandler frameWebSocketHandler,
             PublicBrowserActionSessionState
                     publicBrowserActionSessionState,
-            AutomationStatusEventPublisher uiEventPublisher
+            AutomationStatusEventPublisher uiEventPublisher,
+            UserDecisionSessionState userDecisionSessionState
     ) {
         this.sessionRepository =
                 sessionRepository;
@@ -86,6 +89,20 @@ public class SessionExpirationScheduler {
                 publicBrowserActionSessionState;
 
         this.uiEventPublisher = uiEventPublisher;
+        this.userDecisionSessionState = userDecisionSessionState;
+    }
+
+    public SessionExpirationScheduler(
+            AutomationSessionRepository sessionRepository,
+            BrowserSessionManager browserSessionManager,
+            BrowserFrameStore browserFrameStore,
+            BrowserFrameWebSocketHandler frameWebSocketHandler,
+            PublicBrowserActionSessionState publicBrowserActionSessionState,
+            AutomationStatusEventPublisher uiEventPublisher
+    ) {
+        this(sessionRepository, browserSessionManager, browserFrameStore,
+                frameWebSocketHandler, publicBrowserActionSessionState,
+                uiEventPublisher, null);
     }
 
     /*
@@ -103,6 +120,7 @@ public class SessionExpirationScheduler {
                 browserFrameStore,
                 frameWebSocketHandler,
                 null,
+                null,
                 null
         );
     }
@@ -119,6 +137,7 @@ public class SessionExpirationScheduler {
                 sessionRepository,
                 browserSessionManager,
                 browserFrameStore,
+                null,
                 null,
                 null,
                 null
@@ -319,6 +338,17 @@ public class SessionExpirationScheduler {
         } catch (RuntimeException exception) {
             log.warn(
                     "만료 UI Event 상태 정리 실패. exceptionType={}",
+                    exception.getClass().getSimpleName()
+            );
+        }
+
+        try {
+            if (userDecisionSessionState != null) {
+                userDecisionSessionState.removeSession(sessionId);
+            }
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "만료 User Decision 상태 정리 실패. exceptionType={}",
                     exception.getClass().getSimpleName()
             );
         }

@@ -15,6 +15,7 @@ public record AutomationUiEvent(
         String message,
         boolean actionRequired,
         AutomationTarget target,
+        AutomationDecisionPrompt decision,
         Instant occurredAt
 ) {
     public AutomationUiEvent {
@@ -31,6 +32,12 @@ public record AutomationUiEvent(
         }
         if (eventType == AutomationUiEventType.TARGET && target == null) {
             throw new IllegalArgumentException("TARGET 이벤트에는 target이 필요합니다.");
+        }
+        if (eventType == AutomationUiEventType.DECISION_REQUIRED
+                && decision == null) {
+            throw new IllegalArgumentException(
+                    "DECISION_REQUIRED 이벤트에는 decision이 필요합니다."
+            );
         }
         if (message == null || message.isBlank()) {
             message = null;

@@ -88,10 +88,14 @@ class UserDecisionApiIntegrationTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-001",
+                                          "decisionId": "dec-001",
                                           "decisionType": "PRODUCT_SELECTION",
                                           "selectedOptionIds": [
                                             "product-001"
-                                          ]
+                                          ],
+                                          "expectedFrameId": "frm-001",
+                                          "expectedSequence": 1
                                         }
                                         """
                                 )
@@ -138,10 +142,14 @@ class UserDecisionApiIntegrationTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-002",
+                                          "decisionId": "dec-002",
                                           "decisionType": "PRODUCT_SELECTION",
                                           "selectedOptionIds": [
                                             "product-001"
-                                          ]
+                                          ],
+                                          "expectedFrameId": "frm-002",
+                                          "expectedSequence": 2
                                         }
                                         """
                                 )
@@ -275,10 +283,14 @@ class UserDecisionApiIntegrationTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-003",
+                                          "decisionId": "dec-003",
                                           "decisionType": "PRODUCT_SELECTION",
                                           "selectedOptionIds": [
                                             "product-001"
-                                          ]
+                                          ],
+                                          "expectedFrameId": "frm-003",
+                                          "expectedSequence": 3
                                         }
                                         """
                                 )

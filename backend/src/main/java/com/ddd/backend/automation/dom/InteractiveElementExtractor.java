@@ -113,6 +113,25 @@ public final class InteractiveElementExtractor {
             String text =
                     candidate.textContent();
 
+            if (text == null || text.isBlank()) {
+                Object associatedLabel = candidate.evaluate(
+                        """
+                        element => {
+                          const direct = element.closest('label');
+                          if (direct?.innerText?.trim()) return direct.innerText;
+                          const id = element.getAttribute('id');
+                          if (!id) return null;
+                          const label = Array.from(document.querySelectorAll('label'))
+                            .find(candidate => candidate.htmlFor === id);
+                          return label?.innerText ?? null;
+                        }
+                        """
+                );
+                text = associatedLabel instanceof String
+                        ? (String) associatedLabel
+                        : text;
+            }
+
             String role =
                     readRole(
                             candidate
