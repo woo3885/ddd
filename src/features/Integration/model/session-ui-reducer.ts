@@ -5,8 +5,10 @@ import type {
 import type { WorkflowStatus } from '@/types/frontend-state';
 import {
   TERMINAL_WORKFLOW_STATUSES,
+  clearSessionDecision,
   createInitialSessionUiState,
   defaultWorkflowMessage,
+  initialDecisionSelection,
   isTargetAllowed,
   statusFromSnapshot,
   type SessionFrameIdentity,
@@ -21,7 +23,18 @@ export type SessionUiAction =
   | { type: 'SAFE_ERROR'; message: string }
   | { type: 'SNAPSHOT_REPLACED'; snapshot: SessionUiSnapshot }
   | { type: 'EVENT_RECEIVED'; event: SessionUiEvent }
-  | { type: 'FRAME_OBSERVED'; frame: SessionFrameIdentity | null };
+  | { type: 'FRAME_OBSERVED'; frame: SessionFrameIdentity | null }
+  | { type: 'DECISION_OPTION_SELECTED'; decisionId: string; optionId: string }
+  | {
+      type: 'DECISION_TERM_TOGGLED';
+      decisionId: string;
+      optionId: string;
+      selected: boolean;
+    }
+  | { type: 'DECISION_SUBMIT_STARTED'; decisionId: string }
+  | { type: 'DECISION_SUBMIT_ACKNOWLEDGED'; decisionId: string }
+  | { type: 'DECISION_SUBMIT_FAILED'; decisionId: string; message: string }
+  | { type: 'DECISION_SUBMIT_ABORTED'; decisionId: string };
 
 function isSameSession(state: SessionUiState, sessionId: string): boolean {
   return state.sessionId === sessionId;
@@ -62,12 +75,15 @@ function applyEvent(
       ) {
         return sequenceState;
       }
-      return {
+      const nextState = {
         ...sequenceState,
         workflowStatus: nextStatus,
         guideMessage: messageForEvent(event, nextStatus),
         target: isTargetAllowed(nextStatus) ? state.target : null
       };
+      return nextStatus === 'USER_DECISION_REQUIRED'
+        ? nextState
+        : clearSessionDecision(nextState);
     }
     case 'GUIDE':
       return {
@@ -81,6 +97,49 @@ function applyEvent(
       };
     case 'TARGET_CLEAR':
       return { ...sequenceState, target: null };
+    case 'DECISION_REQUIRED': {
+      const decision = event.decision;
+      if (!decision) return clearSessionDecision(sequenceState);
+      const sameDecision = state.activeDecision?.decisionId === decision.decisionId;
+      if (!sameDecision) {
+        return {
+          ...sequenceState,
+          activeDecision: decision,
+          ...initialDecisionSelection(decision),
+          decisionSubmitPhase: 'SELECTING',
+          safeDecisionError: ''
+        };
+      }
+
+      if (decision.decisionType === 'TERMS_AGREEMENT') {
+        const availableIds = new Set(
+          decision.options.filter((option) => !option.disabled).map((option) => option.id)
+        );
+        return {
+          ...sequenceState,
+          activeDecision: decision,
+          selectedOptionId: null,
+          selectedTermIds: new Set(
+            Array.from(state.selectedTermIds).filter((id) => availableIds.has(id))
+          )
+        };
+      }
+
+      const selectedStillAvailable = decision.options.some(
+        (option) => option.id === state.selectedOptionId && !option.disabled
+      );
+      return {
+        ...sequenceState,
+        activeDecision: decision,
+        selectedOptionId: selectedStillAvailable
+          ? state.selectedOptionId
+          : initialDecisionSelection(decision).selectedOptionId,
+        selectedTermIds: new Set<string>()
+      };
+    }
+    case 'DECISION_RESOLVED':
+    case 'DECISION_CLEAR':
+      return clearSessionDecision(sequenceState);
   }
 }
 
@@ -111,14 +170,25 @@ function replaceSnapshot(
     isTargetAllowed(workflowStatus) && snapshot.target?.target
       ? snapshot.target.target
       : null;
-
-  return {
+  let nextState: SessionUiState = {
     ...state,
     workflowStatus,
     guideMessage,
     lastEventSequence: snapshot.latestEventSequence,
     target,
     safeError: ''
+  };
+  if (workflowStatus !== 'USER_DECISION_REQUIRED' || snapshot.decision === null) {
+    return clearSessionDecision(nextState);
+  }
+
+  nextState = applyEvent(
+    { ...nextState, lastEventSequence: null },
+    snapshot.decision
+  );
+  return {
+    ...nextState,
+    lastEventSequence: snapshot.latestEventSequence
   };
 }
 
@@ -137,6 +207,10 @@ export function sessionUiReducer(
         ...state,
         connectionPhase: 'RESYNCING',
         target: null,
+        decisionSubmitPhase:
+          state.decisionSubmitPhase === 'SUBMITTING'
+            ? 'SELECTING'
+            : state.decisionSubmitPhase,
         safeError: ''
       };
     case 'CONNECTED':
@@ -146,6 +220,10 @@ export function sessionUiReducer(
         ...state,
         connectionPhase: 'DISCONNECTED',
         target: null,
+        decisionSubmitPhase:
+          state.decisionSubmitPhase === 'SUBMITTING'
+            ? 'SELECTING'
+            : state.decisionSubmitPhase,
         safeError: '실시간 상태 연결이 끊겼습니다. 자동으로 복구하고 있습니다.'
       };
     case 'SAFE_ERROR':
@@ -153,6 +231,10 @@ export function sessionUiReducer(
         ...state,
         connectionPhase: 'ERROR',
         target: null,
+        decisionSubmitPhase:
+          state.decisionSubmitPhase === 'SUBMITTING'
+            ? 'SELECTING'
+            : state.decisionSubmitPhase,
         safeError: action.message
       };
     case 'SNAPSHOT_REPLACED':
@@ -161,14 +243,103 @@ export function sessionUiReducer(
       return applyEvent(state, action.event);
     case 'FRAME_OBSERVED': {
       const target = state.target;
-      if (!target || !action.frame) return state;
-      const frameIsNewer = action.frame.sequence > target.frameSequence;
-      const sameSequenceDifferentFrame =
-        action.frame.sequence === target.frameSequence &&
-        action.frame.frameId !== target.frameId;
-      return frameIsNewer || sameSequenceDifferentFrame
-        ? { ...state, target: null }
-        : state;
+      const decision = state.activeDecision;
+      if (!action.frame) return state;
+      const targetIsStale = Boolean(
+        target &&
+          (action.frame.sequence > target.frameSequence ||
+            (action.frame.sequence === target.frameSequence &&
+              action.frame.frameId !== target.frameId))
+      );
+      const decisionIsStale = Boolean(
+        decision &&
+          (action.frame.sequence > decision.frameSequence ||
+            (action.frame.sequence === decision.frameSequence &&
+              action.frame.frameId !== decision.frameId))
+      );
+      const nextState = targetIsStale ? { ...state, target: null } : state;
+      return decisionIsStale ? clearSessionDecision(nextState) : nextState;
     }
+    case 'DECISION_OPTION_SELECTED': {
+      const decision = state.activeDecision;
+      if (
+        !decision ||
+        decision.decisionId !== action.decisionId ||
+        decision.decisionType === 'TERMS_AGREEMENT' ||
+        !decision.options.some(
+          (option) => option.id === action.optionId && !option.disabled
+        ) ||
+        state.decisionSubmitPhase === 'SUBMITTING' ||
+        state.decisionSubmitPhase === 'WAITING_FOR_RESUME'
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        selectedOptionId: action.optionId,
+        decisionSubmitPhase: 'SELECTING',
+        safeDecisionError: ''
+      };
+    }
+    case 'DECISION_TERM_TOGGLED': {
+      const decision = state.activeDecision;
+      if (
+        !decision ||
+        decision.decisionId !== action.decisionId ||
+        decision.decisionType !== 'TERMS_AGREEMENT' ||
+        !decision.options.some(
+          (option) => option.id === action.optionId && !option.disabled
+        ) ||
+        state.decisionSubmitPhase === 'SUBMITTING' ||
+        state.decisionSubmitPhase === 'WAITING_FOR_RESUME'
+      ) {
+        return state;
+      }
+      const selectedTermIds = new Set(state.selectedTermIds);
+      if (action.selected) selectedTermIds.add(action.optionId);
+      else selectedTermIds.delete(action.optionId);
+      return {
+        ...state,
+        selectedTermIds,
+        decisionSubmitPhase: 'SELECTING',
+        safeDecisionError: ''
+      };
+    }
+    case 'DECISION_SUBMIT_STARTED':
+      return state.activeDecision?.decisionId === action.decisionId &&
+        (state.decisionSubmitPhase === 'SELECTING' ||
+          state.decisionSubmitPhase === 'ERROR')
+        ? {
+            ...state,
+            decisionSubmitPhase: 'SUBMITTING',
+            safeDecisionError: ''
+          }
+        : state;
+    case 'DECISION_SUBMIT_ACKNOWLEDGED':
+      return state.activeDecision?.decisionId === action.decisionId &&
+        state.decisionSubmitPhase === 'SUBMITTING'
+        ? {
+            ...state,
+            decisionSubmitPhase: 'WAITING_FOR_RESUME',
+            safeDecisionError: ''
+          }
+        : state;
+    case 'DECISION_SUBMIT_FAILED':
+      return state.activeDecision?.decisionId === action.decisionId
+        ? {
+            ...state,
+            decisionSubmitPhase: 'ERROR',
+            safeDecisionError: action.message
+          }
+        : state;
+    case 'DECISION_SUBMIT_ABORTED':
+      return state.activeDecision?.decisionId === action.decisionId &&
+        state.decisionSubmitPhase === 'SUBMITTING'
+        ? {
+            ...state,
+            decisionSubmitPhase: 'SELECTING',
+            safeDecisionError: ''
+          }
+        : state;
   }
 }

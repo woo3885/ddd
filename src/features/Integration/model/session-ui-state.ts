@@ -1,4 +1,5 @@
 import type {
+  SessionDecision,
   SessionTarget,
   SessionUiSnapshot
 } from '@/features/Integration/api/session-status-transport';
@@ -12,12 +13,24 @@ export type SessionUiConnectionPhase =
   | 'DISCONNECTED'
   | 'ERROR';
 
+export type DecisionSubmitPhase =
+  | 'IDLE'
+  | 'SELECTING'
+  | 'SUBMITTING'
+  | 'WAITING_FOR_RESUME'
+  | 'ERROR';
+
 export interface SessionUiState {
   sessionId: string;
   workflowStatus: WorkflowStatus;
   guideMessage: string;
   lastEventSequence: number | null;
   target: SessionTarget | null;
+  activeDecision: SessionDecision | null;
+  selectedOptionId: string | null;
+  selectedTermIds: ReadonlySet<string>;
+  decisionSubmitPhase: DecisionSubmitPhase;
+  safeDecisionError: string;
   connectionPhase: SessionUiConnectionPhase;
   safeError: string;
 }
@@ -54,8 +67,50 @@ export function createInitialSessionUiState(
     guideMessage: defaultWorkflowMessage(initialStatus),
     lastEventSequence: null,
     target: null,
+    activeDecision: null,
+    selectedOptionId: null,
+    selectedTermIds: new Set<string>(),
+    decisionSubmitPhase: 'IDLE',
+    safeDecisionError: '',
     connectionPhase: 'CONNECTING',
     safeError: ''
+  };
+}
+
+export function initialDecisionSelection(decision: SessionDecision): {
+  selectedOptionId: string | null;
+  selectedTermIds: ReadonlySet<string>;
+} {
+  if (decision.decisionType === 'TERMS_AGREEMENT') {
+    return {
+      selectedOptionId: null,
+      selectedTermIds: new Set(
+        decision.options
+          .filter((option) => option.checked && !option.disabled)
+          .map((option) => option.id)
+      )
+    };
+  }
+
+  const checked = decision.options.filter(
+    (option) => option.checked && !option.disabled
+  );
+  return {
+    selectedOptionId: checked.length === 1 ? checked[0].id : null,
+    selectedTermIds: new Set<string>()
+  };
+}
+
+export function clearSessionDecision(
+  state: SessionUiState
+): SessionUiState {
+  return {
+    ...state,
+    activeDecision: null,
+    selectedOptionId: null,
+    selectedTermIds: new Set<string>(),
+    decisionSubmitPhase: 'IDLE',
+    safeDecisionError: ''
   };
 }
 
@@ -81,6 +136,71 @@ export function isTargetMatchingFrame(
     frame !== null &&
     target.frameId === frame.frameId &&
     target.frameSequence === frame.sequence
+  );
+}
+
+export function isDecisionMatchingFrame(
+  decision: SessionDecision | null,
+  frame: SessionFrameIdentity | null
+): boolean {
+  return (
+    decision !== null &&
+    frame !== null &&
+    decision.frameId === frame.frameId &&
+    decision.frameSequence === frame.sequence
+  );
+}
+
+export function selectedDecisionOptionIds(
+  state: SessionUiState
+): readonly string[] | null {
+  const decision = state.activeDecision;
+  if (!decision) return null;
+
+  if (decision.decisionType === 'TERMS_AGREEMENT') {
+    const enabledRequired = decision.options.filter(
+      (option) => option.required && !option.disabled
+    );
+    if (
+      decision.options.some((option) => option.required && option.disabled) ||
+      enabledRequired.some((option) => !state.selectedTermIds.has(option.id))
+    ) {
+      return null;
+    }
+    return decision.options
+      .filter(
+        (option) => !option.disabled && state.selectedTermIds.has(option.id)
+      )
+      .map((option) => option.id);
+  }
+
+  const selected = decision.options.find(
+    (option) =>
+      option.id === state.selectedOptionId &&
+      !option.disabled
+  );
+  return selected ? [selected.id] : null;
+}
+
+export function canSubmitSessionDecision(input: {
+  state: SessionUiState;
+  frame: SessionFrameIdentity | null;
+  frameReady: boolean;
+  frameReconnecting: boolean;
+  viewerActionPending: boolean;
+}): boolean {
+  const { state, frame, frameReady, frameReconnecting, viewerActionPending } = input;
+  return (
+    state.workflowStatus === 'USER_DECISION_REQUIRED' &&
+    state.connectionPhase === 'CONNECTED' &&
+    state.activeDecision !== null &&
+    (state.decisionSubmitPhase === 'SELECTING' ||
+      state.decisionSubmitPhase === 'ERROR') &&
+    frameReady &&
+    !frameReconnecting &&
+    !viewerActionPending &&
+    isDecisionMatchingFrame(state.activeDecision, frame) &&
+    selectedDecisionOptionIds(state) !== null
   );
 }
 

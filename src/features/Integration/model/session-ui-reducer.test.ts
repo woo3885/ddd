@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
+  SessionDecision,
   SessionTarget,
   SessionUiEvent,
   SessionUiSnapshot
@@ -40,6 +41,31 @@ const TARGET: SessionTarget = {
   snapshotId: 'snap-001'
 };
 
+const DECISION: SessionDecision = {
+  requestId: 'req-001',
+  decisionId: 'dec-001',
+  decisionType: 'PRODUCT_SELECTION',
+  options: [
+    {
+      id: 'option-001',
+      label: '첫 번째 상품',
+      required: false,
+      checked: false,
+      disabled: false
+    },
+    {
+      id: 'option-002',
+      label: '두 번째 상품',
+      required: false,
+      checked: true,
+      disabled: false
+    }
+  ],
+  frameId: 'frm-001',
+  frameSequence: 3,
+  sourceSnapshotId: 'snap-001'
+};
+
 function event(
   eventSequence: number,
   eventType: SessionUiEvent['eventType'],
@@ -54,6 +80,7 @@ function event(
     message: '안전한 실시간 안내입니다.',
     actionRequired: false,
     target: eventType === 'TARGET' ? TARGET : null,
+    decision: eventType === 'DECISION_REQUIRED' ? DECISION : null,
     occurredAt: '2026-08-19T12:00:00Z',
     ...overrides
   };
@@ -112,7 +139,8 @@ describe('sessionUiReducer', () => {
       latestEventSequence: 5,
       state: event(3, 'STATE', { status: 'PAGE_LOADING' }),
       guide: event(4, 'GUIDE', { message: '페이지를 준비하고 있습니다.' }),
-      target: event(5, 'TARGET')
+      target: event(5, 'TARGET'),
+      decision: null
     };
     const replaced = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
       type: 'SNAPSHOT_REPLACED',
@@ -221,5 +249,111 @@ describe('sessionUiReducer', () => {
 
     expect(resyncing.connectionPhase).toBe('RESYNCING');
     expect(resyncing.target).toBeNull();
+  });
+
+  it('새 decision의 checked 상태를 초기화하고 같은 decision 갱신에서는 선택을 보존한다', () => {
+    const received = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'DECISION_REQUIRED')
+    });
+    const selected = sessionUiReducer(received, {
+      type: 'DECISION_OPTION_SELECTED',
+      decisionId: DECISION.decisionId,
+      optionId: 'option-001'
+    });
+    const duplicatePayload = sessionUiReducer(selected, {
+      type: 'EVENT_RECEIVED',
+      event: event(2, 'DECISION_REQUIRED', {
+        decision: { ...DECISION, options: [...DECISION.options] }
+      })
+    });
+
+    expect(received.selectedOptionId).toBe('option-002');
+    expect(received.decisionSubmitPhase).toBe('SELECTING');
+    expect(selected.selectedOptionId).toBe('option-001');
+    expect(duplicatePayload.selectedOptionId).toBe('option-001');
+  });
+
+  it('약관 checked를 초기 선택으로 보존하고 필수 약관 Gate를 적용한다', () => {
+    const terms: SessionDecision = {
+      ...DECISION,
+      decisionId: 'dec-terms',
+      decisionType: 'TERMS_AGREEMENT',
+      options: [
+        { ...DECISION.options[0], id: 'term-required', required: true },
+        { ...DECISION.options[1], id: 'term-optional', checked: true }
+      ]
+    };
+    const received = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'DECISION_REQUIRED', { decision: terms })
+    });
+    const selected = sessionUiReducer(received, {
+      type: 'DECISION_TERM_TOGGLED',
+      decisionId: terms.decisionId,
+      optionId: 'term-required',
+      selected: true
+    });
+
+    expect([...received.selectedTermIds]).toEqual(['term-optional']);
+    expect(selected.selectedTermIds).toEqual(
+      new Set(['term-required', 'term-optional'])
+    );
+  });
+
+  it('ACK 후 resume을 기다리고 RESOLVED·CLEAR에서 decision을 제거한다', () => {
+    const received = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'DECISION_REQUIRED')
+    });
+    const submitting = sessionUiReducer(received, {
+      type: 'DECISION_SUBMIT_STARTED',
+      decisionId: DECISION.decisionId
+    });
+    const waiting = sessionUiReducer(submitting, {
+      type: 'DECISION_SUBMIT_ACKNOWLEDGED',
+      decisionId: DECISION.decisionId
+    });
+    const resolved = sessionUiReducer(waiting, {
+      type: 'EVENT_RECEIVED',
+      event: event(2, 'DECISION_RESOLVED')
+    });
+
+    expect(submitting.decisionSubmitPhase).toBe('SUBMITTING');
+    expect(waiting.decisionSubmitPhase).toBe('WAITING_FOR_RESUME');
+    expect(resolved.activeDecision).toBeNull();
+    expect(resolved.decisionSubmitPhase).toBe('IDLE');
+  });
+
+  it.each([
+    'SECURE_INPUT_REQUIRED',
+    'FINAL_CONFIRMATION_REQUIRED',
+    'RISK_WARNING',
+    'COMPLETED',
+    'CANCELLED',
+    'ERROR',
+    'TERMINATED'
+  ] as WorkflowStatus[])('%s 상태에서 active decision을 즉시 제거한다', (status) => {
+    const received = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'DECISION_REQUIRED')
+    });
+    const blocked = sessionUiReducer(received, {
+      type: 'EVENT_RECEIVED',
+      event: event(2, 'STATE', { status })
+    });
+    expect(blocked.activeDecision).toBeNull();
+  });
+
+  it('decision frame보다 새로운 frame을 관찰하면 stale decision을 폐기한다', () => {
+    const received = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'DECISION_REQUIRED')
+    });
+    const stale = sessionUiReducer(received, {
+      type: 'FRAME_OBSERVED',
+      frame: { frameId: 'frm-002', sequence: 4 }
+    });
+    expect(stale.activeDecision).toBeNull();
   });
 });

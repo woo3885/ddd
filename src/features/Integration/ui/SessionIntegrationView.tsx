@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import F2_StreamViewer from '@/features/F2_StreamViewer/ui/F2_StreamViewer';
 import F3_SmartOverlay from '@/features/F3_SmartOverlay/ui/F3_SmartOverlay';
 import { useSessionFrameIntegration } from '@/features/Integration/hooks/useSessionFrameIntegration';
+import { useSessionDecisionIntegration } from '@/features/Integration/hooks/useSessionDecisionIntegration';
 import { useSessionStatusIntegration } from '@/features/Integration/hooks/useSessionStatusIntegration';
 import type { BackendSession } from '@/features/Integration/api/session-rest-client';
 import {
@@ -14,6 +15,8 @@ import { Button } from '@/shared/ui/Button';
 import { Panel } from '@/shared/ui/Panel';
 import { StatusBadge, type StatusBadgeVariant } from '@/shared/ui/StatusBadge';
 import { Text } from '@/shared/ui/Text';
+import { TermsAgreementPanel } from '@/shared/ui/TermsAgreementPanel';
+import { UserDecisionPanel } from '@/shared/ui/UserDecisionPanel';
 import { WorkflowStatusPanel } from '@/shared/ui/WorkflowStatusPanel';
 
 export const SESSION_INTEGRATION_SELECTORS = {
@@ -21,6 +24,7 @@ export const SESSION_INTEGRATION_SELECTORS = {
   frameConnection: 'status-production-frame-connection',
   uiConnection: 'status-production-ui-connection',
   actionState: 'status-production-viewer-action',
+  decisionSubmitState: 'status-session-decision-submit',
   exitButton: 'btn-session-integration-exit'
 } as const;
 
@@ -48,6 +52,13 @@ const UI_PHASE_VARIANTS: Record<
   ERROR: 'danger'
 };
 
+const DECISION_TITLES = {
+  PRODUCT_SELECTION: '상품 선택',
+  SOURCE_ACCOUNT_SELECTION: '출금 계좌 선택',
+  RECIPIENT_SELECTION: '수취인 선택',
+  TERMS_AGREEMENT: '약관 선택'
+} as const;
+
 function elementIdentity(id: string) {
   return { id, 'data-testid': id };
 }
@@ -73,6 +84,20 @@ export default function SessionIntegrationView({
     frameIntegration.phase === 'RECONNECTING' ||
     frameIntegration.recoveryPending;
 
+  const decisionIntegration = useSessionDecisionIntegration({
+    state: statusIntegration,
+    frame: frameIdentity,
+    frameReady: frameIntegration.phase === 'FRAME_READY',
+    frameReconnecting,
+    viewerActionPending: frameIntegration.actionPending,
+    onSelectOption: statusIntegration.selectDecisionOption,
+    onToggleTerm: statusIntegration.toggleDecisionTerm,
+    onSubmitStarted: statusIntegration.markDecisionSubmitStarted,
+    onSubmitAcknowledged: statusIntegration.markDecisionSubmitAcknowledged,
+    onSubmitFailed: statusIntegration.markDecisionSubmitFailed,
+    onSubmitAborted: statusIntegration.markDecisionSubmitAborted
+  });
+
   useEffect(() => {
     statusIntegration.observeFrame(frameIdentity);
   }, [
@@ -97,15 +122,21 @@ export default function SessionIntegrationView({
   const canSubmitViewerAction =
     frameIntegration.canSubmitViewerAction &&
     statusTransportReady &&
+    statusIntegration.activeDecision === null &&
     isViewerActionAllowed(statusIntegration.workflowStatus) &&
     targetMatchesFrame;
   const busy =
     frameIntegration.recoveryPending ||
     frameIntegration.actionPending ||
+    decisionIntegration.isBusy ||
     statusIntegration.connectionPhase === 'CONNECTING' ||
     statusIntegration.connectionPhase === 'RESYNCING';
+  const showDecisionPanel =
+    statusIntegration.activeDecision !== null &&
+    statusIntegration.decisionSubmitPhase !== 'WAITING_FOR_RESUME';
 
   const handleExit = async () => {
+    decisionIntegration.abort();
     await frameIntegration.reset();
     onExit();
   };
@@ -169,6 +200,61 @@ export default function SessionIntegrationView({
         status={statusIntegration.workflowStatus}
         message={statusIntegration.guideMessage}
       />
+
+      {showDecisionPanel && statusIntegration.activeDecision?.decisionType ===
+      'TERMS_AGREEMENT' ? (
+        <TermsAgreementPanel
+          title="약관 선택"
+          message={statusIntegration.guideMessage}
+          terms={statusIntegration.activeDecision.options.map((option) => ({
+            id: option.id,
+            label: option.label,
+            required: option.required,
+            disabled: option.disabled
+          }))}
+          selectedTermIds={statusIntegration.selectedTermIds}
+          disabled={decisionIntegration.controlsDisabled}
+          isBusy={decisionIntegration.isBusy}
+          onToggle={decisionIntegration.toggleTerm}
+          onConfirm={decisionIntegration.confirmTerms}
+        />
+      ) : showDecisionPanel && statusIntegration.activeDecision ? (
+        <UserDecisionPanel
+          title={DECISION_TITLES[statusIntegration.activeDecision.decisionType]}
+          message={statusIntegration.guideMessage}
+          options={statusIntegration.activeDecision.options.map((option) => ({
+            id: option.id,
+            label: option.label,
+            disabled: option.disabled
+          }))}
+          selectedOptionId={statusIntegration.selectedOptionId}
+          disabled={decisionIntegration.controlsDisabled}
+          isBusy={decisionIntegration.isBusy}
+          onSelect={decisionIntegration.selectOption}
+          onConfirm={decisionIntegration.confirmOption}
+        />
+      ) : null}
+
+      {statusIntegration.activeDecision ? (
+        <div
+          {...elementIdentity(SESSION_INTEGRATION_SELECTORS.decisionSubmitState)}
+        >
+          {statusIntegration.decisionSubmitPhase === 'WAITING_FOR_RESUME' ? (
+            <div role="status" aria-live="polite">
+              <Text variant="body">
+                선택 결과를 확인했습니다. 다음 업무 상태를 기다리고 있습니다.
+              </Text>
+            </div>
+          ) : null}
+          {statusIntegration.safeDecisionError ? (
+            <div role="alert">
+              <Text variant="body" className="text-danger">
+                {statusIntegration.safeDecisionError}
+              </Text>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <section aria-label="실시간 원격 화면">
         <F2_StreamViewer

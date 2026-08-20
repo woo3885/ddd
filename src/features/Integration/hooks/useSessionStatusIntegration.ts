@@ -106,8 +106,52 @@ export function useSessionStatusIntegration({
     dispatch({ type: 'FRAME_OBSERVED', frame });
   }, []);
 
+  const selectDecisionOption = useCallback(
+    (decisionId: string, optionId: string) => {
+      dispatch({ type: 'DECISION_OPTION_SELECTED', decisionId, optionId });
+    },
+    []
+  );
+
+  const toggleDecisionTerm = useCallback(
+    (decisionId: string, optionId: string, selected: boolean) => {
+      dispatch({
+        type: 'DECISION_TERM_TOGGLED',
+        decisionId,
+        optionId,
+        selected
+      });
+    },
+    []
+  );
+
+  const markDecisionSubmitStarted = useCallback((decisionId: string) => {
+    dispatch({ type: 'DECISION_SUBMIT_STARTED', decisionId });
+  }, []);
+
+  const markDecisionSubmitAcknowledged = useCallback((decisionId: string) => {
+    dispatch({ type: 'DECISION_SUBMIT_ACKNOWLEDGED', decisionId });
+  }, []);
+
+  const markDecisionSubmitFailed = useCallback(
+    (decisionId: string, message: string) => {
+      dispatch({ type: 'DECISION_SUBMIT_FAILED', decisionId, message });
+    },
+    []
+  );
+
+  const markDecisionSubmitAborted = useCallback((decisionId: string) => {
+    dispatch({ type: 'DECISION_SUBMIT_ABORTED', decisionId });
+  }, []);
+
   return {
     ...state,
-    observeFrame
+    observeFrame,
+    selectDecisionOption,
+    toggleDecisionTerm,
+    markDecisionSubmitStarted,
+    markDecisionSubmitAcknowledged,
+    markDecisionSubmitFailed,
+    markDecisionSubmitAborted
   };
 }
