@@ -14,6 +14,46 @@ import {
   PRODUCTION_STRUCTURED_ACTIONS,
 } from "../output/aiResponse.types.js";
 
+import type {
+  UserDecisionContext,
+} from "../workflow/userDecisionContext.store.js";
+
+function createVerifiedDecisionSection(
+  context?: UserDecisionContext,
+): string {
+  if (!context) {
+    return "";
+  }
+
+  const serialized = JSON.stringify(
+    {
+      decisionId: context.decisionId,
+      decisionType: context.decisionType,
+      selectedOptionIds:
+        context.selectedOptionIds,
+      sourceSnapshotId:
+        context.sourceSnapshotId,
+    },
+    null,
+    2,
+  );
+
+  return `
+## Backend-verified user decision
+
+${serialized}
+
+- This context is the user's actual selection already verified and applied by Backend.
+- Preserve decisionId, decisionType, sourceSnapshotId, and selectedOptionIds exactly.
+- Never add, remove, reorder, normalize, recommend, or replace selected IDs.
+- Never CLICK or SELECT an ID from selectedOptionIds again.
+- Do not request the same completed decision again.
+- Continue from the current new snapshot and prefer the next safe NORMAL action.
+- Return WAIT_FOR_USER only for a new and separate unresolved user decision.
+- SECURE_INPUT, FINAL_CONFIRMATION, RISK_WARNING, and BLOCKED rules still take priority.
+`;
+}
+
 /**
  * UserGoal과 현재 DOM을 기반으로
  * 다음 행동 하나를 선택하도록 LLM Prompt를 생성합니다.
@@ -22,12 +62,18 @@ export function createNextActionPrompt(
   requestId: string,
   goal: ActionGoalInput,
   dom: DomModelInput,
+  userDecisionContext?: UserDecisionContext,
 ): string {
   const domText =
     serializeDomModelInput(dom);
 
   const productionActionList =
     PRODUCTION_STRUCTURED_ACTIONS.join(" | ");
+
+  const verifiedDecisionSection =
+    createVerifiedDecisionSection(
+      userDecisionContext,
+    );
 
   return `
 당신은 금융 웹사이트 사용을 돕는 AI 내비게이터입니다.
@@ -51,13 +97,15 @@ export function createNextActionPrompt(
 
 ${domText}
 
+${verifiedDecisionSection}
+
 ## D24 USER_DECISION hard rules
 
 - Never CLICK, TYPE, or SELECT an element whose security policy is USER_DECISION.
 - Never choose a product, source account, recipient, required term, or optional term for the user.
 - Never use confidence as permission to choose a default option.
 - Never auto-agree to required or optional terms.
-- Return WAIT_FOR_USER and stop automatic execution.
+- Return WAIT_FOR_USER only when a new unresolved user decision is required.
 - Do not CLICK a protected element merely to trigger a Backend validation error.
 - Model-generated decisionType and options are not authoritative user selections.
 

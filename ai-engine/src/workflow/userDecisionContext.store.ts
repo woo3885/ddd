@@ -17,6 +17,7 @@ export interface UserDecisionContext {
   decisionId: string;
   decisionType: UserDecisionType;
   selectedOptionIds: readonly string[];
+  sourceSnapshotId: string;
 }
 
 function validateExactId(
@@ -37,8 +38,9 @@ function validateExactId(
 function normalizeUniqueIds(
   values: readonly string[],
   fieldName: string,
+  allowEmpty = false,
 ): readonly string[] {
-  if (values.length === 0) {
+  if (!allowEmpty && values.length === 0) {
     throw new Error(
       `[AI Engine] ${fieldName} must not be empty.`,
     );
@@ -169,6 +171,7 @@ export class UserDecisionContextStore {
     const selectedOptionIds = normalizeUniqueIds(
       value.selectedOptionIds,
       "selected option id",
+      pending.decisionType === "TERMS_AGREEMENT",
     );
     const allowedIds = new Set(pending.optionIds);
 
@@ -194,6 +197,17 @@ export class UserDecisionContextStore {
       "resumed snapshotId",
     );
 
+    const sourceSnapshotId = validateExactId(
+      value.sourceSnapshotId,
+      "source snapshotId",
+    );
+
+    if (sourceSnapshotId !== pending.snapshotId) {
+      throw new Error(
+        "[AI Engine] verified decision source does not match the pending snapshot.",
+      );
+    }
+
     if (nextSnapshotId === pending.snapshotId) {
       throw new Error(
         "[AI Engine] user decision resume requires a new snapshot.",
@@ -204,6 +218,7 @@ export class UserDecisionContextStore {
       decisionId,
       decisionType: value.decisionType,
       selectedOptionIds,
+      sourceSnapshotId,
     });
 
     this.latest = context;

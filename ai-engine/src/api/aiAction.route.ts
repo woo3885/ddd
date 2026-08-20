@@ -12,10 +12,6 @@ import {
   adaptStructuredResponseToBackend,
 } from "./aiDecisionResponse.adapter.js";
 
-import type {
-  BackendAiDecisionRequest,
-} from "./aiRequest.types.js";
-
 export const aiActionRouter =
   Router();
 
@@ -24,12 +20,9 @@ aiActionRouter.post(
 
   async (req, res) => {
     try {
-      const backendRequest =
-        req.body as BackendAiDecisionRequest;
-
       const internalRequest =
         adaptBackendRequestToAiActionRequest(
-          backendRequest,
+          req.body,
         );
 
       const structuredResponse =
@@ -45,10 +38,9 @@ aiActionRouter.post(
       res
         .status(200)
         .json(backendResponse);
-    } catch (error) {
+    } catch {
       console.error(
-        "[AI Engine] /action 처리 실패",
-        error,
+        "[AI Engine] /action request failed.",
       );
 
       res.status(500).json({

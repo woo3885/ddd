@@ -303,6 +303,8 @@ const resumedResult =
       selectedOptionIds: [
         "product-2",
       ],
+      sourceSnapshotId:
+        beforeDecisionSnapshot.snapshotId,
     },
 
     afterDecisionSnapshot,

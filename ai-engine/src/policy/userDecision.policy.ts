@@ -29,6 +29,50 @@ function targetsProtectedUserDecision(
   return target?.securityPolicy === "USER_DECISION";
 }
 
+function targetsResolvedUserDecision(
+  response: StructuredAIResponse,
+  request: AiActionRequest,
+): boolean {
+  return Boolean(
+    response.targetElementId &&
+    request.userDecisionContext
+      ?.selectedOptionIds.includes(
+        response.targetElementId,
+      ),
+  );
+}
+
+function assertProtectedStateConsistency(
+  response: StructuredAIResponse,
+): void {
+  const secureSignal =
+    response.status === "SECURE_INPUT_REQUIRED" ||
+    response.action === "PAUSE_FOR_SECURE_INPUT" ||
+    response.secureInputType !== null;
+  const securePair =
+    response.status === "SECURE_INPUT_REQUIRED" &&
+    response.action === "PAUSE_FOR_SECURE_INPUT";
+
+  const finalSignal =
+    response.status === "FINAL_CONFIRMATION_REQUIRED" ||
+    response.action === "REQUEST_FINAL_CONFIRMATION" ||
+    response.confirmationId !== null;
+  const finalPair =
+    response.status === "FINAL_CONFIRMATION_REQUIRED" &&
+    response.action === "REQUEST_FINAL_CONFIRMATION";
+
+  if (
+    (secureSignal && !securePair) ||
+    (finalSignal && !finalPair) ||
+    response.status === "RISK_WARNING" ||
+    response.riskType !== null
+  ) {
+    throw new Error(
+      "[AI Engine] protected workflow state cannot be bypassed.",
+    );
+  }
+}
+
 function createSafeWaitResponse(
   response: StructuredAIResponse,
 ): StructuredAIResponse {
@@ -53,12 +97,21 @@ function createSafeWaitResponse(
  * Applies C's D24 safety boundary after model parsing.
  *
  * Model-provided decision metadata is never authoritative. Backend-verified
- * selections enter the agent only through UserDecisionContextStore.
+ * selections enter Production through the request-scoped decision context.
+ * UserDecisionContextStore remains an internal Agent Loop utility.
  */
 export function enforceUserDecisionPolicy(
   response: StructuredAIResponse,
   request: AiActionRequest,
 ): StructuredAIResponse {
+  assertProtectedStateConsistency(response);
+
+  if (targetsResolvedUserDecision(response, request)) {
+    throw new Error(
+      "[AI Engine] a resolved user selection cannot be executed again.",
+    );
+  }
+
   if (
     response.action === "WAIT_FOR_USER" ||
     response.status === "USER_DECISION_REQUIRED" ||

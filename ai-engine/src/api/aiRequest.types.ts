@@ -2,6 +2,10 @@ import type {
   UserDecisionContext,
 } from "../workflow/userDecisionContext.store.js";
 
+import type {
+  UserDecisionType,
+} from "../workflow/userDecision.types.js";
+
 export type BackendSecurityPolicy =
   | "NORMAL"
   | "USER_DECISION"
@@ -53,19 +57,32 @@ export interface BackendSanitizedDomSnapshot {
   elements: BackendSanitizedDomElement[];
 }
 
+export interface BackendAiUserDecisionContext {
+  decisionId: string;
+
+  decisionType: UserDecisionType;
+
+  selectedOptionIds: readonly string[];
+
+  sourceSnapshotId: string;
+}
+
 /**
  * B Backend -> C AI Engine HTTP 요청 계약
  *
  * Java:
  * AiDecisionRequest(
  *   String userRequest,
- *   SanitizedDomSnapshot snapshot
+ *   SanitizedDomSnapshot snapshot,
+ *   AiUserDecisionContext userDecision
  * )
  */
 export interface BackendAiDecisionRequest {
   userRequest: string;
 
   snapshot: BackendSanitizedDomSnapshot;
+
+  userDecision?: BackendAiUserDecisionContext;
 }
 
 /**
@@ -87,8 +104,8 @@ export interface AiActionRequest {
   domSnapshot: BackendSanitizedDomSnapshot;
 
   /**
-   * Backend-verified selection context for an internal resumed loop.
-   * The current B -> C HTTP DTO does not populate this field.
+   * Backend-verified selection context for the current Production decision.
+   * Backend remains the resume orchestrator and authoritative state owner.
    */
   userDecisionContext?: UserDecisionContext;
 }

@@ -2,9 +2,9 @@
 
 > **담당:** 개발자 C — AI Engine & Integration  
 > **프로젝트:** 금융길잡이 AI  
-> **대상 범위:** D1 ~ D23  
+> **대상 범위:** D1 ~ D24
 > **문서 목적:** Frontend(A), Backend(B), AI Engine(C) 간 통합을 위해 C 파트의 역할, 구현 현황, 입출력 계약, 안전 원칙 및 연동 시 주의사항을 한 문서에서 확인할 수 있도록 정리한다.  
-> **마지막 정리 기준일:** 2026-08-19 (D23 AI Engine 계약 안정화 반영)
+> **마지막 정리 기준일:** 2026-08-20 (D24 사용자 선택 결과 보존 및 AI 재개 계약 반영)
 
 ---
 
@@ -843,6 +843,125 @@ A Production live event 연결
 D23 최종 완료 기준:
 
 > **A·B·C 세 팀이 동일한 시나리오에서 상태·메시지·Target 흐름을 끝까지 성공시키는 것**
+
+---
+
+# 23. D24 사용자 선택 결과 보존 및 AI 재개 계약
+
+## B → C Production 요청
+
+Backend의 `AiDecisionRequest.userDecision`은 최초 호출에서는 생략될 수 있고,
+사용자 선택 후 재호출에서는 다음 네 필드를 전달한다.
+
+```text
+decisionId
+decisionType
+selectedOptionIds
+sourceSnapshotId
+```
+
+`decisionType`은 다음 다섯 값만 허용한다.
+
+```text
+PRODUCT_SELECTION
+SOURCE_ACCOUNT_SELECTION
+RECIPIENT_SELECTION
+TERMS_AGREEMENT
+ADDITIONAL_INFORMATION
+```
+
+`ACCOUNT_SELECTION` alias와 알 수 없는 값은 허용하지 않는다. 약관 선택도 별도
+`selectedTermIds` 없이 `selectedOptionIds`를 사용한다. Backend가 전달한 opaque ID와
+배열 순서는 C에서 변경하지 않는다.
+
+## Production 처리 흐름과 책임
+
+```text
+Backend 검증 및 사용자 선택 적용
+→ 새 Sanitized DOM Snapshot 생성
+→ /api/ai/action 재호출(userDecision 포함)
+→ C runtime validation 및 request-scoped context 변환
+→ verified decision 전용 Prompt section
+→ 다음 안전한 Action 판단
+```
+
+Production resume orchestrator와 authoritative state owner는 Backend다. Backend가
+stale/duplicate/frame/allowed option/required term을 검증한다. C는 `sessionId`나 이전
+pause 결과를 받지 않으므로 전역 상태를 구성하지 않고, 현재 요청에 포함된 verified
+context만 사용한다.
+
+`UserDecisionContextStore`는 내부 Agent Loop와 테스트용 유틸리티이며 Production의
+authoritative store가 아니다. `resumeAgentLoopAfterUserDecision()`도 Production HTTP
+route에서 직접 호출하지 않는다. 같은 Backend retry가 들어와도 C 프로세스 전역
+duplicate registry 때문에 실패하지 않는 stateless 처리다.
+
+Backend 구현은 선택 적용 후 항상 새로운 snapshot ID를 생성한다. 따라서 C는
+`sourceSnapshotId === snapshot.snapshotId`인 재개 요청을 malformed/stale 요청으로
+거부한다.
+
+## Runtime validation과 Prompt 정책
+
+- `decisionId`와 `sourceSnapshotId`: nonblank exact string, trim 보정 없음
+- `selectedOptionIds`: 최대 20개, nonblank exact string, 중복 금지, 순서 보존
+- 단일 선택 유형 네 가지: 정확히 1개
+- `TERMS_AGREEMENT`: 0~20개
+- request와 `userDecision`의 unknown field: 거부
+- 필수 약관 충족 여부: Backend가 authoritative하게 검증
+- verified selected ID: 다시 CLICK/SELECT하지 않음
+- 해결된 동일 decision: 다시 요청하지 않음
+- 별개의 새 사용자 결정이 필요한 경우에만 `WAIT_FOR_USER` 허용
+- secure input, final confirmation, risk protection이 항상 우선
+
+Prompt에는 `userRequest`에 이어 붙이는 자연어가 아니라 별도의 JSON section으로 네
+필드를 직렬화한다. C는 ID를 추가·삭제·정렬·정규화·추천값으로 교체하지 않는다.
+
+## C → B 응답과 A UI 데이터
+
+C의 Production wire response는 다음 여섯 필드를 그대로 유지한다.
+
+```text
+actionType
+elementId
+value
+scrollX
+scrollY
+waitMillis
+```
+
+`status`, `message`, `decisionId`, `decisionType`, `options`, `terms`, secure/final/risk
+metadata를 C → B wire에 추가하지 않는다. A가 사용하는 decision UI payload는
+Backend의 `DECISION_REQUIRED` 계열 UI event가 authoritative source다.
+
+## 보안과 검증 결과
+
+Production structured action 경로에서 raw Gemini response와 parsing/validation error
+payload 로그를 제거했다. 사용자 메시지 sanitizer는 prompt/reasoning, HTML, URL과
+internal endpoint, password/OTP, 계좌·카드·전화번호 형태의 민감값 노출을 차단한다.
+
+2026-08-20 오프라인 검증 결과:
+
+```text
+npm.cmd run check     PASS
+npm.cmd test          39/39 PASS
+npm.cmd run test:d23   6/6 PASS
+npm.cmd run test:d24  23/23 PASS
+```
+
+실제 Gemini API를 호출하는 `test:live`는 기본 회귀 테스트에서 분리되어 있다.
+
+## 남은 통합 확인 항목
+
+Backend:
+
+- Production에서 실제 발생시키는 decisionType 종류의 확대 시점
+- checkbox desired-state 동기화 방식
+- decision TTL 정책
+- AI 재호출 실패 시 복구 및 재시도 정책
+
+Frontend:
+
+- A의 D24 Production 구현이 develop에 병합되었는지 별도 확인
+- decision event/submit/reconnect 전 구간 E2E 검증
 
 ---
 

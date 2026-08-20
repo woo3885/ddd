@@ -25,6 +25,8 @@ const SENSITIVE_VALUE_PATTERNS = [
   /\b(?:otp|인증번호)\s*[:=]?\s*\d{4,8}\b/gi,
   /\b(?:password|비밀번호)\s*[:=]\s*\S+/gi,
   /\b(?:account|계좌)\s*[:=]?\s*\d[\d\s-]{7,}\d\b/gi,
+  /\b\d{13,19}\b/g,
+  /\b\d{2,6}(?:[- ]\d{2,6}){2,4}\b/g,
 ];
 
 export function sanitizeInternalMessage(

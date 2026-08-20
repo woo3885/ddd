@@ -4,16 +4,35 @@ import { extractUserGoal } from "../goals/userGoal.extractor.js";
 
 import type {
   AiActionRequest,
-  BackendAiDecisionRequest,
 } from "./aiRequest.types.js";
 
+import {
+  validateBackendAiDecisionRequest,
+} from "./aiDecisionRequest.validator.js";
+
 export function adaptBackendRequestToAiActionRequest(
-  request: BackendAiDecisionRequest,
+  value: unknown,
 ): AiActionRequest {
+  const request =
+    validateBackendAiDecisionRequest(value);
+
   const userGoal =
     extractUserGoal(
       request.userRequest,
     );
+
+  const userDecisionContext =
+    request.userDecision;
+
+  if (
+    userDecisionContext &&
+    userDecisionContext.sourceSnapshotId ===
+      request.snapshot.snapshotId
+  ) {
+    throw new Error(
+      "[AI Engine] resumed user decision requires a new snapshot.",
+    );
+  }
 
   return {
     requestId:
@@ -38,5 +57,12 @@ export function adaptBackendRequestToAiActionRequest(
 
     domSnapshot:
       request.snapshot,
+
+    ...(userDecisionContext
+      ? {
+          userDecisionContext:
+            userDecisionContext,
+        }
+      : {}),
   };
 }

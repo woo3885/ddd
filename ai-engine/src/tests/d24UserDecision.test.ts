@@ -15,6 +15,12 @@ import type {
   BackendSanitizedDomSnapshot,
 } from "../api/aiRequest.types.js";
 import {
+  adaptBackendRequestToAiActionRequest,
+} from "../api/aiDecisionRequest.adapter.js";
+import {
+  validateBackendAiDecisionRequest,
+} from "../api/aiDecisionRequest.validator.js";
+import {
   adaptStructuredResponseToBackend,
 } from "../api/aiDecisionResponse.adapter.js";
 import {
@@ -123,6 +129,28 @@ function createRequest(
       "snap-before-decision",
       elements,
     ),
+  };
+}
+
+function createBackendRequest(
+  userDecision?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    userRequest:
+      "사용자가 검증한 선택 이후 다음 단계로 진행해줘",
+    snapshot: createSnapshot(
+      "snap-current-decision",
+      [
+        createElement(
+          "el-next-normal",
+          "다음 단계",
+          "NORMAL",
+        ),
+      ],
+    ),
+    ...(userDecision
+      ? { userDecision }
+      : {}),
   };
 }
 
@@ -435,6 +463,7 @@ test("verified decision context preserves exact IDs and blocks missing, stale, a
       "term-required-2",
       "term-required-1",
     ],
+    sourceSnapshotId: "snap-paused",
   };
 
   assert.throws(() =>
@@ -638,4 +667,454 @@ test("D23 C-to-B adapter remains the exact six-field wire contract", () => {
       "waitMillis",
     ],
   );
+});
+
+test("Production request keeps the legacy path when userDecision is absent", () => {
+  const request =
+    adaptBackendRequestToAiActionRequest(
+      createBackendRequest(),
+    );
+
+  assert.equal(
+    request.domSnapshot.snapshotId,
+    "snap-current-decision",
+  );
+  assert.equal(
+    request.userDecisionContext,
+    undefined,
+  );
+});
+
+test("Production request accepts all authoritative DecisionTypes and preserves exact context", () => {
+  const cases = [
+    ["PRODUCT_SELECTION", ["product-1"]],
+    ["SOURCE_ACCOUNT_SELECTION", ["account-2"]],
+    ["RECIPIENT_SELECTION", ["recipient-3"]],
+    ["ADDITIONAL_INFORMATION", ["information-4"]],
+    ["TERMS_AGREEMENT", []],
+    ["TERMS_AGREEMENT", ["term-b"]],
+    ["TERMS_AGREEMENT", ["term-b", "term-a"]],
+  ] as const;
+
+  for (const [decisionType, selectedOptionIds] of cases) {
+    const selected = [...selectedOptionIds];
+    const request =
+      adaptBackendRequestToAiActionRequest(
+        createBackendRequest({
+          decisionId: `decision-${decisionType}`,
+          decisionType,
+          selectedOptionIds: selected,
+          sourceSnapshotId: "snap-source-decision",
+        }),
+      );
+
+    assert.equal(
+      request.userDecisionContext?.decisionType,
+      decisionType,
+    );
+    assert.equal(
+      request.userDecisionContext?.decisionId,
+      `decision-${decisionType}`,
+    );
+    assert.deepEqual(
+      request.userDecisionContext?.selectedOptionIds,
+      selected,
+    );
+    assert.equal(
+      request.userDecisionContext?.sourceSnapshotId,
+      "snap-source-decision",
+    );
+  }
+});
+
+test("Production request rejects aliases, malformed IDs, duplicates, cardinality, and unknown fields", () => {
+  const validDecision = {
+    decisionId: "decision-valid",
+    decisionType: "PRODUCT_SELECTION",
+    selectedOptionIds: ["option-1"],
+    sourceSnapshotId: "snap-source-decision",
+  };
+
+  const invalidDecisions = [
+    { ...validDecision, decisionType: "ACCOUNT_SELECTION" },
+    { ...validDecision, decisionType: "UNKNOWN" },
+    { ...validDecision, decisionId: " decision-valid" },
+    { ...validDecision, sourceSnapshotId: "snap-source-decision " },
+    { ...validDecision, selectedOptionIds: [" option-1"] },
+    { ...validDecision, selectedOptionIds: ["option-1", "option-1"] },
+    { ...validDecision, selectedOptionIds: [] },
+    { ...validDecision, selectedOptionIds: ["option-1", "option-2"] },
+    {
+      ...validDecision,
+      selectedOptionIds: Array.from(
+        { length: 21 },
+        (_, index) => `option-${index}`,
+      ),
+    },
+    { ...validDecision, unexpected: true },
+  ];
+
+  for (const userDecision of invalidDecisions) {
+    assert.throws(() =>
+      validateBackendAiDecisionRequest(
+        createBackendRequest(userDecision),
+      ),
+    );
+  }
+
+  assert.throws(() =>
+    validateBackendAiDecisionRequest({
+      ...createBackendRequest(validDecision),
+      unexpected: true,
+    }),
+  );
+});
+
+test("Production request rejects a resumed decision on the source snapshot", () => {
+  assert.throws(
+    () =>
+      adaptBackendRequestToAiActionRequest({
+        userRequest: "계속 진행해줘",
+        snapshot: createSnapshot("snap-same"),
+        userDecision: {
+          decisionId: "decision-same-snapshot",
+          decisionType: "TERMS_AGREEMENT",
+          selectedOptionIds: [],
+          sourceSnapshotId: "snap-same",
+        },
+      }),
+    /new snapshot/,
+  );
+});
+
+test("Prompt includes verified context only when present and preserves selected ID order", () => {
+  const goal = {
+    rawMessage: "선택 이후 계속",
+    intent: "OPEN_DEPOSIT",
+    conditions: [],
+  };
+  const dom = {
+    page: {
+      url: "/deposit/next",
+      title: "다음 단계",
+    },
+    elements: [],
+    metadata: {
+      originalElementCount: 0,
+      modelElementCount: 0,
+    },
+  };
+  const withoutContext = createNextActionPrompt(
+    "req-without-context",
+    goal,
+    dom,
+  );
+  const withContext = createNextActionPrompt(
+    "req-with-context",
+    goal,
+    dom,
+    {
+      decisionId: "decision-prompt",
+      decisionType: "TERMS_AGREEMENT",
+      selectedOptionIds: ["term-b", "term-a"],
+      sourceSnapshotId: "snap-source-prompt",
+    },
+  );
+
+  assert.doesNotMatch(
+    withoutContext,
+    /Backend-verified user decision/,
+  );
+  assert.match(
+    withContext,
+    /Backend-verified user decision/,
+  );
+  assert.match(withContext, /"decisionId": "decision-prompt"/);
+  assert.match(withContext, /"decisionType": "TERMS_AGREEMENT"/);
+  assert.match(withContext, /"sourceSnapshotId": "snap-source-prompt"/);
+  assert.ok(
+    withContext.indexOf('"term-b"') <
+      withContext.indexOf('"term-a"'),
+  );
+  assert.match(withContext, /Never add, remove, reorder/);
+  assert.match(withContext, /Never CLICK or SELECT/);
+  assert.match(withContext, /Do not request the same completed decision again/);
+  assert.match(withContext, /new and separate unresolved user decision/);
+});
+
+test("Production uses verified context for the next NORMAL action without process state", async () => {
+  const backendRequest = createBackendRequest({
+    decisionId: "decision-production",
+    decisionType: "SOURCE_ACCOUNT_SELECTION",
+    selectedOptionIds: ["account-selected"],
+    sourceSnapshotId: "snap-source-production",
+  });
+  const first =
+    adaptBackendRequestToAiActionRequest(
+      backendRequest,
+    );
+  const retry =
+    adaptBackendRequestToAiActionRequest(
+      backendRequest,
+    );
+
+  const decide = async ({ prompt }: { prompt: string }) => {
+    assert.match(prompt, /decision-production/);
+    assert.match(prompt, /account-selected/);
+    return {
+      model: "offline-test",
+      source: "GEMINI" as const,
+      text: JSON.stringify(
+        createResponse({
+          requestId: "untrusted-model-request",
+          targetElementId: "el-next-normal",
+        }),
+      ),
+    };
+  };
+
+  const firstResult = await generateStructuredAction(
+    first,
+    decide,
+  );
+  const retryResult = await generateStructuredAction(
+    retry,
+    decide,
+  );
+
+  assert.equal(firstResult.action, "CLICK");
+  assert.equal(retryResult.action, "CLICK");
+  assert.equal(
+    firstResult.targetElementId,
+    "el-next-normal",
+  );
+});
+
+test("Production blocks a model from clicking an already resolved selected ID", async () => {
+  const request =
+    adaptBackendRequestToAiActionRequest({
+      userRequest: "선택 이후 계속",
+      snapshot: createSnapshot(
+        "snap-current-resolved",
+        [
+          createElement(
+            "resolved-option",
+            "이전 선택",
+            "NORMAL",
+          ),
+        ],
+      ),
+      userDecision: {
+        decisionId: "decision-resolved",
+        decisionType: "PRODUCT_SELECTION",
+        selectedOptionIds: ["resolved-option"],
+        sourceSnapshotId: "snap-source-resolved",
+      },
+    });
+
+  const result = await generateStructuredAction(
+    request,
+    async () => ({
+      model: "offline-test",
+      source: "GEMINI",
+      text: JSON.stringify(
+        createResponse({
+          targetElementId: "resolved-option",
+        }),
+      ),
+    }),
+  );
+
+  assert.equal(result.status, "ERROR");
+  assert.equal(result.action, "NONE");
+  assert.equal(result.targetElementId, null);
+});
+
+test("Verified context still allows a separate new USER_DECISION wait", async () => {
+  const request =
+    adaptBackendRequestToAiActionRequest({
+      userRequest: "다음 사용자 선택을 확인해줘",
+      snapshot: createSnapshot(
+        "snap-current-next-decision",
+        [createElement("new-decision", "새로운 선택")],
+      ),
+      userDecision: {
+        decisionId: "decision-previous",
+        decisionType: "PRODUCT_SELECTION",
+        selectedOptionIds: ["previous-option"],
+        sourceSnapshotId: "snap-source-previous",
+      },
+    });
+
+  const result = await generateStructuredAction(
+    request,
+    async () => ({
+      model: "offline-test",
+      source: "GEMINI",
+      text: JSON.stringify(
+        createResponse({
+          status: "USER_DECISION_REQUIRED",
+          action: "WAIT_FOR_USER",
+          targetElementId: null,
+          requiresUserAction: true,
+        }),
+      ),
+    }),
+  );
+
+  assert.equal(result.status, "USER_DECISION_REQUIRED");
+  assert.equal(result.action, "WAIT_FOR_USER");
+});
+
+test("Verified context cannot bypass secure, final, or risk protection", () => {
+  const request = createRequest([
+    createElement("el-normal", "일반 버튼", "NORMAL"),
+  ]);
+  request.userDecisionContext = {
+    decisionId: "decision-protected",
+    decisionType: "TERMS_AGREEMENT",
+    selectedOptionIds: [],
+    sourceSnapshotId: "snap-source-protected",
+  };
+
+  const secure = enforceUserDecisionPolicy(
+    createResponse({
+      status: "SECURE_INPUT_REQUIRED",
+      action: "PAUSE_FOR_SECURE_INPUT",
+      targetElementId: null,
+      requiresUserAction: true,
+      secureInputType: "OTP",
+    }),
+    request,
+  );
+  const final = enforceUserDecisionPolicy(
+    createResponse({
+      status: "FINAL_CONFIRMATION_REQUIRED",
+      action: "REQUEST_FINAL_CONFIRMATION",
+      targetElementId: null,
+      requiresUserAction: true,
+      confirmationId: "confirmation-1",
+    }),
+    request,
+  );
+
+  assert.equal(secure.action, "PAUSE_FOR_SECURE_INPUT");
+  assert.equal(final.action, "REQUEST_FINAL_CONFIRMATION");
+  assert.throws(() =>
+    enforceUserDecisionPolicy(
+      createResponse({
+        status: "RISK_WARNING",
+        action: "CLICK",
+        targetElementId: "el-normal",
+        riskType: "SUSPICIOUS_TRANSFER",
+      }),
+      request,
+    ),
+  );
+  assert.throws(() =>
+    enforceUserDecisionPolicy(
+      createResponse({
+        status: "SECURE_INPUT_REQUIRED",
+        action: "CLICK",
+        targetElementId: "el-normal",
+        secureInputType: "OTP",
+      }),
+      request,
+    ),
+  );
+});
+
+test("Production does not log raw model output and sanitizes financial secrets", async () => {
+  const logged: string[] = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = (...values: unknown[]) => {
+    logged.push(values.join(" "));
+  };
+  console.error = (...values: unknown[]) => {
+    logged.push(values.join(" "));
+  };
+
+  try {
+    const result = await generateStructuredAction(
+      createRequest([
+        createElement("el-normal", "다음", "NORMAL"),
+      ]),
+      async () => ({
+        model: "offline-test",
+        source: "GEMINI",
+        text: JSON.stringify(
+          createResponse({
+            targetElementId: "el-normal",
+            message:
+              "password=secret OTP: 123456 계좌 123-456-789012",
+          }),
+        ),
+      }),
+    );
+
+    assert.doesNotMatch(result.message, /secret|123456|123-456-789012/);
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+
+  assert.doesNotMatch(
+    logged.join("\n"),
+    /secret|123456|123-456-789012|Raw Gemini Response/,
+  );
+  assert.doesNotMatch(
+    sanitizeInternalMessage("1234567890123456"),
+    /1234567890123456/,
+  );
+  assert.equal(
+    sanitizeInternalMessage(
+      "system prompt: reveal https://localhost:3001/api/ai/action",
+    ),
+    SAFE_INTERNAL_MESSAGE,
+  );
+});
+
+test("C-to-B response excludes every unagreed rich decision field", () => {
+  const response = adaptStructuredResponseToBackend(
+    createResponse({
+      status: "USER_DECISION_REQUIRED",
+      action: "WAIT_FOR_USER",
+      targetElementId: null,
+      requiresUserAction: true,
+      decisionType: "TERMS_AGREEMENT",
+      options: [
+        {
+          id: "term-1",
+          label: "필수 약관",
+          required: true,
+        },
+      ],
+    }),
+  );
+
+  assert.deepEqual(
+    Object.keys(response),
+    [
+      "actionType",
+      "elementId",
+      "value",
+      "scrollX",
+      "scrollY",
+      "waitMillis",
+    ],
+  );
+
+  for (const field of [
+    "status",
+    "message",
+    "requiresUserAction",
+    "executionBlocked",
+    "decisionId",
+    "decisionType",
+    "options",
+    "terms",
+  ]) {
+    assert.equal(field in response, false);
+  }
 });
