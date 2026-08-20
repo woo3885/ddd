@@ -276,15 +276,6 @@ public final class AiDecisionExecutionService {
 
         if (validatedResponse.actionType() == BrowserActionType.WAIT_FOR_USER
                 && userDecisionPromptService != null) {
-            if (validatedResponse.decisionType()
-                    == com.ddd.backend.domain.session.DecisionType.ADDITIONAL_INFORMATION) {
-                AutomationSession session = getSession(sessionId);
-                session.transitionTo(WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED);
-                sessionRepository.save(session);
-                statusEventPublisher.publish(
-                        sessionId, WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED,
-                        "추가 정보가 필요합니다.");
-            }
             userDecisionPromptService.publish(sessionId, snapshot, validatedResponse);
         }
 

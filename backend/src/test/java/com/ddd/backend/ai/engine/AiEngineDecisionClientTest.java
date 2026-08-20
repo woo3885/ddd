@@ -78,6 +78,60 @@ class AiEngineDecisionClientTest {
     }
 
     @Test
+    void C의_실제_Decision_JSON_fixture에서_4개_유형과_options_terms를_보존한다() {
+        for (DecisionType type : List.of(
+                DecisionType.PRODUCT_SELECTION,
+                DecisionType.SOURCE_ACCOUNT_SELECTION,
+                DecisionType.RECIPIENT_SELECTION,
+                DecisionType.TERMS_AGREEMENT)) {
+            String option = """
+                    {"id":"el-a1b2c3d4-001","label":"선택 항목","required":%s,"checked":%s}
+                    """.formatted(type == DecisionType.TERMS_AGREEMENT,
+                    type == DecisionType.TERMS_AGREEMENT);
+            transport.response = """
+                    {
+                      "actionType":"WAIT_FOR_USER",
+                      "elementId":null,
+                      "value":null,
+                      "scrollX":null,
+                      "scrollY":null,
+                      "waitMillis":null,
+                      "status":"USER_DECISION_REQUIRED",
+                      "message":"선택해주세요.",
+                      "requiresUserAction":true,
+                      "executionBlocked":true,
+                      "decisionType":"%s",
+                      "sourceSnapshotId":"snap-a1b2c3d4",
+                      "options":[%s],
+                      "terms":%s
+                    }
+                    """.formatted(type, option,
+                    type == DecisionType.TERMS_AGREEMENT
+                            ? "[" + option + "]" : "[]");
+
+            AiDecisionResponse response = client.decide(createRequest());
+
+            assertThat(response.decisionType()).isEqualTo(type);
+            assertThat(response.options()).hasSize(1);
+            assertThat(response.sourceSnapshotId()).isEqualTo("snap-a1b2c3d4");
+            if (type == DecisionType.TERMS_AGREEMENT) {
+                assertThat(response.terms()).hasSize(1);
+                assertThat(response.terms().getFirst().checked()).isTrue();
+            }
+        }
+    }
+
+    @Test
+    void C_Decision_JSON의_알_수_없는_유형은_역직렬화를_차단한다() {
+        transport.response = """
+                {"actionType":"WAIT_FOR_USER","decisionType":"UNKNOWN_SELECTION"}
+                """;
+
+        assertThatThrownBy(() -> client.decide(createRequest()))
+                .isInstanceOf(AiDecisionClientException.class);
+    }
+
+    @Test
     void B는_userRequest와_SanitizedSnapshot만_C에_보낸다()
             throws Exception {
 
