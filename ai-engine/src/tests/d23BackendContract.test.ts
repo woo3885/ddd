@@ -146,7 +146,7 @@ test("trusted C requestId replaces the model echo", () => {
   assert.equal(response.requestId, "req-generated-by-c");
 });
 
-test("CLICK, TYPE, and NONE include the Backend rich decision envelope", () => {
+test("CLICK, TYPE, and NONE keep the Backend six-field wire contract", () => {
   const cases: Array<{
     response: StructuredAIResponse;
     expected: ReturnType<typeof adaptStructuredResponseToBackend>;
@@ -162,13 +162,6 @@ test("CLICK, TYPE, and NONE include the Backend rich decision envelope", () => {
         scrollX: null,
         scrollY: null,
         waitMillis: null,
-        status: "AI_EXECUTING",
-        message: "next action",
-        requiresUserAction: false,
-        executionBlocked: false,
-        decisionType: null,
-        options: [],
-        terms: [],
       },
     },
     {
@@ -183,13 +176,6 @@ test("CLICK, TYPE, and NONE include the Backend rich decision envelope", () => {
         scrollX: null,
         scrollY: null,
         waitMillis: null,
-        status: "AI_EXECUTING",
-        message: "next action",
-        requiresUserAction: false,
-        executionBlocked: false,
-        decisionType: null,
-        options: [],
-        terms: [],
       },
     },
     {
@@ -201,13 +187,6 @@ test("CLICK, TYPE, and NONE include the Backend rich decision envelope", () => {
         scrollX: null,
         scrollY: null,
         waitMillis: null,
-        status: "AI_EXECUTING",
-        message: "next action",
-        requiresUserAction: false,
-        executionBlocked: false,
-        decisionType: null,
-        options: [],
-        terms: [],
       },
     },
   ];
@@ -217,43 +196,16 @@ test("CLICK, TYPE, and NONE include the Backend rich decision envelope", () => {
     assert.deepEqual(wire, expected);
     assert.deepEqual(
       Object.keys(wire).sort(),
-      ["actionType", "decisionType", "elementId", "executionBlocked",
-        "message", "options", "requiresUserAction", "scrollX", "scrollY",
-        "status", "terms", "value", "waitMillis"],
+      [
+        "actionType",
+        "elementId",
+        "scrollX",
+        "scrollY",
+        "value",
+        "waitMillis",
+      ],
     );
   }
-});
-
-test("B userDecision context is preserved by the C request adapter", async () => {
-  const { adaptBackendRequestToAiActionRequest } = await import(
-    "../api/aiDecisionRequest.adapter.js"
-  );
-  const userDecision = {
-    decisionId: "dec-001",
-    decisionType: "TERMS_AGREEMENT" as const,
-    selectedOptionIds: ["term-required"],
-    sourceSnapshotId: "snap-before",
-  };
-  const adapted = adaptBackendRequestToAiActionRequest({
-    userRequest: "agree to required terms",
-    snapshot,
-    userDecision,
-  });
-  assert.deepEqual(adapted.userDecision, userDecision);
-});
-
-test("WAIT_FOR_USER exposes decision type, options, and terms", () => {
-  const options = [{ id: "term-required", label: "required", required: true }];
-  const wire = adaptStructuredResponseToBackend(createResponse("WAIT_FOR_USER", {
-    status: "USER_DECISION_REQUIRED",
-    requiresUserAction: true,
-    decisionType: "TERMS_AGREEMENT",
-    options,
-  }));
-  assert.equal(wire.executionBlocked, true);
-  assert.equal(wire.decisionType, "TERMS_AGREEMENT");
-  assert.deepEqual(wire.options, options);
-  assert.deepEqual(wire.terms, options);
 });
 
 test("STOP is STOPPED even when a model labels it COMPLETED", async () => {

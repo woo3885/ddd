@@ -18,14 +18,6 @@ export interface BackendAiDecisionResponse {
   scrollY: number | null;
 
   waitMillis: number | null;
-
-  status: StructuredAIResponse["status"];
-  message: string;
-  requiresUserAction: boolean;
-  executionBlocked: boolean;
-  decisionType: string | null;
-  options: unknown[];
-  terms: unknown[];
 }
 
 export function adaptStructuredResponseToBackend(
@@ -53,18 +45,5 @@ export function adaptStructuredResponseToBackend(
     scrollY: null,
 
     waitMillis: null,
-
-    status: response.status,
-    message: response.message,
-    requiresUserAction: response.requiresUserAction,
-    executionBlocked:
-      response.requiresUserAction
-      || response.action === "STOP",
-    decisionType: response.decisionType,
-    options: response.options ?? [],
-    terms:
-      response.decisionType === "TERMS_AGREEMENT"
-        ? response.options ?? []
-        : [],
   };
 }
