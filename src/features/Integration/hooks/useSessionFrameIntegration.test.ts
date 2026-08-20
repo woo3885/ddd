@@ -113,6 +113,32 @@ describe('useSessionFrameIntegration', () => {
     expect(transportFactory).not.toHaveBeenCalled();
   });
 
+  it('App이 전달한 기존 session은 다시 생성하지 않고 같은 Frame transport에 연결한다', async () => {
+    const sessionClient = {
+      createSession: vi.fn(),
+      cancelSession: vi.fn().mockResolvedValue(session)
+    };
+    const transport = createFakeTransport();
+    const transportFactory = vi.fn(() => transport);
+    const { result } = renderHook(() =>
+      useSessionFrameIntegration({
+        sessionClient,
+        transportFactory,
+        existingSession: session
+      })
+    );
+
+    await waitFor(() => expect(transport.connect).toHaveBeenCalledTimes(1));
+    expect(sessionClient.createSession).not.toHaveBeenCalled();
+    expect(transportFactory).toHaveBeenCalledWith({
+      webSocketUrl: session.frameWebSocketUrl,
+      sessionId: session.sessionId,
+      protocol: session.frameProtocol,
+      initialSequence: 0
+    });
+    expect(result.current.phase).toBe('CONNECTING_FRAME');
+  });
+
   it('사용자 start에서 REST 후 WebSocket 순서로 시작한다', async () => {
     const order: string[] = [];
     const transport = createFakeTransport(order);

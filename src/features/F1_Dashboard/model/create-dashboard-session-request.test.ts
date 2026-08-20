@@ -21,6 +21,7 @@ describe('createDashboardSessionRequest', () => {
     expect(request).toEqual({
       siteId: 'demo-bank',
       taskType: 'OPEN_DEPOSIT',
+      initialPath: '/deposit/products',
       initialUrl: `${DEFAULT_DEMO_BANK_BASE_URL}/deposit/products`,
       userRequest: '예금 가입 절차를 시작해 주세요.'
     });
@@ -41,6 +42,7 @@ describe('createDashboardSessionRequest', () => {
     expect(request).toEqual({
       siteId: 'demo-bank',
       taskType: 'TRANSFER_MONEY',
+      initialPath: '/transfer/accounts',
       initialUrl: 'https://demo.example.com/bank/transfer/accounts',
       userRequest: '계좌이체 절차를 시작해 주세요.'
     });

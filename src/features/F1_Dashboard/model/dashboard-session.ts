@@ -12,6 +12,7 @@ export interface DashboardStartSelection {
 // unchanged while the real session API contract is being finalized.
 export interface DashboardSessionStartRequest
   extends DashboardStartSelection {
+  initialPath: '/deposit/products' | '/transfer/accounts';
   initialUrl: string;
   userRequest: string;
 }

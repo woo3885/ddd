@@ -217,6 +217,9 @@ describe('IntegrationPreview', () => {
 
     completeLatestImageLoad();
     expect(screen.getByTestId('status-target-highlight')).toHaveTextContent(
+      'Mock 안내: 수취인 선택 위치입니다.'
+    );
+    expect(screen.getByTestId('status-target-highlight')).not.toHaveTextContent(
       'btn-select-recipient-hong-gildong'
     );
   });

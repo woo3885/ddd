@@ -23,7 +23,7 @@ const WORKFLOW_STATUSES: ReadonlySet<WorkflowStatus> = new Set([
 export interface CreateBackendSessionRequest {
   userRequest: string;
   siteId: 'demo-bank';
-  initialPath: '/transfer/accounts';
+  initialPath: '/deposit/products' | '/transfer/accounts';
 }
 
 export interface BackendSession {

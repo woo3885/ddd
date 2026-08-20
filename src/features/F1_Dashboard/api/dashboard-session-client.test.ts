@@ -10,6 +10,7 @@ import {
 const request: DashboardSessionStartRequest = {
   siteId: 'demo-bank',
   taskType: 'OPEN_DEPOSIT',
+  initialPath: '/deposit/products',
   initialUrl: 'http://127.0.0.1:5190/deposit/products',
   userRequest: '예금 가입 절차를 시작해 주세요.'
 };

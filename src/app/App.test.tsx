@@ -2,11 +2,30 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { defaultDashboardSessionClient } from '@/features/F1_Dashboard/api/dashboard-session-client';
+import { defaultSessionRestClient } from '@/features/Integration/api/session-rest-client';
 import * as orchestratorClient from '@/shared/api/orchestratorClient';
 import App, { shouldRenderSessionFramePreview } from './App';
 
+const mocks = vi.hoisted(() => ({
+  sessionView: vi.fn()
+}));
+
+vi.mock('@/features/Integration/ui/SessionIntegrationView', () => ({
+  default: (props: { onExit: () => void }) => {
+    mocks.sessionView(props);
+    return (
+      <div data-testid="mock-session-integration-view">
+        <span>실시간 연동 화면</span>
+        <button type="button" onClick={props.onExit}>
+          대시보드로 돌아가기
+        </button>
+      </div>
+    );
+  }
+}));
+
 afterEach(() => {
+  mocks.sessionView.mockClear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -62,7 +81,7 @@ describe('App', () => {
     expect(webSocketMock).not.toHaveBeenCalled();
   });
 
-  it('Dashboard 선택을 세션 요청으로 변환하고 로컬 클라이언트를 한 번 호출한다', async () => {
+  it('Dashboard 선택으로 실제 Backend session을 한 번 만들고 Integration View에 전달한다', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn();
     const webSocketMock = vi.fn();
@@ -71,10 +90,14 @@ describe('App', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('WebSocket', webSocketMock);
     const createSessionSpy = vi
-      .spyOn(defaultDashboardSessionClient, 'createSession')
+      .spyOn(defaultSessionRestClient, 'createSession')
       .mockResolvedValue({
         sessionId: 'session-app-test',
-        createdAt: '2026-07-31T00:00:00.000Z'
+        status: 'SESSION_CREATED',
+        frameWebSocketPath: '/ws/sessions/session-app-test/frames',
+        frameProtocol: 'ddd.browser-frame.v1',
+        frameWebSocketUrl:
+          'ws://127.0.0.1:8080/ws/sessions/session-app-test/frames'
       });
     render(<App />);
 
@@ -93,19 +116,26 @@ describe('App', () => {
 
     expect(createSessionSpy).toHaveBeenCalledTimes(1);
     expect(createSessionSpy).toHaveBeenCalledWith({
+      userRequest: '예금 가입 절차를 시작해 주세요.',
       siteId: 'demo-bank',
-      taskType: 'OPEN_DEPOSIT',
-      initialUrl: 'http://127.0.0.1:5190/deposit/products',
-      userRequest: '예금 가입 절차를 시작해 주세요.'
+      initialPath: '/deposit/products'
     });
-    expect(
-      await screen.findByText('금융 업무 세션이 준비되었습니다.')
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-session-result')).toHaveTextContent(
-      'session-app-test'
+    expect(await screen.findByText('실시간 연동 화면')).toBeInTheDocument();
+    expect(mocks.sessionView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({ sessionId: 'session-app-test' })
+      })
     );
     expect(fetchMock).not.toHaveBeenCalled();
     expect(webSocketMock).not.toHaveBeenCalled();
     expect(window.location.href).toBe(initialLocation);
+
+    await user.click(
+      screen.getByRole('button', { name: '대시보드로 돌아가기' })
+    );
+    expect(
+      screen.getByRole('heading', { name: '금융 업무 시작' })
+    ).toBeInTheDocument();
+    expect(createSessionSpy).toHaveBeenCalledTimes(1);
   });
 });

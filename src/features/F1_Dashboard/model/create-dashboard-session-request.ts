@@ -6,7 +6,10 @@ import type {
 
 export const DEFAULT_DEMO_BANK_BASE_URL = 'http://127.0.0.1:5190';
 
-const taskStartPaths: Record<DashboardTaskType, string> = {
+const taskStartPaths: Record<
+  DashboardTaskType,
+  DashboardSessionStartRequest['initialPath']
+> = {
   OPEN_DEPOSIT: '/deposit/products',
   TRANSFER_MONEY: '/transfer/accounts'
 };
@@ -61,6 +64,7 @@ export function createDashboardSessionRequest(
   return {
     siteId: selection.siteId,
     taskType: selection.taskType,
+    initialPath: taskStartPaths[selection.taskType],
     initialUrl: `${baseUrl}${taskStartPaths[selection.taskType]}`,
     userRequest: taskUserRequests[selection.taskType]
   };

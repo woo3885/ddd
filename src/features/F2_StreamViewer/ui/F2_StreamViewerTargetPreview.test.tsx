@@ -222,16 +222,15 @@ describe('F2_StreamViewerTargetPreview', () => {
     expect(observerRecords[0].disconnect).toHaveBeenCalledOnce();
   });
 
-  it('기존 F2 status와 신규 F3 status 접근성 selector를 유지한다', () => {
+  it('기존 F2 live status와 중복 없는 F3 접근성 selector를 유지한다', () => {
     render(<F2_StreamViewerTargetPreview />);
 
     expect(screen.getByTestId('status-viewer-frame')).toHaveAttribute(
       'aria-live',
       'polite'
     );
-    expect(screen.getByTestId('status-target-highlight')).toHaveAttribute(
-      'aria-live',
-      'polite'
+    expect(screen.getByTestId('status-target-highlight')).not.toHaveAttribute(
+      'aria-live'
     );
   });
 
