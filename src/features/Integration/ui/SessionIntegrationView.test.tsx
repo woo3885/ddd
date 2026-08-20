@@ -11,6 +11,7 @@ import SessionIntegrationView, {
 const mocks = vi.hoisted(() => ({
   frameHook: vi.fn(),
   statusHook: vi.fn(),
+  decisionHook: vi.fn(),
   overlayProps: vi.fn()
 }));
 
@@ -20,6 +21,10 @@ vi.mock('@/features/Integration/hooks/useSessionFrameIntegration', () => ({
 
 vi.mock('@/features/Integration/hooks/useSessionStatusIntegration', () => ({
   useSessionStatusIntegration: mocks.statusHook
+}));
+
+vi.mock('@/features/Integration/hooks/useSessionDecisionIntegration', () => ({
+  useSessionDecisionIntegration: mocks.decisionHook
 }));
 
 vi.mock('@/features/F2_StreamViewer/ui/F2_StreamViewer', () => ({
@@ -110,9 +115,34 @@ function statusHook(overrides = {}) {
     guideMessage: 'AI가 화면을 확인하고 있습니다.',
     lastEventSequence: 3,
     target: TARGET,
+    activeDecision: null,
+    selectedOptionId: null,
+    selectedTermIds: new Set<string>(),
+    decisionSubmitPhase: 'IDLE',
+    safeDecisionError: '',
     connectionPhase: 'CONNECTED',
     safeError: '',
     observeFrame: vi.fn(),
+    selectDecisionOption: vi.fn(),
+    toggleDecisionTerm: vi.fn(),
+    markDecisionSubmitStarted: vi.fn(),
+    markDecisionSubmitAcknowledged: vi.fn(),
+    markDecisionSubmitFailed: vi.fn(),
+    markDecisionSubmitAborted: vi.fn(),
+    ...overrides
+  };
+}
+
+function decisionHook(overrides = {}) {
+  return {
+    canSubmit: true,
+    controlsDisabled: false,
+    isBusy: false,
+    selectOption: vi.fn(),
+    toggleTerm: vi.fn(),
+    confirmOption: vi.fn(),
+    confirmTerms: vi.fn(),
+    abort: vi.fn(),
     ...overrides
   };
 }
@@ -120,6 +150,7 @@ function statusHook(overrides = {}) {
 beforeEach(() => {
   mocks.frameHook.mockReturnValue(frameHook());
   mocks.statusHook.mockReturnValue(statusHook());
+  mocks.decisionHook.mockReturnValue(decisionHook());
   mocks.overlayProps.mockClear();
 });
 
@@ -204,6 +235,117 @@ describe('SessionIntegrationView', () => {
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(reset.mock.invocationCallOrder[0]).toBeLessThan(
       onExit.mock.invocationCallOrder[0]
+    );
+  });
+
+  it.each([
+    ['PRODUCT_SELECTION', '상품 선택'],
+    ['SOURCE_ACCOUNT_SELECTION', '출금 계좌 선택'],
+    ['RECIPIENT_SELECTION', '수취인 선택']
+  ] as const)('%s production options를 단일 선택 Panel에 표시한다', (decisionType, title) => {
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'USER_DECISION_REQUIRED',
+        activeDecision: {
+          requestId: 'req-private',
+          decisionId: 'dec-private',
+          decisionType,
+          options: [
+            {
+              id: 'option-private',
+              label: '사용자가 확인할 선택 항목',
+              required: false,
+              checked: false,
+              disabled: false
+            }
+          ],
+          frameId: 'frm-001',
+          frameSequence: 3,
+          sourceSnapshotId: 'snap-private'
+        }
+      })
+    );
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+
+    expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /사용자가 확인할 선택 항목/ })).toBeInTheDocument();
+    expect(screen.queryByText('option-private')).not.toBeInTheDocument();
+    expect(screen.queryByText('req-private')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-f2-viewer')).toHaveAttribute(
+      'data-interaction-disabled',
+      'true'
+    );
+  });
+
+  it('약관의 checked 초기 상태를 controlled checkbox로 표시하고 확인을 분리한다', async () => {
+    const user = userEvent.setup();
+    const confirmTerms = vi.fn();
+    mocks.decisionHook.mockReturnValue(decisionHook({ confirmTerms }));
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'USER_DECISION_REQUIRED',
+        activeDecision: {
+          requestId: 'req-terms',
+          decisionId: 'dec-terms',
+          decisionType: 'TERMS_AGREEMENT',
+          options: [
+            {
+              id: 'term-required',
+              label: '필수 약관 확인',
+              required: true,
+              checked: true,
+              disabled: false
+            }
+          ],
+          frameId: 'frm-001',
+          frameSequence: 3,
+          sourceSnapshotId: 'snap-terms'
+        },
+        selectedTermIds: new Set(['term-required'])
+      })
+    );
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+
+    expect(screen.getByRole('checkbox', { name: /필수 약관 확인/ })).toBeChecked();
+    expect(confirmTerms).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '약관 선택 확인' }));
+    expect(confirmTerms).toHaveBeenCalledWith(['term-required']);
+  });
+
+  it('ACK 대기 상태와 안전한 제출 오류를 고정 selector로 안내한다', () => {
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'USER_DECISION_REQUIRED',
+        activeDecision: {
+          requestId: 'req-001',
+          decisionId: 'dec-001',
+          decisionType: 'PRODUCT_SELECTION',
+          options: [
+            { id: 'option-001', label: '상품 하나', required: false, checked: false, disabled: false }
+          ],
+          frameId: 'frm-001',
+          frameSequence: 3,
+          sourceSnapshotId: 'snap-001'
+        },
+        decisionSubmitPhase: 'WAITING_FOR_RESUME',
+        safeDecisionError: '최신 화면을 다시 확인해 주세요.'
+      })
+    );
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+
+    const status = screen.getByTestId(
+      SESSION_INTEGRATION_SELECTORS.decisionSubmitState
+    );
+    expect(status).toHaveAttribute(
+      'id',
+      SESSION_INTEGRATION_SELECTORS.decisionSubmitState
+    );
+    expect(screen.getByText(/다음 업무 상태를 기다리고/).parentElement).toHaveAttribute(
+      'role',
+      'status'
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '최신 화면을 다시 확인해 주세요.'
     );
   });
 });

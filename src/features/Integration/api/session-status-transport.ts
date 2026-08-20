@@ -8,6 +8,7 @@ export const SESSION_STATUS_HEARTBEAT_MS = 10_000;
 export const SESSION_STATUS_RECONNECT_DELAY_MS = 2_000;
 export const SESSION_STATUS_BUFFER_LIMIT = 100;
 export const SESSION_STATUS_MESSAGE_MAX_LENGTH = 500;
+export const SESSION_DECISION_LABEL_MAX_LENGTH = 120;
 
 const SESSION_ID_PATTERN = /^[A-Za-z0-9-]{1,100}$/;
 const EVENT_ID_PATTERN = /^[A-Za-z0-9-]{1,100}$/;
@@ -18,6 +19,9 @@ const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f
 const SECURITY_CODE_PATTERN = /(?:otp|비밀번호|인증(?:번호|\s*코드))\s*[:=]?\s*\d{4,8}/i;
 const PASSWORD_VALUE_PATTERN = /(?:비밀번호|password)\s*[:=]\s*\S{4,}/i;
 const FINANCIAL_NUMBER_PATTERN = /(?:^|\D)\d{2,6}(?:[- ]\d{2,6}){2,4}(?:\D|$)|(?:^|\D)\d{13,19}(?:\D|$)/;
+const RESIDENT_NUMBER_PATTERN = /(?:^|\D)\d{6}-?[1-4]\d{6}(?:\D|$)/;
+const PHONE_NUMBER_PATTERN = /(?:^|\D)01[016789]-?\d{3,4}-?\d{4}(?:\D|$)/;
+const SENSITIVE_LABEL_PATTERN = /(?:sensitive|otp|password|passwd|pin|비밀번호|인증번호|인증\s*코드)/i;
 
 const WORKFLOW_STATUSES: ReadonlySet<WorkflowStatus> = new Set([
   'SESSION_CREATED',
@@ -34,7 +38,38 @@ const WORKFLOW_STATUSES: ReadonlySet<WorkflowStatus> = new Set([
   'TERMINATED'
 ]);
 
-export type SessionUiEventType = 'STATE' | 'GUIDE' | 'TARGET' | 'TARGET_CLEAR';
+export type SessionDecisionType =
+  | 'PRODUCT_SELECTION'
+  | 'SOURCE_ACCOUNT_SELECTION'
+  | 'RECIPIENT_SELECTION'
+  | 'TERMS_AGREEMENT';
+
+export interface SessionDecisionOption {
+  id: string;
+  label: string;
+  required: boolean;
+  checked: boolean;
+  disabled: boolean;
+}
+
+export interface SessionDecision {
+  requestId: string;
+  decisionId: string;
+  decisionType: SessionDecisionType;
+  options: readonly SessionDecisionOption[];
+  frameId: string;
+  frameSequence: number;
+  sourceSnapshotId: string;
+}
+
+export type SessionUiEventType =
+  | 'STATE'
+  | 'GUIDE'
+  | 'TARGET'
+  | 'TARGET_CLEAR'
+  | 'DECISION_REQUIRED'
+  | 'DECISION_RESOLVED'
+  | 'DECISION_CLEAR';
 
 export interface SessionTarget {
   elementId: string;
@@ -57,6 +92,7 @@ export interface SessionUiEvent {
   message: string | null;
   actionRequired: boolean;
   target: SessionTarget | null;
+  decision: SessionDecision | null;
   occurredAt: string;
 }
 
@@ -66,6 +102,7 @@ export interface SessionUiSnapshot {
   state: SessionUiEvent | null;
   guide: SessionUiEvent | null;
   target: SessionUiEvent | null;
+  decision: SessionUiEvent | null;
 }
 
 export type SessionStatusTransportEvent =
@@ -201,6 +238,94 @@ function sanitizeTargetLabel(value: unknown): string {
   return normalized;
 }
 
+function validateDecisionLabel(value: unknown): string {
+  if (typeof value !== 'string') return protocolError();
+  const normalized = value.trim();
+  if (
+    normalized === '' ||
+    Array.from(normalized).length > SESSION_DECISION_LABEL_MAX_LENGTH ||
+    /[\r\n]/.test(normalized) ||
+    HTML_PATTERN.test(normalized) ||
+    CONTROL_CHARACTER_PATTERN.test(normalized) ||
+    SENSITIVE_LABEL_PATTERN.test(normalized) ||
+    SECURITY_CODE_PATTERN.test(normalized) ||
+    PASSWORD_VALUE_PATTERN.test(normalized) ||
+    FINANCIAL_NUMBER_PATTERN.test(normalized) ||
+    RESIDENT_NUMBER_PATTERN.test(normalized) ||
+    PHONE_NUMBER_PATTERN.test(normalized)
+  ) {
+    return protocolError();
+  }
+  return normalized;
+}
+
+function validateDecision(value: unknown): SessionDecision {
+  if (!isRecord(value) || !Array.isArray(value.options)) return protocolError();
+  const decisionTypes: readonly SessionDecisionType[] = [
+    'PRODUCT_SELECTION',
+    'SOURCE_ACCOUNT_SELECTION',
+    'RECIPIENT_SELECTION',
+    'TERMS_AGREEMENT'
+  ];
+  if (
+    typeof value.requestId !== 'string' ||
+    !EVENT_ID_PATTERN.test(value.requestId) ||
+    typeof value.decisionId !== 'string' ||
+    !EVENT_ID_PATTERN.test(value.decisionId) ||
+    !decisionTypes.includes(value.decisionType as SessionDecisionType) ||
+    value.options.length < 1 ||
+    value.options.length > 20 ||
+    typeof value.frameId !== 'string' ||
+    !FRAME_ID_PATTERN.test(value.frameId) ||
+    !Number.isSafeInteger(value.frameSequence) ||
+    Number(value.frameSequence) < 1 ||
+    typeof value.sourceSnapshotId !== 'string' ||
+    !SNAPSHOT_ID_PATTERN.test(value.sourceSnapshotId)
+  ) {
+    return protocolError();
+  }
+
+  const seenIds = new Set<string>();
+  const options = value.options.map((rawOption): SessionDecisionOption => {
+    if (
+      !isRecord(rawOption) ||
+      typeof rawOption.id !== 'string' ||
+      !EVENT_ID_PATTERN.test(rawOption.id) ||
+      seenIds.has(rawOption.id) ||
+      typeof rawOption.required !== 'boolean' ||
+      typeof rawOption.checked !== 'boolean' ||
+      typeof rawOption.disabled !== 'boolean'
+    ) {
+      return protocolError();
+    }
+    seenIds.add(rawOption.id);
+    return {
+      id: rawOption.id,
+      label: validateDecisionLabel(rawOption.label),
+      required: rawOption.required,
+      checked: rawOption.checked,
+      disabled: rawOption.disabled
+    };
+  });
+
+  if (
+    value.decisionType !== 'TERMS_AGREEMENT' &&
+    options.filter((option) => option.checked).length > 1
+  ) {
+    return protocolError();
+  }
+
+  return {
+    requestId: value.requestId,
+    decisionId: value.decisionId,
+    decisionType: value.decisionType as SessionDecisionType,
+    options,
+    frameId: value.frameId,
+    frameSequence: Number(value.frameSequence),
+    sourceSnapshotId: value.sourceSnapshotId
+  };
+}
+
 function validateTarget(value: unknown): SessionTarget {
   if (!isRecord(value)) return protocolError();
 
@@ -247,7 +372,15 @@ export function validateSessionUiEvent(
     !EVENT_ID_PATTERN.test(value.eventId) ||
     !Number.isSafeInteger(value.eventSequence) ||
     Number(value.eventSequence) < 1 ||
-    !['STATE', 'GUIDE', 'TARGET', 'TARGET_CLEAR'].includes(
+    ![
+      'STATE',
+      'GUIDE',
+      'TARGET',
+      'TARGET_CLEAR',
+      'DECISION_REQUIRED',
+      'DECISION_RESOLVED',
+      'DECISION_CLEAR'
+    ].includes(
       String(value.eventType)
     ) ||
     typeof value.actionRequired !== 'boolean' ||
@@ -260,12 +393,18 @@ export function validateSessionUiEvent(
   const eventType = value.eventType as SessionUiEventType;
   const status = validateWorkflowStatus(value.status);
   const target = value.target === null ? null : validateTarget(value.target);
+  const decision = value.decision === null ? null : validateDecision(value.decision);
 
   if (
     (eventType === 'STATE' && status === null) ||
     (eventType !== 'STATE' && status !== null) ||
     (eventType === 'TARGET' && target === null) ||
-    (eventType !== 'TARGET' && target !== null)
+    (eventType !== 'TARGET' && target !== null) ||
+    (eventType === 'DECISION_REQUIRED' && decision === null) ||
+    (eventType !== 'DECISION_REQUIRED' && decision !== null) ||
+    (eventType === 'DECISION_REQUIRED' && value.actionRequired !== true) ||
+    ((eventType === 'DECISION_RESOLVED' || eventType === 'DECISION_CLEAR') &&
+      value.actionRequired !== false)
   ) {
     return protocolError();
   }
@@ -279,6 +418,7 @@ export function validateSessionUiEvent(
     message: sanitizeSessionMessage(value.message, status),
     actionRequired: value.actionRequired,
     target,
+    decision,
     occurredAt: value.occurredAt
   };
 }
@@ -301,8 +441,9 @@ export function validateSessionUiSnapshot(
   const state = parseEntry(value.state);
   const guide = parseEntry(value.guide);
   const target = parseEntry(value.target);
+  const decision = parseEntry(value.decision);
   const latestEventSequence = Number(value.latestEventSequence);
-  const entries = [state, guide, target].filter(
+  const entries = [state, guide, target, decision].filter(
     (entry): entry is SessionUiEvent => entry !== null
   );
 
@@ -310,6 +451,7 @@ export function validateSessionUiSnapshot(
     (state !== null && state.eventType !== 'STATE') ||
     (guide !== null && guide.eventType !== 'GUIDE') ||
     (target !== null && target.eventType !== 'TARGET') ||
+    (decision !== null && decision.eventType !== 'DECISION_REQUIRED') ||
     entries.some((entry) => entry.eventSequence > latestEventSequence)
   ) {
     return protocolError();
@@ -320,7 +462,8 @@ export function validateSessionUiSnapshot(
     latestEventSequence,
     state,
     guide,
-    target
+    target,
+    decision
   };
 }
 

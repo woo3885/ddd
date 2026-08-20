@@ -35,6 +35,7 @@ function stateEvent(sequence: number): SessionUiEvent {
     message: 'AI가 화면을 확인하고 있습니다.',
     actionRequired: false,
     target: null,
+    decision: null,
     occurredAt: '2026-08-19T12:00:00Z'
   };
 }
@@ -64,8 +65,9 @@ describe('useSessionStatusIntegration', () => {
           sessionId: 'session-001',
           latestEventSequence: 0,
           state: null,
-          guide: null,
-          target: null
+        guide: null,
+        target: null,
+        decision: null
         }
       });
       transport.emit({ type: 'EVENT_RECEIVED', event: stateEvent(1) });

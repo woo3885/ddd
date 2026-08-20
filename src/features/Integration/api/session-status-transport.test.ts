@@ -6,6 +6,8 @@ import {
   createSessionStatusWebSocketUrl,
   sanitizeSessionMessage,
   validateSessionUiEvent,
+  validateSessionUiSnapshot,
+  type SessionDecisionType,
   type SessionStatusStompConfig,
   type SessionStatusTransportEvent,
   type SessionUiEvent
@@ -23,6 +25,7 @@ function stateEvent(sequence = 1): SessionUiEvent {
     message: 'AI가 다음 행동을 판단하고 있습니다.',
     actionRequired: false,
     target: null,
+    decision: null,
     occurredAt: '2026-08-19T12:00:00Z'
   };
 }
@@ -47,7 +50,42 @@ function targetEvent(sequence = 2): SessionUiEvent {
       frameSequence: 3,
       snapshotId: 'snap-001'
     },
+    decision: null,
     occurredAt: '2026-08-19T12:00:01Z'
+  };
+}
+
+function decisionEvent(
+  decisionType: SessionDecisionType = 'PRODUCT_SELECTION',
+  sequence = 3
+): SessionUiEvent {
+  return {
+    eventId: `evt-${sequence}`,
+    eventSequence: sequence,
+    eventType: 'DECISION_REQUIRED',
+    sessionId: SESSION_ID,
+    status: null,
+    message: '직접 선택해 주세요.',
+    actionRequired: true,
+    target: null,
+    decision: {
+      requestId: 'req-001',
+      decisionId: 'dec-001',
+      decisionType,
+      options: [
+        {
+          id: 'el-option-001',
+          label: '안전한 선택 항목',
+          required: decisionType === 'TERMS_AGREEMENT',
+          checked: false,
+          disabled: false
+        }
+      ],
+      frameId: 'frm-001',
+      frameSequence: 3,
+      sourceSnapshotId: 'snap-001'
+    },
+    occurredAt: '2026-08-19T12:00:02Z'
   };
 }
 
@@ -114,7 +152,8 @@ describe('session-status-transport', () => {
         latestEventSequence: 1,
         state: stateEvent(1),
         guide: null,
-        target: null
+        target: null,
+        decision: null
       })
     );
     await vi.waitFor(() => {
@@ -166,7 +205,8 @@ describe('session-status-transport', () => {
         latestEventSequence: 1,
         state: stateEvent(1),
         guide: null,
-        target: null
+        target: null,
+        decision: null
       })
     );
 
@@ -188,6 +228,111 @@ describe('session-status-transport', () => {
         SESSION_ID
       )
     ).toThrow('실시간 상태 정보를 안전하게 확인할 수 없습니다.');
+  });
+
+  it.each([
+    'PRODUCT_SELECTION',
+    'SOURCE_ACCOUNT_SELECTION',
+    'RECIPIENT_SELECTION',
+    'TERMS_AGREEMENT'
+  ] as const)('%s DECISION_REQUIRED payload를 검증한다', (decisionType) => {
+    const event = validateSessionUiEvent(
+      decisionEvent(decisionType),
+      SESSION_ID
+    );
+
+    expect(event.decision).toMatchObject({
+      decisionType,
+      frameId: 'frm-001',
+      frameSequence: 3,
+      sourceSnapshotId: 'snap-001'
+    });
+  });
+
+  it('DECISION_RESOLVED와 DECISION_CLEAR를 decision 없는 안전 이벤트로 받는다', () => {
+    for (const eventType of ['DECISION_RESOLVED', 'DECISION_CLEAR'] as const) {
+      const event = validateSessionUiEvent(
+        {
+          ...decisionEvent(),
+          eventType,
+          actionRequired: false,
+          decision: null
+        },
+        SESSION_ID
+      );
+      expect(event.decision).toBeNull();
+    }
+  });
+
+  it('latest snapshot의 active decision을 검증한다', () => {
+    const decision = decisionEvent('TERMS_AGREEMENT', 4);
+    const snapshot = validateSessionUiSnapshot(
+      {
+        sessionId: SESSION_ID,
+        latestEventSequence: 4,
+        state: stateEvent(1),
+        guide: null,
+        target: null,
+        decision
+      },
+      SESSION_ID
+    );
+    expect(snapshot.decision?.decision).toEqual(decision.decision);
+  });
+
+  it('unknown type·빈 option·중복 ID·민감 label을 fail-closed 처리한다', () => {
+    const base = decisionEvent();
+    const invalidDecisions = [
+      { ...base.decision, decisionType: 'ADDITIONAL_INFORMATION' },
+      { ...base.decision, options: [] },
+      {
+        ...base.decision,
+        options: [base.decision?.options[0], base.decision?.options[0]]
+      },
+      {
+        ...base.decision,
+        options: [
+          { ...base.decision?.options[0], label: 'OTP 입력값' }
+        ]
+      }
+    ];
+    for (const decision of invalidDecisions) {
+      expect(() =>
+        validateSessionUiEvent({ ...base, decision }, SESSION_ID)
+      ).toThrow('실시간 상태 정보를 안전하게 확인할 수 없습니다.');
+    }
+  });
+
+  it('단일 선택에서 복수 checked와 boolean 이외 상태를 차단한다', () => {
+    const base = decisionEvent();
+    const option = base.decision?.options[0];
+    expect(() =>
+      validateSessionUiEvent(
+        {
+          ...base,
+          decision: {
+            ...base.decision,
+            options: [
+              { ...option, id: 'el-option-001', checked: true },
+              { ...option, id: 'el-option-002', checked: true }
+            ]
+          }
+        },
+        SESSION_ID
+      )
+    ).toThrow();
+    expect(() =>
+      validateSessionUiEvent(
+        {
+          ...base,
+          decision: {
+            ...base.decision,
+            options: [{ ...option, required: 'true' }]
+          }
+        },
+        SESSION_ID
+      )
+    ).toThrow();
   });
 
   it('malformed JSON은 raw payload를 노출하지 않고 연결을 종료한다', () => {
@@ -247,7 +392,8 @@ describe('session-status-transport', () => {
           latestEventSequence: 0,
           state: null,
           guide: null,
-          target: null
+          target: null,
+          decision: null
         })
       );
     const events: SessionStatusTransportEvent[] = [];
