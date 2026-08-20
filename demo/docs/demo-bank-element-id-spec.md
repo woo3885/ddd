@@ -96,67 +96,6 @@
 
 `btn-secure-input-complete`는 동시에 렌더링되지 않는 개별 보안 입력 페이지에서 공통 의미로 사용할 수 있다. 한 페이지에 여러 보안 입력 완료 버튼을 만들지 않는다.
 
-### D11 이체 비밀번호 보안 입력
-
-| ID | 대상 |
-| --- | --- |
-| `btn-transfer-password-start` | 확인된 이체 금액에서 비밀번호 화면으로 이동하는 Gate |
-| `page-transfer-password` | 이체 계좌 비밀번호 페이지 루트 |
-| `summary-transfer-password-source-account` | URL로 확인한 Mock 출금 계좌 별칭 |
-| `summary-transfer-password-recipient` | URL로 확인한 Mock 수취인 이름 |
-| `input-account-password` | D1 계좌 비밀번호 직접 입력 요소 |
-| `status-transfer-password-input` | 비밀번호 입력 유무 상태 live region |
-| `status-confirmed-transfer-password` | 데모 입력 완료 상태 live region |
-| `btn-secure-input-complete` | D1 보안 입력 완료 버튼 |
-| `btn-transfer-amount-back` | 동일 Mock 계좌·수취인의 금액 화면 복귀 |
-| `notice-transfer-secure-input` | 사용자 직접 입력과 자동화 중단 보안 안내 |
-
-`input-account-password`는 `type="password"`와
-`data-ddd-policy="secure-input"`을 사용한다. 비밀번호 원문, 길이, 금액,
-계좌번호와 인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
-
-### D12 이체 OTP 보안 입력
-
-| ID | 대상 |
-| --- | --- |
-| `btn-transfer-otp-start` | 데모 비밀번호 입력 완료 후 OTP 화면으로 이동하는 Gate |
-| `page-transfer-otp` | 이체 OTP 페이지 루트 |
-| `summary-transfer-otp-source-account` | URL로 확인한 Mock 출금 계좌 별칭 |
-| `summary-transfer-otp-recipient` | URL로 확인한 Mock 수취인 이름 |
-| `input-otp` | D1 OTP 직접 입력 요소 |
-| `status-transfer-otp-input` | OTP 입력 유무 상태 live region |
-| `status-confirmed-transfer-otp` | 로컬 데모 입력 완료 상태 live region |
-| `btn-secure-input-complete` | D1 보안 입력 완료 버튼 |
-| `btn-transfer-password-back` | 동일 Mock 계좌·수취인의 비밀번호 화면 복귀 |
-| `notice-transfer-otp-secure-input` | 사용자 직접 입력과 자동화 중단 보안 안내 |
-
-`input-otp`는 uncontrolled native `type="password"`, `autocomplete="off"`와
-`data-ddd-policy="secure-input"`을 사용한다. OTP 원문, 길이, 일부 값,
-계좌번호와 인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
-`btn-secure-input-complete`는 각 보안 페이지의 page root 아래에서 조회한다.
-
-### D15 예금 비밀번호 보안 입력
-
-| ID | 대상 |
-| --- | --- |
-| `btn-deposit-terms-next` | 약관 확인 완료 후 예금 비밀번호 화면으로 이동하는 Gate |
-| `page-deposit-password` | 예금 계좌 비밀번호 페이지 루트 |
-| `summary-deposit-password-product-name` | URL로 확인한 공개 Mock 상품명 |
-| `summary-deposit-password-product-period` | URL로 확인한 공개 Mock 상품 기간 |
-| `input-account-password` | D1 계좌 비밀번호 직접 입력 요소 |
-| `status-deposit-password-input` | 비밀번호 입력 유무 상태 live region |
-| `status-confirmed-deposit-password` | 로컬 데모 입력 완료 상태 live region |
-| `btn-secure-input-complete` | D1 보안 입력 완료 버튼 |
-| `btn-deposit-terms-back` | 같은 Mock 상품의 약관 화면 복귀 |
-| `btn-deposit-password-cancel` | 실제 거래 취소가 아닌 데모 흐름 나가기 |
-| `notice-deposit-secure-input` | 사용자 직접 입력과 자동화 중단 보안 안내 |
-
-`input-account-password`는 uncontrolled native `type="password"`,
-`autocomplete="off"`와 `data-ddd-policy="secure-input"`을 사용한다. 원문,
-길이, 가입 금액, 약관·인증 상태는 selector나 `data-*` 속성에 넣지 않는다.
-`btn-secure-input-complete`는 `page-deposit-password` 아래에서 조회하며 이체
-보안 입력 화면과 동시에 렌더링되지 않는다.
-
 ### 최종 승인
 
 | ID | 대상 |
@@ -168,39 +107,6 @@
 | `btn-final-approve` | 최종 승인 실행 버튼 |
 | `btn-final-edit` | 입력 내용 수정 버튼 |
 | `btn-final-cancel` | 최종 처리 취소 버튼 |
-
-### D13 이체 최종 확인
-
-| ID | 대상 |
-| --- | --- |
-| `btn-transfer-confirmation-start` | OTP 원문 제거와 로컬 입력 완료 후 최종 확인 화면으로 이동하는 Gate |
-| `page-transfer-confirmation` | 이체 최종 확인 Mock 페이지 루트 |
-| `summary-transfer-confirmation-source-account` | 공개 Mock 출금 계좌 요약 |
-| `status-transfer-confirmation-amount` | D10 금액 미전달 상태 안내 |
-| `notice-transfer-confirmation` | 직접 접근과 실제 거래 미실행 안내 |
-| `status-transfer-final-approval` | 로컬 승인 또는 취소 상태 live region |
-| `btn-transfer-otp-back` | 동일 Mock 계좌·수취인의 OTP 화면 복귀 |
-
-D13은 위 신규 ID와 D1의 `summary-transaction-type`, `summary-recipient`,
-`summary-amount`, `checkbox-final-confirmation`, `btn-final-approve`,
-`btn-final-edit`, `btn-final-cancel`을 함께 사용한다. `btn-final-approve`에는
-`data-ddd-policy="final-confirmation"`을 적용한다. selector와 `data-*`
-속성에는 금액, 인증·승인 상태와 민감정보를 넣지 않는다.
-
-### D14 이체 데모 완료
-
-| ID | 대상 |
-| --- | --- |
-| `btn-transfer-completion-start` | D13 로컬 승인 후 데모 완료 화면으로 이동하는 별도 Gate |
-| `page-transfer-completion` | 이체 데모 완료 화면 루트 |
-| `summary-transfer-completion-source-account` | 공개 Mock 출금 계좌 문맥 |
-| `summary-transfer-completion-recipient` | 공개 Mock 수취인 문맥 |
-| `status-transfer-demo-completion` | 데모 안내 흐름 완료 상태 live region |
-| `notice-transfer-no-transaction` | 직접 접근과 실제 거래 미실행 안내 |
-| `btn-transfer-home` | 데모 메인 화면 복귀 버튼 |
-
-D14 selector는 실제 거래 성공이나 영수증을 뜻하지 않는다. 금액, 승인·인증
-상태, 실제 거래 결과와 민감정보를 selector 또는 `data-*` 속성에 넣지 않는다.
 
 ### 위험 경고
 
