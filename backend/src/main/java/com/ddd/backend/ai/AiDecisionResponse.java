@@ -18,6 +18,7 @@ public record AiDecisionResponse(
         Boolean requiresUserAction,
         Boolean executionBlocked,
         DecisionType decisionType,
+        String sourceSnapshotId,
         List<AiDecisionOption> options,
         List<AiDecisionOption> terms
 ) {
@@ -47,7 +48,19 @@ public record AiDecisionResponse(
             Integer scrollX, Integer scrollY, Integer waitMillis
     ) {
         this(actionType, elementId, value, scrollX, scrollY, waitMillis,
-                null, null, null, null, null, List.of(), List.of());
+                null, null, null, null, null, null, List.of(), List.of());
+    }
+
+    public AiDecisionResponse(
+            BrowserActionType actionType, String elementId, String value,
+            Integer scrollX, Integer scrollY, Integer waitMillis,
+            String status, String message, Boolean requiresUserAction,
+            Boolean executionBlocked, DecisionType decisionType,
+            List<AiDecisionOption> options, List<AiDecisionOption> terms
+    ) {
+        this(actionType, elementId, value, scrollX, scrollY, waitMillis,
+                status, message, requiresUserAction, executionBlocked,
+                decisionType, null, options, terms);
     }
 
     /*

@@ -117,13 +117,22 @@ public final class AiDecisionResponseValidator {
                 ? response.terms() : response.options();
         boolean hasDecision = response.decisionType() != null
                 || !response.options().isEmpty() || !response.terms().isEmpty();
-        if (!hasDecision) {
+        if (!hasDecision && response.actionType() != BrowserActionType.WAIT_FOR_USER) {
             return;
         }
+        Set<com.ddd.backend.domain.session.DecisionType> supportedTypes = Set.of(
+                com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.SOURCE_ACCOUNT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.RECIPIENT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT);
         if (response.decisionType() == null || choices.isEmpty()
+                || !supportedTypes.contains(response.decisionType())
                 || response.actionType() != BrowserActionType.WAIT_FOR_USER
+                || !"USER_DECISION_REQUIRED".equals(response.status())
                 || !Boolean.TRUE.equals(response.requiresUserAction())
-                || !Boolean.TRUE.equals(response.executionBlocked())) {
+                || !Boolean.TRUE.equals(response.executionBlocked())
+                || response.sourceSnapshotId() == null
+                || !response.sourceSnapshotId().equals(snapshot.snapshotId())) {
             throw invalidPayload("사용자 결정 응답 계약이 올바르지 않습니다.");
         }
         Set<String> ids = new java.util.HashSet<>();
@@ -150,6 +159,11 @@ public final class AiDecisionResponseValidator {
                     .filter(java.util.Objects::nonNull)
                     .map(String::toLowerCase)
                     .reduce("", (left, right) -> left + " " + right);
+            if (response.decisionType()
+                    == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
+                    && choice.checked() == null) {
+                throw invalidPayload("약관 checked 상태가 필요합니다.");
+            }
             if (response.decisionType()
                     == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
                     && (sourceLabel.contains("필수") || sourceLabel.contains("required"))

@@ -46,7 +46,8 @@ class UserDecisionPromptServiceTest {
                         SanitizedDomSnapshot.SecurityPolicy.USER_DECISION)));
 
         AutomationDecisionPrompt prompt = service.publish(
-                "session-001", snapshot);
+                "session-001", snapshot,
+                com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION);
 
         assertThat(prompt.requestId()).startsWith("req-");
         assertThat(prompt.decisionId()).startsWith("dec-");
@@ -78,7 +79,9 @@ class UserDecisionPromptServiceTest {
                         element("required", "[필수] 서비스 이용약관", true),
                         element("optional", "[선택] 마케팅 동의", true)));
 
-        AutomationDecisionPrompt prompt = service.publish("session-terms", snapshot);
+        AutomationDecisionPrompt prompt = service.publish(
+                "session-terms", snapshot,
+                com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT);
 
         assertThat(prompt.decisionType()).isEqualTo(com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT);
         assertThat(prompt.options()).extracting(option -> option.required())
@@ -101,7 +104,9 @@ class UserDecisionPromptServiceTest {
                 new SanitizedDomSnapshot.PageSnapshot("http://example.test", "약관"),
                 List.of(element("required", "[필수] 서비스 약관", true)));
 
-        AutomationDecisionPrompt prompt = service.publish("session-checked", snapshot);
+        AutomationDecisionPrompt prompt = service.publish(
+                "session-checked", snapshot,
+                com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT);
 
         assertThat(prompt.sourceSnapshotId()).isEqualTo("snap-checked");
         assertThat(prompt.options().getFirst().checked()).isTrue();
@@ -113,7 +118,7 @@ class UserDecisionPromptServiceTest {
                 com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
                 com.ddd.backend.domain.session.DecisionType.SOURCE_ACCOUNT_SELECTION,
                 com.ddd.backend.domain.session.DecisionType.RECIPIENT_SELECTION,
-                com.ddd.backend.domain.session.DecisionType.ADDITIONAL_INFORMATION)) {
+                com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT)) {
             String sessionId = "session-" + type.name().toLowerCase();
             BrowserFrameStore frameStore = new BrowserFrameStore();
             frameStore.publish(sessionId, new CapturedBrowserFrame(
@@ -128,7 +133,15 @@ class UserDecisionPromptServiceTest {
             AiDecisionResponse response = new AiDecisionResponse(
                     BrowserActionType.WAIT_FOR_USER, null, null, null, null, null,
                     "WAIT_FOR_USER", "선택하세요", true, true, type,
-                    List.of(new AiDecisionOption("choice", "선택항목", false)), List.of());
+                    snapshot.snapshotId(),
+                    List.of(new AiDecisionOption(
+                            "choice", "선택항목", false,
+                            type == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
+                                    ? Boolean.FALSE : null)),
+                    type == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
+                            ? List.of(new AiDecisionOption(
+                                    "choice", "선택항목", false, false))
+                            : List.of());
 
             assertThat(service.publish(sessionId, snapshot, response).decisionType())
                     .isEqualTo(type);

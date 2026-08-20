@@ -387,6 +387,73 @@ class AiDecisionResponseValidatorTest {
                 .isEqualTo(AiDecisionValidationException.Code.INVALID_PAYLOAD);
     }
 
+    @Test
+    void WAIT_FOR_USER에_decisionType이_누락되면_상품으로_기본_처리하지_않는다() {
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.WAIT_FOR_USER, null, null, null, null, null);
+
+        assertThatThrownBy(() -> validator.validate(response, emptySnapshot()))
+                .isInstanceOf(AiDecisionValidationException.class)
+                .extracting(exception -> ((AiDecisionValidationException) exception).code())
+                .isEqualTo(AiDecisionValidationException.Code.INVALID_PAYLOAD);
+    }
+
+    @Test
+    void 구조화_Decision은_지원_유형과_sourceSnapshot을_검증한다() {
+        SanitizedDomSnapshot snapshot = snapshot(policyElement(
+                SanitizedDomSnapshot.SecurityPolicy.USER_DECISION, true, true));
+        for (var type : List.of(
+                com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.SOURCE_ACCOUNT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.RECIPIENT_SELECTION,
+                com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT)) {
+            var option = new com.ddd.backend.ai.AiDecisionOption(
+                    "el-test0001-001", "선택", false,
+                    type == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
+                            ? Boolean.FALSE : null);
+            AiDecisionResponse response = new AiDecisionResponse(
+                    BrowserActionType.WAIT_FOR_USER, null, null, null, null, null,
+                    "USER_DECISION_REQUIRED", "선택하세요", true, true,
+                    type, snapshot.snapshotId(), List.of(option),
+                    type == com.ddd.backend.domain.session.DecisionType.TERMS_AGREEMENT
+                            ? List.of(option) : List.of());
+
+            assertThat(validator.validate(response, snapshot)).isSameAs(response);
+        }
+    }
+
+    @Test
+    void sourceSnapshotId가_현재_Snapshot과_다르면_차단한다() {
+        var option = new com.ddd.backend.ai.AiDecisionOption(
+                "el-test0001-001", "선택", false);
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.WAIT_FOR_USER, null, null, null, null, null,
+                "USER_DECISION_REQUIRED", "선택하세요", true, true,
+                com.ddd.backend.domain.session.DecisionType.PRODUCT_SELECTION,
+                "snap-stale", List.of(option), List.of());
+
+        assertThatThrownBy(() -> validator.validate(response, snapshot(policyElement(
+                SanitizedDomSnapshot.SecurityPolicy.USER_DECISION, true, true))))
+                .isInstanceOf(AiDecisionValidationException.class);
+    }
+
+    @Test
+    void ADDITIONAL_INFORMATION은_D24_구조화_Decision에서_명시적으로_차단한다() {
+        var option = new com.ddd.backend.ai.AiDecisionOption(
+                "el-test0001-001", "추가 정보", false);
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.WAIT_FOR_USER, null, null, null, null, null,
+                "USER_DECISION_REQUIRED", "정보를 입력하세요", true, true,
+                com.ddd.backend.domain.session.DecisionType.ADDITIONAL_INFORMATION,
+                "snap-test0001", List.of(option), List.of());
+
+        assertThatThrownBy(() -> validator.validate(response, snapshot(policyElement(
+                SanitizedDomSnapshot.SecurityPolicy.USER_DECISION, true, true))))
+                .isInstanceOf(AiDecisionValidationException.class)
+                .extracting(exception -> ((AiDecisionValidationException) exception).code())
+                .isEqualTo(AiDecisionValidationException.Code.INVALID_PAYLOAD);
+    }
+
     private AiDecisionResponse response(
             BrowserActionType actionType,
             String elementId,

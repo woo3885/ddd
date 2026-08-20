@@ -53,11 +53,8 @@ public final class UserDecisionPromptService {
             String sessionId,
             SanitizedDomSnapshot snapshot
     ) {
-        return publish(
-                sessionId,
-                snapshot,
-                inferDecisionType(snapshot)
-        );
+        throw new IllegalStateException(
+                "AI Decision Response에 decisionType이 필요합니다.");
     }
 
     public AutomationDecisionPrompt publish(
@@ -66,11 +63,21 @@ public final class UserDecisionPromptService {
             AiDecisionResponse response
     ) {
         Objects.requireNonNull(response, "AI Decision Response는 필수입니다.");
+        if (!java.util.Set.of(
+                DecisionType.PRODUCT_SELECTION,
+                DecisionType.SOURCE_ACCOUNT_SELECTION,
+                DecisionType.RECIPIENT_SELECTION,
+                DecisionType.TERMS_AGREEMENT).contains(response.decisionType())
+                || !snapshot.snapshotId().equals(response.sourceSnapshotId())) {
+            throw new IllegalStateException(
+                    "검증되지 않은 Decision 유형 또는 Snapshot입니다.");
+        }
         List<AiDecisionOption> richOptions = response.decisionType()
                 == DecisionType.TERMS_AGREEMENT && !response.terms().isEmpty()
                 ? response.terms() : response.options();
         if (response.decisionType() == null || richOptions.isEmpty()) {
-            return publish(sessionId, snapshot);
+            throw new IllegalStateException(
+                    "AI Decision Response의 유형과 선택지가 필요합니다.");
         }
         BrowserFramePayload frame = frameStore.latest(sessionId)
                 .orElseThrow(() -> new IllegalStateException(
@@ -84,12 +91,18 @@ public final class UserDecisionPromptService {
             if (element == null) {
                 throw new IllegalStateException("Snapshot에 없는 Decision Option입니다.");
             }
+            boolean checked = isChecked(sessionId, option.id());
+            if (response.decisionType() == DecisionType.TERMS_AGREEMENT
+                    && (option.checked() == null || option.checked() != checked)) {
+                throw new IllegalStateException(
+                        "약관 checked 상태가 현재 DOM과 일치하지 않습니다.");
+            }
             return new AutomationDecisionOption(
                     option.id(),
                     option.label() == null || option.label().isBlank()
                             ? safeLabel(element) : option.label(),
                     option.required() || isRequiredTerm(element),
-                    isChecked(sessionId, option.id()),
+                    checked,
                     !element.enabled());
         }).toList();
         AutomationDecisionPrompt prompt = new AutomationDecisionPrompt(
@@ -157,15 +170,6 @@ public final class UserDecisionPromptService {
         } catch (RuntimeException ignored) {
             return false;
         }
-    }
-
-    private DecisionType inferDecisionType(SanitizedDomSnapshot snapshot) {
-        boolean terms = snapshot.elements().stream().anyMatch(element ->
-                "checkbox".equalsIgnoreCase(element.inputType())
-                        && containsTermMarker(element));
-        return terms
-                ? DecisionType.TERMS_AGREEMENT
-                : DecisionType.PRODUCT_SELECTION;
     }
 
     private boolean isRequiredTerm(SanitizedDomSnapshot.ElementSnapshot element) {
