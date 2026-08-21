@@ -42,7 +42,7 @@ class AutomationUiEventPublisherTest {
                 .isEqualTo(AutomationUiEventType.STATE);
         assertThat(snapshot.state().eventSequence()).isEqualTo(1L);
         assertThat(snapshot.guide().eventSequence()).isEqualTo(2L);
-        assertThat(snapshot.latestEventSequence()).isEqualTo(2L);
+        assertThat(snapshot.latestEventSequence()).isEqualTo(3L);
     }
 
     @Test
@@ -120,6 +120,20 @@ class AutomationUiEventPublisherTest {
                     .as(status.name())
                     .isNull();
         }
+    }
+
+    @Test
+    void PAGE_LOADING은_이전화면_Target을_latest_snapshot에서_즉시_제거한다() {
+        publisher.publishTarget("session-loading",
+                new AutomationTarget("el-12345678-001", "이전 대상",
+                        1, 1, 10, 10, "frm-001", 1L, "snap-12345678"),
+                "이전 대상");
+
+        publisher.publish("session-loading", WorkflowStatus.PAGE_LOADING,
+                "새 화면을 확인하고 있습니다.");
+
+        assertThat(publisher.latestSnapshot("session-loading")
+                .orElseThrow().target()).isNull();
     }
 
     @Test

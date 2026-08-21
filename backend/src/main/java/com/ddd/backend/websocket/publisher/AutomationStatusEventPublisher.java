@@ -233,7 +233,8 @@ public final class AutomationStatusEventPublisher {
     }
 
     private boolean clearsTarget(WorkflowStatus status) {
-        return status == WorkflowStatus.AI_EXECUTING
+        return status == WorkflowStatus.PAGE_LOADING
+                || status == WorkflowStatus.AI_EXECUTING
                 || requiresUserAction(status)
                 || status == WorkflowStatus.COMPLETED
                 || status == WorkflowStatus.CANCELLED

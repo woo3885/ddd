@@ -27,6 +27,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.inOrder;
+import org.mockito.InOrder;
 
 class BrowserActionExecutionServiceTest {
 
@@ -189,6 +191,19 @@ class BrowserActionExecutionServiceTest {
         ).sendLatest(
                 session.getSessionId()
         );
+
+        InOrder eventOrder = inOrder(statusEventPublisher,
+                browserFrameCaptureService, browserFrameStore,
+                frameWebSocketHandler);
+        eventOrder.verify(statusEventPublisher).publish(session.getSessionId(),
+                WorkflowStatus.PAGE_LOADING,
+                "변경된 화면을 안전하게 확인하고 있습니다.");
+        eventOrder.verify(browserFrameCaptureService).capture(session.getSessionId());
+        eventOrder.verify(browserFrameStore).publishAfterAction(
+                session.getSessionId(), capturedFrame);
+        eventOrder.verify(frameWebSocketHandler).sendLatest(session.getSessionId());
+        eventOrder.verify(statusEventPublisher).publish(session.getSessionId(),
+                WorkflowStatus.AI_EXECUTING, "브라우저 행동을 실행했습니다.");
     }
 
     @Test

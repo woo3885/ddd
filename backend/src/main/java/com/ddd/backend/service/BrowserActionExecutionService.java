@@ -376,9 +376,16 @@ public final class BrowserActionExecutionService {
                                 result.status()
                         );
 
-        session.transitionTo(
-                workflowStatus
-        );
+        if (result.status() == BrowserActionExecutionStatus.EXECUTED) {
+            session.transitionTo(WorkflowStatus.PAGE_LOADING);
+            sessionRepository.save(session);
+            statusEventPublisher.publish(sessionId, WorkflowStatus.PAGE_LOADING,
+                    "변경된 화면을 안전하게 확인하고 있습니다.");
+        }
+
+        refreshFrameAfterExecutedActionSafely(sessionId, result);
+
+        session.transitionTo(workflowStatus);
 
         sessionRepository.save(
                 session
@@ -388,11 +395,6 @@ public final class BrowserActionExecutionService {
                 sessionId,
                 workflowStatus,
                 message
-        );
-
-        refreshFrameAfterExecutedActionSafely(
-                sessionId,
-                result
         );
 
         return result;

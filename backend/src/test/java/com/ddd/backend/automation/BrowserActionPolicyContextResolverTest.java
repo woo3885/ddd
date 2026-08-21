@@ -182,6 +182,24 @@ class BrowserActionPolicyContextResolverTest {
     }
 
     @Test
+    void 비밀번호_화면으로_이동하는_일반_버튼은_민감입력으로_오탐하지_않는다() {
+        setPageContent("""
+                <button id="btn-deposit-terms-next" data-ddd-policy="normal">
+                    동의하고 비밀번호 입력으로 이동
+                </button>
+                """);
+
+        BrowserActionPolicyContext context = resolver.resolve(
+                SESSION_ID,
+                new BrowserAction(BrowserActionType.CLICK,
+                        "#btn-deposit-terms-next", null, null, null, null));
+
+        assertFalse(context.sensitiveInput());
+        assertFalse(context.finalExecution());
+        assertFalse(context.blockedTarget());
+    }
+
+    @Test
     void 선택적_마케팅_동의는_선택약관으로_판정한다() {
         setPageContent("""
                 <!doctype html>

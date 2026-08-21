@@ -303,7 +303,13 @@ public final class BrowserActionPolicyContextResolver {
             return true;
         }
 
-        return containsAny(
+        String inputType = normalize(snapshot.type());
+        boolean inputLike = containsAny(
+                inputType,
+                "text", "password", "tel", "number", "email", "search"
+        ) || (snapshot.autocomplete() != null && !snapshot.autocomplete().isBlank());
+
+        return inputLike && containsAny(
                 text,
                 "password",
                 "passwd",

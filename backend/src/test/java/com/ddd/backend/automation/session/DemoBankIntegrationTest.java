@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+import com.ddd.backend.security.capture.FrameCaptureDecision;
+import com.ddd.backend.security.capture.FrameCaptureGuard;
 
 @EnabledIfEnvironmentVariable(
         named = "RUN_DEMO_BANK_INTEGRATION",
@@ -101,6 +103,39 @@ class DemoBankIntegrationTest {
                         return null;
                     }
             );
+        }
+    }
+
+    @Test
+    void D25_정기예금_전체경로는_password에서_보안중단한다() {
+        try (PlaywrightWorker worker = new PlaywrightWorker();
+             BrowserSessionManager manager = new BrowserSessionManager(worker)) {
+            String sessionId = "demo-deposit-d25";
+            manager.createSession(sessionId);
+            manager.execute(sessionId, COMMAND_TIMEOUT, page -> {
+                page.navigate(BASE_URL + "/deposit/products");
+                page.locator("#btn-select-deposit-12m").click();
+                page.locator("#btn-deposit-product-next").click();
+                page.waitForURL("**/deposit/products/deposit-12m");
+                page.locator("#btn-deposit-amount-start").click();
+                page.waitForURL("**/deposit/conditions/deposit-12m");
+                page.locator("#input-deposit-amount").fill("1000000");
+                page.locator("#btn-deposit-amount-confirm").click();
+                page.locator("#btn-deposit-terms-start").click();
+                page.waitForURL("**/deposit/terms/deposit-12m");
+                page.locator("#checkbox-term-service-required").check();
+                page.locator("#checkbox-term-privacy-required").check();
+                page.locator("#btn-deposit-terms-confirm").click();
+                page.locator("#btn-deposit-terms-next").click();
+                page.waitForURL("**/deposit/secure/password/deposit-12m");
+                assertThat(page.locator("#input-account-password"))
+                        .hasAttribute("data-ddd-policy", "secure-input");
+                return null;
+            });
+
+            FrameCaptureGuard guard = new FrameCaptureGuard(manager);
+            org.assertj.core.api.Assertions.assertThat(guard.evaluate(sessionId))
+                    .isEqualTo(FrameCaptureDecision.SECURE_INPUT_BLOCKED);
         }
     }
 

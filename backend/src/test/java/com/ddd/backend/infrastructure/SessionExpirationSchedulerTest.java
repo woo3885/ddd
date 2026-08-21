@@ -5,6 +5,10 @@ import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.ai.AgentLoopService;
+import com.ddd.backend.service.action.PublicBrowserActionSessionState;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
+import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -112,6 +116,24 @@ class SessionExpirationSchedulerTest {
         ).removeSession(
                 sessionId
         );
+    }
+
+    @Test
+    void Redis_TTL_만료시_Agent_loop도_정리한다() {
+        String sessionId = "expired-agent-loop";
+        AgentLoopService agentLoopService = mock(AgentLoopService.class);
+        SessionExpirationScheduler d25Scheduler = new SessionExpirationScheduler(
+                sessionRepository, browserSessionManager, browserFrameStore,
+                mock(BrowserFrameWebSocketHandler.class),
+                mock(PublicBrowserActionSessionState.class),
+                mock(AutomationStatusEventPublisher.class),
+                mock(UserDecisionSessionState.class), agentLoopService);
+        when(browserSessionManager.activeSessionIds()).thenReturn(Set.of(sessionId));
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
+
+        d25Scheduler.cleanupExpiredSessions();
+
+        verify(agentLoopService).cancel(sessionId);
     }
 
     /*

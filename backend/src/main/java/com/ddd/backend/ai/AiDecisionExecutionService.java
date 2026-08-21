@@ -22,9 +22,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public final class AiDecisionExecutionService {
+
+    private static final Pattern MAN_WON_AMOUNT = Pattern.compile(
+            "(?<![0-9])([0-9][0-9,]*)\\s*만\\s*원");
+    private static final Pattern WON_AMOUNT = Pattern.compile(
+            "(?<![0-9])([0-9][0-9,]{3,})\\s*원");
 
     private static final Logger log =
             LoggerFactory.getLogger(
@@ -241,7 +248,9 @@ public final class AiDecisionExecutionService {
 
         BrowserActionExecutionResult
                 executionResult =
-                publishTargetThenExecute(
+                isUnauthorizedDepositInput(session, snapshot, validatedResponse)
+                        ? requireAdditionalInformation(session)
+                        : publishTargetThenExecute(
                         sessionId,
                         snapshot,
                         validatedResponse
@@ -254,11 +263,65 @@ public final class AiDecisionExecutionService {
         );
     }
 
+    private boolean isUnauthorizedDepositInput(
+            AutomationSession session,
+            SanitizedDomSnapshot snapshot,
+            AiDecisionResponse response
+    ) {
+        if (snapshot.page() == null
+                || snapshot.page().url() == null
+                || !snapshot.page().url().contains("/deposit/conditions/")) {
+            return false;
+        }
+        if (!session.getUserRequest().matches("(?s).*12\\s*개월.*")) {
+            return true;
+        }
+        if (response.actionType() != BrowserActionType.TYPE) {
+            return false;
+        }
+        Long requestedAmount = extractRequestedAmount(session.getUserRequest());
+        Long proposedAmount = parseDigits(response.value());
+        return requestedAmount == null || !requestedAmount.equals(proposedAmount);
+    }
+
+    private BrowserActionExecutionResult requireAdditionalInformation(
+            AutomationSession session
+    ) {
+        session.transitionTo(WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED);
+        sessionRepository.save(session);
+        statusEventPublisher.publish(session.getSessionId(),
+                WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED,
+                "가입 금액을 사용자 요청에서 확인할 수 없습니다.");
+        return BrowserActionExecutionResult.userActionRequired(BrowserActionType.TYPE);
+    }
+
+    private Long extractRequestedAmount(String userRequest) {
+        Matcher manWon = MAN_WON_AMOUNT.matcher(userRequest);
+        if (manWon.find()) {
+            return Math.multiplyExact(Long.parseLong(manWon.group(1).replace(",", "")),
+                    10_000L);
+        }
+        Matcher won = WON_AMOUNT.matcher(userRequest);
+        return won.find() ? Long.parseLong(won.group(1).replace(",", "")) : null;
+    }
+
+    private Long parseDigits(String value) {
+        if (value == null) return null;
+        String digits = value.replaceAll("[^0-9]", "");
+        if (digits.isBlank()) return null;
+        try {
+            return Long.parseLong(digits);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
     private BrowserActionExecutionResult publishTargetThenExecute(
             String sessionId,
             SanitizedDomSnapshot snapshot,
             AiDecisionResponse validatedResponse
     ) {
+        ensureSessionCanExecuteAction(sessionId);
         if (targetEventService != null) {
             try {
                 targetEventService.publishCurrentTarget(
@@ -280,6 +343,21 @@ public final class AiDecisionExecutionService {
         }
 
         return result;
+    }
+
+    private void ensureSessionCanExecuteAction(String sessionId) {
+        WorkflowStatus status = getSession(sessionId).getStatus();
+        if (status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.ERROR
+                || status == WorkflowStatus.TERMINATED
+                || status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.SECURE_INPUT_REQUIRED
+                || status == WorkflowStatus.FINAL_CONFIRMATION_REQUIRED
+                || status == WorkflowStatus.RISK_WARNING
+                || status == WorkflowStatus.USER_DECISION_REQUIRED) {
+            throw new IllegalStateException(
+                    "현재 세션 상태에서는 AI Action을 실행할 수 없습니다.");
+        }
     }
 
     private BrowserActionExecutionResult

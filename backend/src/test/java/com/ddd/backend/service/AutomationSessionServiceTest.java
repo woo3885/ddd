@@ -14,6 +14,10 @@ import com.ddd.backend.security.capture.FrameCaptureDecision;
 import com.ddd.backend.security.navigation.DemoNavigationPolicy;
 import com.ddd.backend.security.navigation.DemoNavigationTarget;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.ai.AgentLoopService;
+import com.ddd.backend.automation.dom.SanitizedDomSnapshotService;
+import com.ddd.backend.service.action.PublicBrowserActionSessionState;
+import com.ddd.backend.service.decision.UserDecisionSessionState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -366,6 +370,35 @@ class AutomationSessionServiceTest {
                 WorkflowStatus.SESSION_CREATED,
                 "자동화 세션이 생성되었습니다."
         );
+    }
+
+    @Test
+    void D25_첫_Frame과_Snapshot_준비후에만_최초_AI를_예약한다() {
+        SanitizedDomSnapshotService snapshotService =
+                mock(SanitizedDomSnapshotService.class);
+        AgentLoopService agentLoopService = mock(AgentLoopService.class);
+        AutomationSessionService d25Service = new AutomationSessionService(
+                repository, browserSessionManager, statusEventPublisher,
+                demoNavigationPolicy, browserFrameCaptureService, browserFrameStore,
+                null, mock(PublicBrowserActionSessionState.class),
+                mock(UserDecisionSessionState.class), snapshotService,
+                agentLoopService);
+        when(demoNavigationPolicy.resolve(DEMO_SITE_ID, ACCOUNTS_PATH))
+                .thenReturn(navigationTarget);
+        when(browserSessionManager.navigate(anyString(), eq(navigationTarget.targetUri())))
+                .thenReturn(ACCOUNTS_URL);
+        when(browserFrameCaptureService.capture(anyString()))
+                .thenReturn(FrameCaptureAttempt.captured(capturedFrame));
+        when(agentLoopService.start(anyString())).thenReturn(true);
+
+        AutomationSession session = d25Service.createSession(
+                "100만 원을 12개월 정기예금 상품에 가입하고 싶다",
+                DEMO_SITE_ID, ACCOUNTS_PATH);
+
+        verify(snapshotService).createSnapshot(session.getSessionId());
+        assertTrue(browserFrameStore.latest(session.getSessionId()).isPresent());
+        assertTrue(d25Service.startInitialAi(session.getSessionId()));
+        verify(agentLoopService).start(session.getSessionId());
     }
 
     /*
