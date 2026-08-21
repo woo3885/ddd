@@ -21,6 +21,13 @@ export type DepositScenarioStage =
   | "SECURE_INPUT"
   | "UNKNOWN";
 
+export interface SelectedDepositProductContext {
+  productId: string;
+  productLabel: string;
+  periodMonths: number;
+  sourceSnapshotId: string;
+}
+
 export const DEPOSIT_GUIDANCE = Object.freeze({
   productSelection:
     "가입할 예금 상품을 직접 선택해 주세요.",
@@ -34,6 +41,10 @@ export const DEPOSIT_GUIDANCE = Object.freeze({
     "약관 내용을 확인해 주세요.",
   amountMissing:
     "가입 금액을 확인하려면 추가 정보가 필요합니다.",
+  productVerification:
+    "선택한 상품의 상세 조건을 다시 확인해 주세요.",
+  periodMismatch:
+    "선택한 상품의 가입 기간을 다시 확인해 주세요.",
   finalBoundary:
     "현재 단계에서는 최종 확인을 진행하지 않습니다.",
   terms:
@@ -45,6 +56,14 @@ export const DEPOSIT_GUIDANCE = Object.freeze({
   secureInput:
     "비밀번호는 금융 화면에 직접 입력해 주세요.",
 } as const);
+
+const DEPOSIT_PRODUCT_ID_PATTERN =
+  /^deposit-[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+const DEPOSIT_PRODUCT_PERIOD_PATTERN =
+  /^([1-9][0-9]{0,2})\s*개월$/u;
+const REQUEST_PERIOD_PATTERN =
+  /(?<![0-9])([0-9]+)\s*(개월|달|년)/gu;
+const MAX_DEPOSIT_PERIOD_MONTHS = 999;
 
 export const DEPOSIT_DEMO_BUTTON_LABELS = Object.freeze({
   productNext: "선택한 상품 상세 보기",
@@ -136,6 +155,143 @@ function includesAny(
   return keywords.some((keyword) =>
     value.includes(normalize(keyword)),
   );
+}
+
+function canonicalDetailPath(
+  url: string,
+): string | null {
+  try {
+    return new URL(url).pathname.replace(/\/+$/u, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * B가 상품 상세 화면에서만 제공하는 sanitized semantic context를 읽는다.
+ * URL은 detail 화면 identity 확인에만 쓰고 기간 source로 사용하지 않는다.
+ */
+export function readSelectedDepositProductContext(
+  request: AiActionRequest,
+): SelectedDepositProductContext | null {
+  const page = request.domSnapshot.page;
+  const productId = page.productId;
+  const productLabel = page.productName;
+  const productPeriod = page.productPeriod;
+
+  if (
+    typeof productId !== "string" ||
+    !DEPOSIT_PRODUCT_ID_PATTERN.test(productId) ||
+    typeof productLabel !== "string" ||
+    productLabel.trim() !== productLabel ||
+    productLabel.length === 0 ||
+    typeof productPeriod !== "string"
+  ) {
+    return null;
+  }
+
+  const periodMatch = productPeriod.match(
+    DEPOSIT_PRODUCT_PERIOD_PATTERN,
+  );
+  const periodMonths = Number(periodMatch?.[1]);
+  if (
+    !periodMatch ||
+    !Number.isSafeInteger(periodMonths) ||
+    periodMonths <= 0 ||
+    periodMonths > MAX_DEPOSIT_PERIOD_MONTHS
+  ) {
+    return null;
+  }
+
+  const pathname = canonicalDetailPath(page.url);
+  if (
+    pathname !==
+    `/deposit/products/${encodeURIComponent(productId)}`
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    productId,
+    productLabel,
+    periodMonths,
+    sourceSnapshotId: request.domSnapshot.snapshotId,
+  });
+}
+
+type RequestedDepositPeriod =
+  | { kind: "UNSPECIFIED" }
+  | { kind: "VALID"; months: number }
+  | { kind: "INVALID" };
+
+function durationInMonths(
+  value: number,
+  unit: string,
+): number | null {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    return null;
+  }
+
+  const months = unit === "MONTH"
+    ? value
+    : unit === "YEAR"
+      ? value * 12
+      : null;
+
+  return months !== null &&
+    Number.isSafeInteger(months) &&
+    months <= MAX_DEPOSIT_PERIOD_MONTHS
+    ? months
+    : null;
+}
+
+function requestedDepositPeriod(
+  request: AiActionRequest,
+): RequestedDepositPeriod {
+  const rawPeriods = Array.from(
+    request.userGoal.rawMessage.matchAll(
+      REQUEST_PERIOD_PATTERN,
+    ),
+    (match) => {
+      const value = Number(match[1]);
+      const unit = match[2] === "년"
+        ? "YEAR"
+        : "MONTH";
+      return durationInMonths(value, unit);
+    },
+  );
+
+  if (rawPeriods.some((period) => period === null)) {
+    return { kind: "INVALID" };
+  }
+
+  const distinctRawPeriods = new Set(rawPeriods);
+  if (distinctRawPeriods.size > 1) {
+    return { kind: "INVALID" };
+  }
+
+  const duration = request.userGoal.duration;
+  if (!duration) {
+    return rawPeriods.length === 0
+      ? { kind: "UNSPECIFIED" }
+      : { kind: "INVALID" };
+  }
+
+  const months = durationInMonths(
+    duration.value,
+    duration.unit,
+  );
+  if (
+    months === null ||
+    (
+      distinctRawPeriods.size === 1 &&
+      !distinctRawPeriods.has(months)
+    )
+  ) {
+    return { kind: "INVALID" };
+  }
+
+  return { kind: "VALID", months };
 }
 
 function isVisible(
@@ -683,6 +839,54 @@ function enforceAmountEntry(
   };
 }
 
+function enforceProductDetail(
+  response: StructuredAIResponse,
+  request: AiActionRequest,
+): StructuredAIResponse {
+  const product = readSelectedDepositProductContext(
+    request,
+  );
+  const requestedPeriod = requestedDepositPeriod(
+    request,
+  );
+
+  if (
+    !product ||
+    requestedPeriod.kind === "INVALID"
+  ) {
+    return createNoneResponse(
+      response,
+      DEPOSIT_GUIDANCE.productVerification,
+    );
+  }
+
+  if (
+    requestedPeriod.kind === "VALID" &&
+    requestedPeriod.months !== product.periodMonths
+  ) {
+    return createNoneResponse(
+      response,
+      DEPOSIT_GUIDANCE.periodMismatch,
+    );
+  }
+
+  const target = findDemoButton(
+    request,
+    DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+    true,
+  );
+  return target
+    ? createNavigationResponse(
+        response,
+        target,
+        DEPOSIT_GUIDANCE.productDetail,
+      )
+    : createNoneResponse(
+        response,
+        DEPOSIT_GUIDANCE.productDetail,
+      );
+}
+
 function enforceSecureInput(
   response: StructuredAIResponse,
 ): StructuredAIResponse {
@@ -735,23 +939,8 @@ export function enforceDepositScenarioPolicy(
   switch (stage) {
     case "PRODUCT_LIST":
       return enforceProductList(response, request);
-    case "PRODUCT_DETAIL": {
-      const target = findDemoButton(
-        request,
-        DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
-        true,
-      );
-      return target
-        ? createNavigationResponse(
-            response,
-            target,
-            DEPOSIT_GUIDANCE.productDetail,
-          )
-        : createNoneResponse(
-            response,
-            DEPOSIT_GUIDANCE.productDetail,
-          );
-    }
+    case "PRODUCT_DETAIL":
+      return enforceProductDetail(response, request);
     case "AMOUNT_ENTRY":
       return enforceAmountEntry(response, request);
     case "TERMS":

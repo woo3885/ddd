@@ -15,6 +15,9 @@ import {
   adaptBackendRequestToAiActionRequest,
 } from "../api/aiDecisionRequest.adapter.js";
 import {
+  validateBackendAiDecisionRequest,
+} from "../api/aiDecisionRequest.validator.js";
+import {
   adaptStructuredResponseToBackend,
 } from "../api/aiDecisionResponse.adapter.js";
 import type {
@@ -29,6 +32,7 @@ import {
   DEPOSIT_GUIDANCE,
   enforceDepositScenarioPolicy,
   finalizeDepositScenarioGuidance,
+  readSelectedDepositProductContext,
 } from "../deposit/depositScenario.policy.js";
 import {
   SAFE_INTERNAL_MESSAGE,
@@ -87,6 +91,9 @@ function snapshot(
   snapshotId: string,
   elements: BackendSanitizedDomElement[],
   url = "https://demo.test/deposit/flow",
+  pageOverrides: Partial<
+    BackendSanitizedDomSnapshot["page"]
+  > = {},
 ): BackendSanitizedDomSnapshot {
   return {
     schemaVersion: "1.0",
@@ -94,6 +101,10 @@ function snapshot(
     page: {
       url,
       title: "정기예금 가입",
+      productId: null,
+      productName: null,
+      productPeriod: null,
+      ...pageOverrides,
     },
     elements,
   };
@@ -234,6 +245,289 @@ test("existing UserGoal parser preserves the requested 12 months and 5,000,000 w
     value: 12,
     unit: "MONTH",
   });
+});
+
+test("Backend detail metadata is authoritative and deposit period is optional", () => {
+  const products = [
+    {
+      productId: "deposit-12m",
+      productName: "12개월 정기예금",
+      productPeriod: "12개월",
+    },
+    {
+      productId: "deposit-preferred",
+      productName: "우대금리 정기예금",
+      productPeriod: "12개월",
+    },
+  ] as const;
+
+  for (const product of products) {
+    const detailSnapshot = snapshot(
+      `snap-${product.productId}`,
+      [element(
+        `el-${product.productId}-next`,
+        DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+      )],
+      `https://demo.test/deposit/products/${product.productId}`,
+      product,
+    );
+    const adapted = adaptBackendRequestToAiActionRequest({
+      userRequest:
+        "100만 원으로 정기예금 가입 절차를 시작해 주세요.",
+      snapshot: detailSnapshot,
+    });
+
+    assert.equal(adapted.userGoal.amount, 1_000_000);
+    assert.equal(adapted.userGoal.duration, undefined);
+    assert.deepEqual(
+      readSelectedDepositProductContext(adapted),
+      {
+        productId: product.productId,
+        productLabel: product.productName,
+        periodMonths: 12,
+        sourceSnapshotId: detailSnapshot.snapshotId,
+      },
+    );
+  }
+
+  const missingNewFields = snapshot("snap-old-page", []);
+  const oldPage = {
+    url: missingNewFields.page.url,
+    title: missingNewFields.page.title,
+  };
+  assert.throws(() =>
+    validateBackendAiDecisionRequest({
+      userRequest: "100만 원 정기예금",
+      snapshot: {
+        ...missingNewFields,
+        page: oldPage,
+      },
+    }),
+  );
+});
+
+test("amount-only detail proceeds for both Demo products and matching period stays separate", () => {
+  const products = [
+    ["deposit-12m", "12개월 정기예금"],
+    ["deposit-preferred", "우대금리 정기예금"],
+  ] as const;
+
+  for (const [productId, productName] of products) {
+    const detailSnapshot = snapshot(
+      `snap-${productId}-detail`,
+      [element(
+        `el-${productId}-amount-start`,
+        DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+      )],
+      `https://demo.test/deposit/products/${productId}`,
+      {
+        productId,
+        productName,
+        productPeriod: "12개월",
+      },
+    );
+    const amountOnly = request(detailSnapshot, {
+      userGoal: {
+        rawMessage:
+          "100만 원으로 정기예금 가입 절차를 시작해 주세요.",
+        intent: "DEPOSIT",
+        amount: 1_000_000,
+        conditions: [],
+      },
+    });
+    const safe = applyPolicies(response(), amountOnly);
+
+    assert.equal(safe.action, "CLICK");
+    assert.equal(
+      safe.targetElementId,
+      `el-${productId}-amount-start`,
+    );
+    assert.equal(amountOnly.userGoal.duration, undefined);
+  }
+
+  const matching = request(snapshot(
+    "snap-period-match",
+    [element(
+      "el-period-match-next",
+      DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+    )],
+    "https://demo.test/deposit/products/deposit-12m",
+    {
+      productId: "deposit-12m",
+      productName: "12개월 정기예금",
+      productPeriod: "12개월",
+    },
+  ));
+  const matched = applyPolicies(response(), matching);
+  assert.equal(matched.action, "CLICK");
+  assert.deepEqual(matching.userGoal.duration, {
+    value: 12,
+    unit: "MONTH",
+  });
+});
+
+test("Production prompt separates an unspecified request period from Backend product metadata", async () => {
+  const currentRequest = request(snapshot(
+    "snap-period-prompt",
+    [element(
+      "el-period-prompt-next",
+      DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+    )],
+    "https://demo.test/deposit/products/deposit-preferred",
+    {
+      productId: "deposit-preferred",
+      productName: "우대금리 정기예금",
+      productPeriod: "12개월",
+    },
+  ), {
+    userGoal: {
+      rawMessage:
+        "100만 원으로 정기예금 가입 절차를 시작해 주세요.",
+      intent: "DEPOSIT",
+      amount: 1_000_000,
+      conditions: [],
+    },
+  });
+  let prompt = "";
+
+  const safe = await generateStructuredAction(
+    currentRequest,
+    async (input) => {
+      prompt = input.prompt;
+      return {
+        model: "offline-test",
+        source: "GEMINI",
+        text: JSON.stringify(response({
+          action: "CLICK",
+          targetElementId: "el-period-prompt-next",
+        })),
+      };
+    },
+  );
+
+  assert.equal(safe.action, "CLICK");
+  assert.match(prompt, /요청 기간: 없음/);
+  assert.match(prompt, /선택 상품 ID: deposit-preferred/);
+  assert.match(prompt, /선택 상품명: 우대금리 정기예금/);
+  assert.match(prompt, /선택 상품 실제 기간: 12개월/);
+  assert.match(prompt, /기간 기본값을 만들지 마십시오/);
+  assert.match(prompt, /다른 상품을 자동 선택하지 마십시오/);
+});
+
+test("period mismatch and invalid product context fail closed without financial action", () => {
+  const detail = snapshot(
+    "snap-period-conflict",
+    [element(
+      "el-conflict-next",
+      DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+    )],
+    "https://demo.test/deposit/products/deposit-12m",
+    {
+      productId: "deposit-12m",
+      productName: "12개월 정기예금",
+      productPeriod: "12개월",
+    },
+  );
+  const mismatchRequest = request(detail, {
+    userGoal: {
+      rawMessage:
+        "6개월 정기예금에 100만 원 가입하고 싶어요.",
+      intent: "DEPOSIT",
+      amount: 1_000_000,
+      duration: { value: 6, unit: "MONTH" },
+      conditions: [],
+    },
+  });
+  const mismatch = applyPolicies(
+    response({
+      action: "CLICK",
+      targetElementId: "el-conflict-next",
+    }),
+    mismatchRequest,
+  );
+  const mismatchWire = adaptStructuredResponseToBackend(
+    mismatch,
+    detail.snapshotId,
+  );
+
+  assert.deepEqual(mismatchWire, {
+    actionType: "NONE",
+    elementId: null,
+    value: null,
+    scrollX: null,
+    scrollY: null,
+    waitMillis: null,
+    status: "AI_EXECUTING",
+    message: DEPOSIT_GUIDANCE.periodMismatch,
+    requiresUserAction: true,
+    executionBlocked: true,
+    decisionType: null,
+    sourceSnapshotId: null,
+    options: [],
+    terms: [],
+  });
+  assert.deepEqual(mismatchRequest.userGoal.duration, {
+    value: 6,
+    unit: "MONTH",
+  });
+
+  const invalidContexts = [
+    { productId: null, productName: null, productPeriod: null },
+    {
+      productId: "deposit-12m",
+      productName: "12개월 정기예금",
+      productPeriod: "12개월 또는 6개월",
+    },
+    {
+      productId: "deposit-12m",
+      productName: "12개월 정기예금",
+      productPeriod: "0개월",
+    },
+    {
+      productId: "deposit-12m",
+      productName: "12개월 정기예금",
+      productPeriod: "1000개월",
+    },
+    {
+      productId: "deposit-preferred",
+      productName: "우대금리 정기예금",
+      productPeriod: "12개월",
+    },
+  ] as const;
+
+  for (const [index, context] of invalidContexts.entries()) {
+    const invalid = request(snapshot(
+      `snap-invalid-product-${index}`,
+      [element(
+        `el-invalid-product-${index}`,
+        DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+      )],
+      "https://demo.test/deposit/products/deposit-12m",
+      context,
+    ));
+    const blocked = applyPolicies(response(), invalid);
+    assert.equal(blocked.action, "NONE");
+    assert.equal(blocked.targetElementId, null);
+    assert.equal(
+      blocked.message,
+      DEPOSIT_GUIDANCE.productVerification,
+    );
+  }
+
+  const conflictingRequest = request(detail, {
+    userGoal: {
+      rawMessage:
+        "6개월 또는 12개월 정기예금에 100만 원 가입하고 싶어요.",
+      intent: "DEPOSIT",
+      amount: 1_000_000,
+      duration: { value: 6, unit: "MONTH" },
+      conditions: [],
+    },
+  });
+  assert.equal(
+    applyPolicies(response(), conflictingRequest).action,
+    "NONE",
+  );
 });
 
 test("stage classifier uses semantic DOM and never classifies from URL alone", () => {
@@ -379,21 +673,17 @@ test("verified product resume preserves context and clicks only a new NORMAL nav
   );
 });
 
-test("product detail allows only a semantic NORMAL navigation action", () => {
+test("product detail uses Backend semantic period and only a NORMAL navigation action", () => {
   const currentRequest = request(snapshot("snap-detail", [
-    element("el-rate", "금리 연 3.2%", {
-      tag: "div",
-      role: null,
-    }),
-    element("el-period", "가입 기간 12개월", {
-      tag: "div",
-      role: null,
-    }),
     element(
       "el-join",
       DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
     ),
-  ]), {
+  ], "https://demo.test/deposit/products/deposit-12m", {
+    productId: "deposit-12m",
+    productName: "12개월 정기예금",
+    productPeriod: "12개월",
+  }), {
     userDecisionContext: {
       decisionId: "dec-product",
       decisionType: "PRODUCT_SELECTION",
@@ -425,7 +715,11 @@ test("product detail allows only a semantic NORMAL navigation action", () => {
       DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
       { enabled: false },
     ),
-  ]));
+  ], "https://demo.test/deposit/products/deposit-12m", {
+    productId: "deposit-12m",
+    productName: "12개월 정기예금",
+    productPeriod: "12개월",
+  }));
   const disabled = applyPolicies(
     response({
       action: "CLICK",
@@ -895,11 +1189,15 @@ function demoSnapshot(
   token: string,
   path: string,
   elements: BackendSanitizedDomElement[],
+  pageOverrides: Partial<
+    BackendSanitizedDomSnapshot["page"]
+  > = {},
 ): BackendSanitizedDomSnapshot {
   return snapshot(
     `snap-${token}`,
     [...demoNavigation(token), ...elements],
     `http://127.0.0.1:5190${path}`,
+    pageOverrides,
   );
 }
 
@@ -1018,7 +1316,7 @@ test("POST /api/ai/action follows the real Demo sanitized DOM through secure pau
         },
         body: JSON.stringify({
           userRequest:
-            "12개월 정기예금에 500만원 가입하고 싶어요.",
+            "100만 원으로 정기예금 가입 절차를 시작해 주세요.",
           snapshot: currentSnapshot,
           ...(userDecision
             ? { userDecision }
@@ -1107,6 +1405,11 @@ test("POST /api/ai/action follows the real Demo sanitized DOM through secure pau
           DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
         ),
       ],
+      {
+        productId: "deposit-12m",
+        productName: "12개월 정기예금",
+        productPeriod: "12개월",
+      },
     ));
     assert.equal(detail.actionType, "CLICK");
     assert.equal(detail.elementId, "el-detail01-005");
@@ -1134,7 +1437,7 @@ test("POST /api/ai/action follows the real Demo sanitized DOM through secure pau
       ],
     ));
     assert.equal(amount.actionType, "TYPE");
-    assert.equal(amount.value, "5000000");
+    assert.equal(amount.value, "1000000");
     assert.equal(amount.elementId, "el-amount01-004");
 
     const amountConfirm = await post(demoSnapshot(
@@ -1291,6 +1594,236 @@ test("POST /api/ai/action follows the real Demo sanitized DOM through secure pau
     assert.equal(secure.value, null);
     assert.deepEqual(secure.options, []);
     assert.deepEqual(secure.terms, []);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
+test("POST /api/ai/action applies the selected-product period contract for the preferred product", async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    "/api/ai",
+    createAiActionRouter((input) =>
+      generateStructuredAction(
+        input,
+        async () => {
+          const targetBySnapshot: Record<string, string | null> = {
+            "snap-prefprod1": null,
+            "snap-prefprod2": "el-prefprod1-005",
+            "snap-prefdetail": "el-prefdetail-005",
+            "snap-prefamount1": "el-prefamount1-004",
+            "snap-prefamount2": "el-prefamount2-004",
+            "snap-prefamount3": "el-prefamount3-004",
+            "snap-prefmatch": "el-prefmatch-005",
+            "snap-prefconflict": "el-prefconflict-005",
+          };
+          assert.ok(
+            input.domSnapshot.snapshotId in targetBySnapshot,
+          );
+          const target = targetBySnapshot[
+            input.domSnapshot.snapshotId
+          ];
+          const candidate = target?.endsWith("-004")
+            ? response({
+                action: "TYPE",
+                targetElementId: target,
+                inputValue: "1",
+              })
+            : response({
+                action: target ? "CLICK" : "NONE",
+                targetElementId: target,
+              });
+          return {
+            model: "offline-test",
+            source: "GEMINI" as const,
+            text: JSON.stringify(candidate),
+          };
+        },
+      )),
+  );
+
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  try {
+    const address = server.address() as AddressInfo;
+    const endpoint =
+      `http://127.0.0.1:${address.port}/api/ai/action`;
+    const post = async (
+      userRequest: string,
+      currentSnapshot: BackendSanitizedDomSnapshot,
+      userDecision?: BackendAiUserDecisionContext,
+    ) => {
+      const result = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          userRequest,
+          snapshot: currentSnapshot,
+          ...(userDecision ? { userDecision } : {}),
+        }),
+      });
+      assert.equal(result.status, 200);
+      return result.json() as Promise<Record<string, unknown>>;
+    };
+    const amountOnly =
+      "100만 원으로 정기예금 가입 절차를 시작해 주세요.";
+
+    const products = await post(amountOnly, demoSnapshot(
+      "prefprod1",
+      "/deposit/products",
+      [
+        productChoice(
+          demoElementId("prefprod1", 4),
+          "12개월 정기예금",
+        ),
+        productChoice(
+          demoElementId("prefprod1", 5),
+          "우대금리 정기예금",
+        ),
+        element(
+          demoElementId("prefprod1", 6),
+          "상품 선택 후 다음",
+          { enabled: false },
+        ),
+      ],
+    ));
+    assert.equal(products.actionType, "WAIT_FOR_USER");
+    assert.equal(products.decisionType, "PRODUCT_SELECTION");
+
+    const productNext = await post(amountOnly, demoSnapshot(
+      "prefprod2",
+      "/deposit/products",
+      [
+        productChoice(
+          demoElementId("prefprod2", 4),
+          "12개월 정기예금",
+        ),
+        productChoice(
+          demoElementId("prefprod2", 5),
+          "우대금리 정기예금",
+        ),
+        element(
+          demoElementId("prefprod2", 6),
+          DEPOSIT_DEMO_BUTTON_LABELS.productNext,
+        ),
+      ],
+    ), {
+      decisionId: "dec-preferred-product",
+      decisionType: "PRODUCT_SELECTION",
+      selectedOptionIds: ["el-prefprod1-005"],
+      sourceSnapshotId: "snap-prefprod1",
+    });
+    assert.equal(productNext.actionType, "CLICK");
+    assert.equal(productNext.elementId, "el-prefprod2-006");
+    assert.notEqual(productNext.elementId, "el-prefprod1-005");
+
+    const detailElements = (token: string) => [
+      element(demoElementId(token, 4), "예금 상품 목록으로 돌아가기"),
+      element(
+        demoElementId(token, 5),
+        DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+      ),
+    ];
+    const preferredPage = {
+      productId: "deposit-preferred",
+      productName: "우대금리 정기예금",
+      productPeriod: "12개월",
+    } as const;
+
+    const detail = await post(amountOnly, demoSnapshot(
+      "prefdetail",
+      "/deposit/products/deposit-preferred",
+      detailElements("prefdetail"),
+      preferredPage,
+    ));
+    assert.equal(detail.actionType, "CLICK");
+    assert.equal(detail.elementId, "el-prefdetail-005");
+
+    const amountElements = (
+      token: string,
+      confirmEnabled: boolean,
+      termsEnabled: boolean,
+    ) => [
+      element(demoElementId(token, 4), "가입 금액", {
+        tag: "input",
+        role: "textbox",
+        inputType: "text",
+      }),
+      element(demoElementId(token, 5), "상품 상세로 돌아가기"),
+      element(
+        demoElementId(token, 6),
+        DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+        { enabled: confirmEnabled },
+      ),
+      element(
+        demoElementId(token, 7),
+        DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+        { enabled: termsEnabled },
+      ),
+    ];
+
+    const amount = await post(amountOnly, demoSnapshot(
+      "prefamount1",
+      "/deposit/conditions/deposit-preferred",
+      amountElements("prefamount1", false, false),
+    ));
+    assert.equal(amount.actionType, "TYPE");
+    assert.equal(amount.elementId, "el-prefamount1-004");
+    assert.equal(amount.value, "1000000");
+
+    const amountConfirm = await post(amountOnly, demoSnapshot(
+      "prefamount2",
+      "/deposit/conditions/deposit-preferred",
+      amountElements("prefamount2", true, false),
+    ));
+    assert.equal(amountConfirm.actionType, "CLICK");
+    assert.equal(amountConfirm.elementId, "el-prefamount2-006");
+    assert.equal(amountConfirm.value, null);
+
+    const termsStart = await post(amountOnly, demoSnapshot(
+      "prefamount3",
+      "/deposit/conditions/deposit-preferred",
+      amountElements("prefamount3", true, true),
+    ));
+    assert.equal(termsStart.actionType, "CLICK");
+    assert.equal(termsStart.elementId, "el-prefamount3-007");
+    assert.equal(termsStart.value, null);
+
+    const matched = await post(
+      "12개월 정기예금에 100만 원 가입하고 싶어요.",
+      demoSnapshot(
+        "prefmatch",
+        "/deposit/products/deposit-preferred",
+        detailElements("prefmatch"),
+        preferredPage,
+      ),
+    );
+    assert.equal(matched.actionType, "CLICK");
+    assert.equal(matched.elementId, "el-prefmatch-005");
+
+    const conflict = await post(
+      "6개월 정기예금에 100만 원 가입하고 싶어요.",
+      demoSnapshot(
+        "prefconflict",
+        "/deposit/products/deposit-preferred",
+        detailElements("prefconflict"),
+        preferredPage,
+      ),
+    );
+    assert.deepEqual(Object.keys(conflict), RESPONSE_FIELDS);
+    assert.equal(conflict.actionType, "NONE");
+    assert.equal(conflict.status, "AI_EXECUTING");
+    assert.equal(conflict.message, DEPOSIT_GUIDANCE.periodMismatch);
+    assert.equal(conflict.requiresUserAction, true);
+    assert.equal(conflict.executionBlocked, true);
+    assert.equal(conflict.elementId, null);
+    assert.equal(conflict.value, null);
+    assert.equal(conflict.decisionType, null);
+    assert.deepEqual(conflict.options, []);
+    assert.deepEqual(conflict.terms, []);
   } finally {
     server.close();
     await once(server, "close");

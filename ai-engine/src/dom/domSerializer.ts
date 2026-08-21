@@ -47,6 +47,9 @@ export function serializeDomModelInput(
   return [
     `현재 페이지: ${input.page.title}`,
     `URL: ${input.page.url}`,
+    `선택 상품 ID: ${input.page.productId ?? "없음"}`,
+    `선택 상품명: ${input.page.productName ?? "없음"}`,
+    `선택 상품 실제 기간: ${input.page.productPeriod ?? "없음"}`,
     "",
     "현재 화면 요소:",
     elementLines,

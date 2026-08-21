@@ -118,6 +118,9 @@ export function adaptBackendDomToModelInput(
     page: {
       url: snapshot.page.url,
       title: snapshot.page.title,
+      productId: snapshot.page.productId,
+      productName: snapshot.page.productName,
+      productPeriod: snapshot.page.productPeriod,
     },
 
     elements: modelElements,

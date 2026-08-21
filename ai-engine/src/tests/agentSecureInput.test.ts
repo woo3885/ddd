@@ -24,6 +24,9 @@ function createSnapshot(
     page: {
       url,
       title,
+      productId: null,
+      productName: null,
+      productPeriod: null,
     },
 
     elements: [],

@@ -54,6 +54,9 @@ export interface BackendSanitizedDomSnapshot {
   page: {
     url: string;
     title: string;
+    productId: string | null;
+    productName: string | null;
+    productPeriod: string | null;
   };
 
   elements: BackendSanitizedDomElement[];
