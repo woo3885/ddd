@@ -10,6 +10,7 @@ export interface DashboardTaskOption {
   id: DashboardTaskType;
   name: string;
   description: string;
+  userRequest: string;
 }
 
 export interface DashboardSiteOption {
@@ -34,11 +35,13 @@ export const DASHBOARD_TASKS: DashboardTaskOption[] = [
   {
     id: 'OPEN_DEPOSIT',
     name: '예금 가입',
-    description: '예금 상품을 확인하고 가입 절차를 진행합니다.'
+    description: '예금 상품을 확인하고 가입 절차를 진행합니다.',
+    userRequest: '100만 원으로 정기예금 가입 절차를 시작해 주세요.'
   },
   {
     id: 'TRANSFER_MONEY',
     name: '계좌이체',
-    description: '출금 계좌와 수취인, 금액을 확인하며 이체 절차를 진행합니다.'
+    description: '출금 계좌와 수취인, 금액을 확인하며 이체 절차를 진행합니다.',
+    userRequest: '계좌이체 절차를 시작해 주세요.'
   }
 ];

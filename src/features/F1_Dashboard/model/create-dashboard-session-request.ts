@@ -1,4 +1,7 @@
-import type { DashboardTaskType } from './dashboard-options';
+import {
+  DASHBOARD_TASKS,
+  type DashboardTaskType
+} from './dashboard-options';
 import type {
   DashboardSessionStartRequest,
   DashboardStartSelection
@@ -12,11 +15,6 @@ const taskStartPaths: Record<
 > = {
   OPEN_DEPOSIT: '/deposit/products',
   TRANSFER_MONEY: '/transfer/accounts'
-};
-
-const taskUserRequests: Record<DashboardTaskType, string> = {
-  OPEN_DEPOSIT: '예금 가입 절차를 시작해 주세요.',
-  TRANSFER_MONEY: '계좌이체 절차를 시작해 주세요.'
 };
 
 function normalizeDemoBankBaseUrl(configuredBaseUrl?: string): string {
@@ -60,12 +58,19 @@ export function createDashboardSessionRequest(
   const baseUrl = normalizeDemoBankBaseUrl(
     import.meta.env.VITE_DEMO_BANK_BASE_URL
   );
+  const selectedTask = DASHBOARD_TASKS.find(
+    (task) => task.id === selection.taskType
+  );
+
+  if (!selectedTask) {
+    throw new Error('지원하지 않는 금융 업무입니다.');
+  }
 
   return {
     siteId: selection.siteId,
     taskType: selection.taskType,
     initialPath: taskStartPaths[selection.taskType],
     initialUrl: `${baseUrl}${taskStartPaths[selection.taskType]}`,
-    userRequest: taskUserRequests[selection.taskType]
+    userRequest: selectedTask.userRequest
   };
 }

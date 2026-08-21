@@ -38,6 +38,10 @@ describe('F1_Dashboard', () => {
     expect(screen.getByText('예금 가입')).toBeInTheDocument();
     expect(screen.getByText('계좌이체')).toBeInTheDocument();
     expect(
+      screen.getByText('100만 원으로 정기예금 가입 절차를 시작해 주세요.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/12개월/)).not.toBeInTheDocument();
+    expect(
       screen.getByRole('group', {
         name: '1. 이용할 사이트 선택'
       })
@@ -188,6 +192,9 @@ describe('F1_Dashboard', () => {
       siteId: 'demo-bank',
       taskType: 'OPEN_DEPOSIT'
     });
+    expect(
+      screen.getByText('100만 원으로 정기예금 가입 절차를 시작해 주세요.')
+    ).toBeInTheDocument();
     expect(await screen.findByRole('status')).toHaveTextContent(
       '선택한 업무를 시작할 준비가 완료되었습니다.'
     );
