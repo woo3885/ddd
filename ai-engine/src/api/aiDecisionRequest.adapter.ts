@@ -51,6 +51,14 @@ export function adaptBackendRequestToAiActionRequest(
       recipient:
         userGoal.recipient ?? undefined,
 
+      duration:
+        userGoal.duration
+          ? {
+              value: userGoal.duration.value,
+              unit: userGoal.duration.unit,
+            }
+          : undefined,
+
       conditions:
         userGoal.conditions,
     },

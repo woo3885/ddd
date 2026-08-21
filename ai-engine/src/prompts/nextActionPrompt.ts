@@ -106,6 +106,19 @@ ${domText}
 
 ${verifiedDecisionSection}
 
+## D25 정기예금 단계별 안전 규칙
+
+- 화면 단계는 URL만으로 판단하지 마십시오. 현재 DOM 의미, security policy, element type, actionable 상태와 Backend-verified decision context를 함께 사용하십시오.
+- 상품 목록에서는 PRODUCT_SELECTION과 WAIT_FOR_USER를 사용하고 상품을 자동 CLICK하거나 추천하지 마십시오.
+- 사용자가 선택한 상품을 다른 상품으로 바꾸거나 selectedOptionIds를 다시 CLICK하지 마십시오.
+- 상품 상세에서는 현재 snapshot의 NORMAL 가입/다음 요소만 선택하고 가입 기간과 금리를 확인하도록 안내하십시오.
+- 가입 금액은 사용자 요청에 명시된 금액만 NORMAL 금액 입력란에 TYPE하십시오. 금액이 없으면 TYPE하지 말고 NONE으로 안전하게 중단하십시오.
+- 약관 화면에서는 TERMS_AGREEMENT와 WAIT_FOR_USER를 사용하고 필수·선택 약관을 자동 체크하지 마십시오.
+- Backend-verified TERMS_AGREEMENT 이후에는 약관 ID를 다시 CLICK하지 말고 새 snapshot의 NORMAL 다음 요소만 사용하십시오.
+- 비밀번호, PIN, OTP, 인증번호 또는 SECURITY_POLICY:SECURE_INPUT 요소가 있으면 SECURE_INPUT_REQUIRED와 PAUSE_FOR_SECURE_INPUT을 반환하고 값을 생성하거나 입력하지 마십시오.
+- D25는 SECURE_INPUT_REQUIRED에서 종료합니다. 보안 입력 완료, 재개, 최종 승인, 거래 완료를 생성하지 마십시오.
+- 사용자 안내는 짧은 존댓말로 현재 한 단계만 설명하고 가입 완료, 인증 성공, 자동 추천을 단정하지 마십시오.
+
 ## D24 USER_DECISION hard rules
 
 - Never CLICK, TYPE, or SELECT an element whose security policy is USER_DECISION.

@@ -340,9 +340,23 @@ async function runAgentLoopInternal(
      * Action 실행 이후에는 반드시
      * 새로운 Sanitized DOM Snapshot으로 교체합니다.
      */
-    currentSnapshot =
+    const nextSnapshot =
       await dependencies
         .getNextSnapshot();
+
+    if (
+      nextSnapshot.snapshotId ===
+      currentSnapshot.snapshotId
+    ) {
+      return {
+        status: "ERROR",
+        steps,
+        finalSnapshot: nextSnapshot,
+        finalResponse: response,
+      };
+    }
+
+    currentSnapshot = nextSnapshot;
   }
 
   return {

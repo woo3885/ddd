@@ -1047,6 +1047,132 @@ Frontend:
 
 ---
 
+# 24. D25 정기예금 시나리오 판단 및 안전 안내
+
+## 범위와 완료 경계
+
+D25 Production 경로는 다음 시나리오를 지원한다.
+
+```text
+상품 목록(PRODUCT_SELECTION)
+→ 검증된 상품 선택 결과로 stateless 재호출
+→ 상품 상세의 안전한 NORMAL navigation
+→ 사용자 요청에 명시된 가입 금액 TYPE
+→ 약관(TERMS_AGREEMENT)
+→ 검증된 약관 선택 결과로 stateless 재호출
+→ 새 snapshot의 안전한 NORMAL navigation
+→ 비밀번호 화면(SECURE_INPUT_REQUIRED)
+→ Browser Action 없이 중단
+```
+
+D25의 종료점은 `SECURE_INPUT_REQUIRED`다. 보안 입력 완료와 복귀는 D26,
+최종 확인과 거래 완료는 D27 범위이며 이번 Production 흐름에서 생성하지 않는다.
+
+## 화면 단계 판정
+
+`DepositScenarioStage`는 `PRODUCT_LIST`, `PRODUCT_DETAIL`, `AMOUNT_ENTRY`,
+`TERMS`, `SECURE_INPUT`, `UNKNOWN`으로 구성한다. 판정은 현재 Sanitized DOM의
+label, `securityPolicy`, role/tag/inputType, visible/enabled 상태와 request-scoped
+`userDecision` context를 우선 사용한다. URL은 상품 상세 판정의 보조 신호일 뿐이며,
+URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 다른 신호보다 우선한다.
+
+## 단계별 정책
+
+- 상품 목록: `PRODUCT_SELECTION`, `WAIT_FOR_USER`, `USER_DECISION_REQUIRED`로
+  자동 실행을 차단한다. 현재 snapshot의 visible/enabled `USER_DECISION` 요소만
+  options 후보로 만들고, D24 정책이 membership과 snapshot 기반 label을 다시 검증한다.
+- 상품 선택 재개: Backend가 검증한 네 필드 context와 selected ID 순서를 그대로
+  사용한다. 선택 요소를 재CLICK하거나 동일 결정을 재발행하지 않고 새 snapshot의
+  NORMAL navigation만 찾는다.
+- 상품 상세: 현재 snapshot에 실제 존재하는 NORMAL button/link 중 가입·다음 의미의
+  target이 하나이거나 모델 target과 일치할 때만 `CLICK`한다.
+- 가입 금액: 기존 UserGoal parser가 원 요청에서 읽은 양의 safe integer만 사용한다.
+  NORMAL 금액 입력란에만 `TYPE`하며, 금액이 없으면 `ADDITIONAL_INFORMATION` wire를
+  임의 생성하지 않고 안내 message를 가진 안전한 `NONE`을 반환한다. 이 응답은
+  `AI_EXECUTING`, `requiresUserAction=true`, `executionBlocked=true`, null Action payload와
+  null decision metadata, 빈 `options`/`terms`를 가진 기존 14필드 계약이다.
+- 약관: `TERMS_AGREEMENT`, `WAIT_FOR_USER`, `USER_DECISION_REQUIRED`로 자동 동의를
+  차단한다. `terms` 순서와 snapshot의 실제 `checked`를 보존하며 `required`는 현재
+  label의 필수 marker에서 D24 정책이 canonicalize한다.
+- 약관 재개: selected IDs를 다시 실행하거나 선택 약관을 추가하지 않는다. Backend가
+  적용한 새 snapshot에서 활성화된 NORMAL 다음 target만 실행한다.
+- 보안 입력: password/PIN/OTP/인증번호 또는 `SECURE_INPUT` 요소를 감지하면
+  `PAUSE_FOR_SECURE_INPUT`, `SECURE_INPUT_REQUIRED`, `requiresUserAction=true`,
+  `executionBlocked=true`를 반환한다. Action payload와 decision metadata는 비우고
+  Agent Loop를 즉시 중단한다.
+
+모델이 D25 예금 요청에서 `FINAL_CONFIRMATION_REQUIRED`,
+`REQUEST_FINAL_CONFIRMATION` 또는 `confirmationId`를 생성해도 Product/Detail/Amount/Terms와
+semantic UNKNOWN 단계에서 D27 상태로 전달하지 않고 안전한 `NONE`으로 차단한다.
+secure 및 risk 보호는 이 경계보다 우선한다.
+
+## 금액 누락 Backend integration limitation
+
+기간(예: 12개월)은 있지만 가입 금액이 없는 요청에서 C가 반환하는 `NONE`은 현재
+Backend에서 자동으로 `ADDITIONAL_INFORMATION_REQUIRED`로 전환되지 않는다.
+`AiDecisionExecutionService`의 추가정보 분기는 조건 화면에서 기간 누락 또는 잘못된
+`TYPE` 금액을 검사하지만, 기간이 존재하고 응답이 `NONE`이면 일반 Action 실행 경로로
+진입한다. 이후 `BrowserActionExecutionService`의 `NO_ACTION`을
+`BrowserActionStatusEventMapper`가 `AI_EXECUTING`으로 매핑한다.
+
+따라서 이 경우에는 Backend consumer가 C의 blocked `NONE`을
+`ADDITIONAL_INFORMATION_REQUIRED`로 전환하는 별도 계약이 추가로 필요하다. 현재 C는
+새 status/decisionType이나 wire 필드를 임의로 추가하지 않으며, 이 항목은 D25 통합
+blocker/limitation으로 남는다.
+
+Production Action allowlist와 C → B 14필드 rich response는 D23/D24 계약을 그대로
+유지한다. `SELECT`, `SCROLL`, `WAIT`를 활성화하지 않으며 Production 전역
+`UserDecisionContextStore`와 `resumeAgentLoopAfterUserDecision()` 직접 호출을 사용하지
+않는다.
+
+## 고령층 안내와 TTS 안전 문장
+
+단계별 고정 의미는 다음과 같다.
+
+```text
+상품 선택: 가입할 예금 상품을 직접 선택해 주세요.
+상품 상세: 가입 기간과 금리를 확인해 주세요.
+가입 금액: 가입 금액 입력 내용을 확인하고 다음 단계로 이동합니다.
+금액 없음: 가입 금액을 확인하려면 추가 정보가 필요합니다.
+약관: 필수 약관과 선택 약관을 확인한 뒤 직접 선택해 주세요.
+보안 입력: 비밀번호는 금융 화면에 직접 입력해 주세요. 입력 내용은 AI가 확인하지 않습니다.
+```
+
+message sanitizer는 prompt/reasoning, 내부 endpoint, selector/elementId/raw DOM,
+HTML/URL, 금융 비밀, 완료·성공 선단정, 상품 추천과 자동 선택·동의 표현을 차단한다.
+C는 Frontend가 읽을 수 있는 안전한 문장만 제공하며 TTS 재생 자체는 수행하지 않는다.
+
+## Agent Loop과 장애 안전성
+
+Action 뒤 동일 `snapshotId`가 반환되면 재실행하지 않고 `ERROR`로 종료한다. 서로 다른
+snapshot이 계속 와도 기존 maxSteps 상한이 적용된다. 사용자 결정과 보안 입력에서는
+Browser Action을 실행하지 않으며 secure/final/risk 보호와 STOP/COMPLETED 정책도
+변경하지 않는다. Gemini 장애 시 금융 Action 없는 fallback을 사용하되, 현재 DOM이
+보안 입력 단계이면 모델 없이도 보안 pause로 fail closed한다.
+
+## Production route와 검증
+
+synthetic fixture로 실제 `POST /api/ai/action`의 request validation, stage/context 정책,
+Structured Output 처리, D24 option 검증, 14필드 adapter와 HTTP response까지 상품 선택,
+상세, 금액, 약관, 약관 재개, 보안 중단 순서로 검증한다. 실제 고객정보, 계좌번호,
+비밀번호, API key 또는 raw Gemini output은 fixture와 로그에 포함하지 않는다.
+
+2026-08-21 오프라인 검증 기준:
+
+```text
+npm.cmd run check                 PASS
+npm.cmd test                      63/63 PASS
+npm.cmd run test:d23               6/6 PASS
+npm.cmd run test:d24              31/31 PASS
+npm.cmd run test:d24:response      8/8 PASS
+npm.cmd run test:d25              16/16 PASS
+git diff --check                  PASS
+```
+
+`test:live`는 Gemini/API 의존 테스트이므로 기본 오프라인 회귀에서 제외한다.
+
+---
+
 ## 관련 문서
 
 ```text

@@ -622,13 +622,14 @@ test("user-decision resume cannot bypass secure, final, or risk protection", asy
 
 test("Agent Loop maxSteps prevents an unbounded repeated-action loop", async () => {
   let executeCount = 0;
-  const unchangedSnapshot = createSnapshot("snap-unchanged");
+  let snapshotSequence = 0;
+  const initialSnapshot = createSnapshot("snap-initial");
   const result = await runAgentLoop(
     {
       rawMessage: "계속",
       intent: "UNKNOWN",
     },
-    unchangedSnapshot,
+    initialSnapshot,
     {
       decide: async () =>
         createResponse({
@@ -637,7 +638,10 @@ test("Agent Loop maxSteps prevents an unbounded repeated-action loop", async () 
       execute: async () => {
         executeCount++;
       },
-      getNextSnapshot: async () => unchangedSnapshot,
+      getNextSnapshot: async () =>
+        createSnapshot(
+          `snap-next-${++snapshotSequence}`,
+        ),
       createRequestId: (stepNumber) =>
         `req-loop-${stepNumber}`,
     },
