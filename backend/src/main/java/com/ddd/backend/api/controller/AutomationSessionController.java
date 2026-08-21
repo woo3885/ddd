@@ -50,6 +50,9 @@ public class AutomationSessionController {
                         session
                 );
 
+        /* 응답 DTO를 SESSION_CREATED로 확정한 뒤 비동기 Agent loop를 예약한다. */
+        sessionService.startInitialAi(session.getSessionId());
+
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(

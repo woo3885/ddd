@@ -7,6 +7,7 @@ import com.ddd.backend.service.action.PublicBrowserActionSessionState;
 import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
+import com.ddd.backend.ai.AgentLoopService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +59,7 @@ public class SessionExpirationScheduler {
 
     private final AutomationStatusEventPublisher uiEventPublisher;
     private final UserDecisionSessionState userDecisionSessionState;
+    private final AgentLoopService agentLoopService;
 
     /*
      * 실제 Spring 실행용 생성자.
@@ -71,7 +73,8 @@ public class SessionExpirationScheduler {
             PublicBrowserActionSessionState
                     publicBrowserActionSessionState,
             AutomationStatusEventPublisher uiEventPublisher,
-            UserDecisionSessionState userDecisionSessionState
+            UserDecisionSessionState userDecisionSessionState,
+            AgentLoopService agentLoopService
     ) {
         this.sessionRepository =
                 sessionRepository;
@@ -90,6 +93,7 @@ public class SessionExpirationScheduler {
 
         this.uiEventPublisher = uiEventPublisher;
         this.userDecisionSessionState = userDecisionSessionState;
+        this.agentLoopService = agentLoopService;
     }
 
     public SessionExpirationScheduler(
@@ -102,7 +106,7 @@ public class SessionExpirationScheduler {
     ) {
         this(sessionRepository, browserSessionManager, browserFrameStore,
                 frameWebSocketHandler, publicBrowserActionSessionState,
-                uiEventPublisher, null);
+                uiEventPublisher, null, null);
     }
 
     /*
@@ -121,6 +125,7 @@ public class SessionExpirationScheduler {
                 frameWebSocketHandler,
                 null,
                 null,
+                null,
                 null
         );
     }
@@ -137,6 +142,7 @@ public class SessionExpirationScheduler {
                 sessionRepository,
                 browserSessionManager,
                 browserFrameStore,
+                null,
                 null,
                 null,
                 null,
@@ -340,6 +346,15 @@ public class SessionExpirationScheduler {
                     "만료 UI Event 상태 정리 실패. exceptionType={}",
                     exception.getClass().getSimpleName()
             );
+        }
+
+        try {
+            if (agentLoopService != null) {
+                agentLoopService.cancel(sessionId);
+            }
+        } catch (RuntimeException exception) {
+            log.warn("만료 Agent loop 정리 실패. exceptionType={}",
+                    exception.getClass().getSimpleName());
         }
 
         try {

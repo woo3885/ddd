@@ -15,6 +15,7 @@ import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.ddd.backend.ai.AiDecisionExecutionService;
+import com.ddd.backend.ai.AgentLoopService;
 import com.ddd.backend.automation.BrowserActionExecutionStatus;
 import com.ddd.backend.automation.dom.ElementLocatorResolver;
 import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
@@ -36,6 +37,7 @@ public class UserDecisionService {
     private final BrowserActionExecutionService actionExecutionService;
     private final AiDecisionExecutionService aiDecisionExecutionService;
     private final ElementLocatorResolver locatorResolver;
+    private final AgentLoopService agentLoopService;
 
     @Autowired
     public UserDecisionService(
@@ -47,7 +49,8 @@ public class UserDecisionService {
             BrowserFrameStore frameStore,
             BrowserActionExecutionService actionExecutionService,
             AiDecisionExecutionService aiDecisionExecutionService,
-            ElementLocatorResolver locatorResolver
+            ElementLocatorResolver locatorResolver,
+            AgentLoopService agentLoopService
     ) {
         this.sessionRepository = sessionRepository;
         this.decisionValidator = decisionValidator;
@@ -58,6 +61,24 @@ public class UserDecisionService {
         this.actionExecutionService = actionExecutionService;
         this.aiDecisionExecutionService = aiDecisionExecutionService;
         this.locatorResolver = locatorResolver;
+        this.agentLoopService = agentLoopService;
+    }
+
+    public UserDecisionService(
+            AutomationSessionRepository sessionRepository,
+            UserDecisionValidator decisionValidator,
+            BrowserSessionManager browserSessionManager,
+            AutomationStatusEventPublisher statusEventPublisher,
+            UserDecisionSessionState decisionState,
+            BrowserFrameStore frameStore,
+            BrowserActionExecutionService actionExecutionService,
+            AiDecisionExecutionService aiDecisionExecutionService,
+            ElementLocatorResolver locatorResolver
+    ) {
+        this(sessionRepository, decisionValidator, browserSessionManager,
+                statusEventPublisher, decisionState, frameStore,
+                actionExecutionService, aiDecisionExecutionService, locatorResolver,
+                null);
     }
 
     public UserDecisionService(
@@ -72,7 +93,7 @@ public class UserDecisionService {
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
                 statusEventPublisher, decisionState, frameStore,
-                actionExecutionService, aiDecisionExecutionService, null);
+                actionExecutionService, aiDecisionExecutionService, null, null);
     }
 
     public UserDecisionService(
@@ -84,7 +105,8 @@ public class UserDecisionService {
             BrowserFrameStore frameStore
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
-                statusEventPublisher, decisionState, frameStore, null, null, null);
+                statusEventPublisher, decisionState, frameStore, null, null, null,
+                null);
     }
 
     public UserDecisionService(
@@ -94,7 +116,7 @@ public class UserDecisionService {
             AutomationStatusEventPublisher statusEventPublisher
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
-                statusEventPublisher, null, null, null, null, null);
+                statusEventPublisher, null, null, null, null, null, null);
     }
 
     public AutomationSession submitDecision(
@@ -126,7 +148,11 @@ public class UserDecisionService {
                 applyFinalSelection(sessionId, prompt, request.selectedOptionIds());
                 saved.set(applyDecision(
                         sessionId, request.decisionType(), request.selectedOptionIds()));
-                if (aiDecisionExecutionService != null) {
+                if (agentLoopService != null) {
+                    if (!agentLoopService.start(sessionId)) {
+                        throw new IllegalStateException("이미 실행 중인 Agent loop입니다.");
+                    }
+                } else if (aiDecisionExecutionService != null) {
                     aiDecisionExecutionService.execute(sessionId);
                 }
             });

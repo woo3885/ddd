@@ -1,6 +1,8 @@
 package com.ddd.backend.service;
 
 import com.ddd.backend.automation.session.BrowserSessionManager;
+import com.ddd.backend.ai.AgentLoopService;
+import com.ddd.backend.automation.dom.SanitizedDomSnapshotService;
 import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
@@ -59,6 +61,8 @@ public class AutomationSessionService {
             publicBrowserActionSessionState;
 
     private final UserDecisionSessionState userDecisionSessionState;
+    private final SanitizedDomSnapshotService snapshotService;
+    private final AgentLoopService agentLoopService;
 
     /*
      * 실제 Spring 실행용 생성자.
@@ -74,7 +78,9 @@ public class AutomationSessionService {
             BrowserFrameWebSocketHandler frameWebSocketHandler,
             PublicBrowserActionSessionState
                     publicBrowserActionSessionState,
-            UserDecisionSessionState userDecisionSessionState
+            UserDecisionSessionState userDecisionSessionState,
+            SanitizedDomSnapshotService snapshotService,
+            AgentLoopService agentLoopService
     ) {
         this.sessionRepository =
                 sessionRepository;
@@ -101,6 +107,8 @@ public class AutomationSessionService {
                 publicBrowserActionSessionState;
 
         this.userDecisionSessionState = userDecisionSessionState;
+        this.snapshotService = snapshotService;
+        this.agentLoopService = agentLoopService;
     }
 
     public AutomationSessionService(
@@ -115,7 +123,8 @@ public class AutomationSessionService {
     ) {
         this(sessionRepository, browserSessionManager, statusEventPublisher,
                 demoNavigationPolicy, browserFrameCaptureService, browserFrameStore,
-                frameWebSocketHandler, publicBrowserActionSessionState, null);
+                frameWebSocketHandler, publicBrowserActionSessionState, null,
+                null, null);
     }
 
     /*
@@ -142,6 +151,8 @@ public class AutomationSessionService {
                 browserFrameStore,
                 frameWebSocketHandler,
                 null,
+                null,
+                null,
                 null
         );
     }
@@ -164,6 +175,8 @@ public class AutomationSessionService {
                 demoNavigationPolicy,
                 browserFrameCaptureService,
                 browserFrameStore,
+                null,
+                null,
                 null,
                 null,
                 null
@@ -275,6 +288,12 @@ public class AutomationSessionService {
                             finalUrl
                     );
 
+            statusEventPublisher.publish(
+                    sessionId,
+                    com.ddd.backend.domain.session.WorkflowStatus.PAGE_LOADING,
+                    "자동화 화면을 불러오고 있습니다."
+            );
+
             /*
              * 최종 Browser URL을 Session에 기록.
              *
@@ -320,6 +339,15 @@ public class AutomationSessionService {
                     captureAttempt.frame()
             );
 
+            if (frameWebSocketHandler != null) {
+                frameWebSocketHandler.sendLatest(sessionId);
+            }
+
+            /* 첫 Frame 이후 Snapshot/ElementRegistry가 준비돼야 AI를 예약할 수 있다. */
+            if (snapshotService != null) {
+                snapshotService.createSnapshot(sessionId);
+            }
+
             AutomationSession savedSession =
                     sessionRepository.save(
                             session
@@ -351,6 +379,19 @@ public class AutomationSessionService {
 
             throw exception;
         }
+    }
+
+    public boolean startInitialAi(String sessionId) {
+        if (agentLoopService == null) {
+            return false;
+        }
+        AutomationSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
+        if (session.getStatus() != com.ddd.backend.domain.session.WorkflowStatus.SESSION_CREATED
+                || !browserFrameStore.latest(sessionId).isPresent()) {
+            return false;
+        }
+        return agentLoopService.start(sessionId);
     }
 
     /*
@@ -416,6 +457,7 @@ public class AutomationSessionService {
                 sessionId
         );
         cleanupUserDecisionStateSafely(sessionId);
+        cleanupAgentLoopSafely(sessionId);
 
         /*
          * Playwright BrowserContext / Page 종료.
@@ -496,6 +538,7 @@ public class AutomationSessionService {
                 sessionId
         );
         cleanupUserDecisionStateSafely(sessionId);
+        cleanupAgentLoopSafely(sessionId);
 
         /*
          * BrowserContext / Page 종료.
@@ -596,6 +639,12 @@ public class AutomationSessionService {
             userDecisionSessionState.removeSession(sessionId);
         } catch (RuntimeException ignored) {
             // Decision cleanup failure must not stop remaining resource cleanup.
+        }
+    }
+
+    private void cleanupAgentLoopSafely(String sessionId) {
+        if (agentLoopService != null) {
+            agentLoopService.cancel(sessionId);
         }
     }
 

@@ -122,6 +122,7 @@ class AutomationSessionControllerTest {
                 "demo-bank",
                 "/transfer/accounts"
         );
+        verify(sessionService).startInitialAi(session.getSessionId());
     }
 
     @Test

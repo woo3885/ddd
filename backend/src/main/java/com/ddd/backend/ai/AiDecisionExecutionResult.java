@@ -12,7 +12,8 @@ public record AiDecisionExecutionResult(
         BrowserActionType aiActionType,
         BrowserActionType executedActionType,
         BrowserActionExecutionStatus status,
-        String message
+        String message,
+        String actionKey
 ) {
 
     public AiDecisionExecutionResult {
@@ -39,6 +40,10 @@ public record AiDecisionExecutionResult(
                 status,
                 "실행 상태는 필수입니다."
         );
+
+        if (actionKey == null || actionKey.isBlank()) {
+            throw new IllegalArgumentException("actionKey는 필수입니다.");
+        }
     }
 
     public static AiDecisionExecutionResult from(
@@ -66,7 +71,19 @@ public record AiDecisionExecutionResult(
                 aiResponse.actionType(),
                 executionResult.actionType(),
                 executionResult.status(),
-                executionResult.message()
+                executionResult.message(),
+                actionKey(snapshot, aiResponse)
         );
+    }
+
+    private static String actionKey(
+            SanitizedDomSnapshot snapshot,
+            AiDecisionResponse response
+    ) {
+        String page = snapshot.page() == null ? "" : snapshot.page().url();
+        String target = response.elementId() == null ? "" : response.elementId()
+                .replaceFirst("^el-[a-zA-Z0-9]+-", "el-");
+        return Integer.toHexString(Objects.hash(
+                page, response.actionType(), target, response.value()));
     }
 }
