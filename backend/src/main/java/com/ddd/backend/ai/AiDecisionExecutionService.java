@@ -59,6 +59,7 @@ public final class AiDecisionExecutionService {
     private final AutomationTargetEventService targetEventService;
     private final UserDecisionPromptService userDecisionPromptService;
     private final UserDecisionSessionState userDecisionState;
+    private final ActionReplayGuard replayGuard;
 
     @Autowired
     public AiDecisionExecutionService(
@@ -71,6 +72,24 @@ public final class AiDecisionExecutionService {
             AutomationTargetEventService targetEventService,
             UserDecisionPromptService userDecisionPromptService,
             UserDecisionSessionState userDecisionState
+    ) {
+        this(sessionRepository, snapshotService, aiDecisionClient,
+                responseValidator, actionExecutionService, statusEventPublisher,
+                targetEventService, userDecisionPromptService, userDecisionState,
+                new ActionReplayGuard());
+    }
+
+    public AiDecisionExecutionService(
+            AutomationSessionRepository sessionRepository,
+            SanitizedDomSnapshotService snapshotService,
+            AiDecisionClient aiDecisionClient,
+            AiDecisionResponseValidator responseValidator,
+            BrowserActionExecutionService actionExecutionService,
+            AutomationStatusEventPublisher statusEventPublisher,
+            AutomationTargetEventService targetEventService,
+            UserDecisionPromptService userDecisionPromptService,
+            UserDecisionSessionState userDecisionState,
+            ActionReplayGuard replayGuard
     ) {
         this.sessionRepository =
                 Objects.requireNonNull(
@@ -118,6 +137,8 @@ public final class AiDecisionExecutionService {
         );
         this.userDecisionState = Objects.requireNonNull(
                 userDecisionState, "UserDecisionSessionState는 필수입니다.");
+        this.replayGuard = Objects.requireNonNull(replayGuard,
+                "ActionReplayGuard는 필수입니다.");
     }
 
     public AiDecisionExecutionService(
@@ -137,6 +158,7 @@ public final class AiDecisionExecutionService {
         this.targetEventService = null;
         this.userDecisionPromptService = null;
         this.userDecisionState = null;
+        this.replayGuard = new ActionReplayGuard();
     }
 
     /*
@@ -163,10 +185,6 @@ public final class AiDecisionExecutionService {
                         sessionId
                 );
 
-        markAiExecuting(
-                session
-        );
-
         boolean resumingUserDecision = userDecisionState != null
                 && userDecisionState.latestResult(sessionId).isPresent();
 
@@ -184,6 +202,9 @@ public final class AiDecisionExecutionService {
                             .createSnapshot(
                                     sessionId
                             );
+
+            /* 새 Snapshot과 ElementRegistry가 준비된 뒤에만 AI 상태를 발행한다. */
+            markAiExecuting(session);
 
             AiUserDecisionContext userDecision = userDecisionState == null
                     ? null
@@ -250,7 +271,7 @@ public final class AiDecisionExecutionService {
                 executionResult =
                 isUnauthorizedDepositInput(session, snapshot, validatedResponse)
                         ? requireAdditionalInformation(session)
-                        : publishTargetThenExecute(
+                        : reserveThenExecute(
                         sessionId,
                         snapshot,
                         validatedResponse
@@ -261,6 +282,19 @@ public final class AiDecisionExecutionService {
                 response,
                 executionResult
         );
+    }
+
+    private BrowserActionExecutionResult reserveThenExecute(
+            String sessionId,
+            SanitizedDomSnapshot snapshot,
+            AiDecisionResponse response
+    ) {
+        if (replayGuard != null && !replayGuard.reserve(sessionId, snapshot, response)) {
+            AutomationSession session = getSession(sessionId);
+            markErrorSafely(session);
+            throw new IllegalStateException("동일한 금융 Action 반복이 차단되었습니다.");
+        }
+        return publishTargetThenExecute(sessionId, snapshot, response);
     }
 
     private boolean isUnauthorizedDepositInput(

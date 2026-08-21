@@ -8,6 +8,8 @@ import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.security.capture.FrameCaptureDecision;
 import com.ddd.backend.security.capture.FrameCaptureGuard;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.frame.BrowserFrameStore;
+import com.ddd.backend.frame.BrowserFrameMetadata;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,8 +54,11 @@ public final class AgentLoopService {
     private final DepositScreenInspector screenInspector;
     private final int maxSteps;
     private final Duration loopTimeout;
+    private final ActionReplayGuard replayGuard;
+    private final BrowserFrameStore frameStore;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final Set<String> scheduled = ConcurrentHashMap.newKeySet();
+    private final Set<String> resumeRequested = ConcurrentHashMap.newKeySet();
 
     @Autowired
     public AgentLoopService(
@@ -61,10 +66,25 @@ public final class AgentLoopService {
             AiDecisionExecutionService executionService,
             FrameCaptureGuard frameCaptureGuard,
             AutomationStatusEventPublisher statusEventPublisher,
+            DepositScreenInspector screenInspector,
+            ActionReplayGuard replayGuard,
+            BrowserFrameStore frameStore
+    ) {
+        this(sessionRepository, executionService, frameCaptureGuard,
+                statusEventPublisher, screenInspector, replayGuard,
+                frameStore, MAX_STEPS, LOOP_TIMEOUT);
+    }
+
+    AgentLoopService(
+            AutomationSessionRepository sessionRepository,
+            AiDecisionExecutionService executionService,
+            FrameCaptureGuard frameCaptureGuard,
+            AutomationStatusEventPublisher statusEventPublisher,
             DepositScreenInspector screenInspector
     ) {
         this(sessionRepository, executionService, frameCaptureGuard,
-                statusEventPublisher, screenInspector, MAX_STEPS, LOOP_TIMEOUT);
+                statusEventPublisher, screenInspector, new ActionReplayGuard(),
+                null, MAX_STEPS, LOOP_TIMEOUT);
     }
 
     AgentLoopService(
@@ -73,6 +93,35 @@ public final class AgentLoopService {
             FrameCaptureGuard frameCaptureGuard,
             AutomationStatusEventPublisher statusEventPublisher,
             DepositScreenInspector screenInspector,
+            BrowserFrameStore frameStore
+    ) {
+        this(sessionRepository, executionService, frameCaptureGuard,
+                statusEventPublisher, screenInspector, new ActionReplayGuard(),
+                frameStore, MAX_STEPS, LOOP_TIMEOUT);
+    }
+
+    AgentLoopService(
+            AutomationSessionRepository sessionRepository,
+            AiDecisionExecutionService executionService,
+            FrameCaptureGuard frameCaptureGuard,
+            AutomationStatusEventPublisher statusEventPublisher,
+            DepositScreenInspector screenInspector,
+            int maxSteps,
+            Duration loopTimeout
+    ) {
+        this(sessionRepository, executionService, frameCaptureGuard,
+                statusEventPublisher, screenInspector, new ActionReplayGuard(),
+                null, maxSteps, loopTimeout);
+    }
+
+    private AgentLoopService(
+            AutomationSessionRepository sessionRepository,
+            AiDecisionExecutionService executionService,
+            FrameCaptureGuard frameCaptureGuard,
+            AutomationStatusEventPublisher statusEventPublisher,
+            DepositScreenInspector screenInspector,
+            ActionReplayGuard replayGuard,
+            BrowserFrameStore frameStore,
             int maxSteps,
             Duration loopTimeout
     ) {
@@ -86,6 +135,8 @@ public final class AgentLoopService {
         }
         this.maxSteps = maxSteps;
         this.loopTimeout = loopTimeout;
+        this.replayGuard = replayGuard;
+        this.frameStore = frameStore;
     }
 
     /** REST 응답을 막지 않고 최초/재개 실행을 exactly-once로 예약한다. */
@@ -98,9 +149,22 @@ public final class AgentLoopService {
         return true;
     }
 
+    /** WAITING loop가 정리 중이면 종료 직후 재예약해 resume 유실을 막는다. */
+    public boolean resume(String sessionId) {
+        validateSessionId(sessionId);
+        resumeRequested.add(sessionId);
+        if (!scheduled.contains(sessionId)) {
+            resumeRequested.remove(sessionId);
+            return start(sessionId);
+        }
+        return true;
+    }
+
     public void cancel(String sessionId) {
         if (sessionId != null) {
             scheduled.remove(sessionId);
+            resumeRequested.remove(sessionId);
+            replayGuard.removeSession(sessionId);
         }
     }
 
@@ -153,12 +217,16 @@ public final class AgentLoopService {
                     return;
                 }
 
+                BrowserFrameMetadata beforeFrame = latestFrame(sessionId);
                 AiDecisionExecutionResult result = executeBeforeDeadline(
                         sessionId, deadline);
                 AutomationSession after = sessionRepository.findById(sessionId)
                         .orElseThrow(() -> new SessionNotFoundException(sessionId));
                 if (STOP_STATUSES.contains(after.getStatus())
                         || result.status() != BrowserActionExecutionStatus.EXECUTED) {
+                    return;
+                }
+                if (!validateFrameAdvance(sessionId, beforeFrame, after)) {
                     return;
                 }
                 if (result.actionKey().equals(previousActionKey)) {
@@ -177,7 +245,41 @@ public final class AgentLoopService {
                     exception.getClass().getSimpleName());
         } finally {
             scheduled.remove(sessionId);
+            if (resumeRequested.remove(sessionId)) {
+                AutomationSession session = sessionRepository.findById(sessionId)
+                        .orElse(null);
+                if (session != null && !STOP_STATUSES.contains(session.getStatus())) {
+                    start(sessionId);
+                }
+            }
         }
+    }
+
+    private BrowserFrameMetadata latestFrame(String sessionId) {
+        if (frameStore == null) return null;
+        return frameStore.latest(sessionId).map(payload -> payload.metadata()).orElse(null);
+    }
+
+    private boolean validateFrameAdvance(
+            String sessionId,
+            BrowserFrameMetadata before,
+            AutomationSession session
+    ) {
+        if (frameStore == null) return true;
+        BrowserFrameMetadata after = latestFrame(sessionId);
+        if (before != null && after != null
+                && !before.frameId().equals(after.frameId())
+                && after.sequence() > before.sequence()) {
+            return true;
+        }
+        if (frameCaptureGuard.evaluate(sessionId)
+                == FrameCaptureDecision.SECURE_INPUT_BLOCKED) {
+            transition(session, WorkflowStatus.SECURE_INPUT_REQUIRED,
+                    "민감정보는 사용자가 직접 입력해야 합니다.");
+        } else {
+            failSafely(session, "Action 후 새 Viewer Frame을 확인할 수 없습니다.");
+        }
+        return false;
     }
 
     private AiDecisionExecutionResult executeBeforeDeadline(

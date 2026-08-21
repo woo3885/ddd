@@ -147,12 +147,8 @@ public class UserDecisionService {
             decisionState.consume(sessionId, request, () -> {
                 applyFinalSelection(sessionId, prompt, request.selectedOptionIds());
                 saved.set(applyDecision(
-                        sessionId, request.decisionType(), request.selectedOptionIds()));
-                if (agentLoopService != null) {
-                    if (!agentLoopService.start(sessionId)) {
-                        throw new IllegalStateException("이미 실행 중인 Agent loop입니다.");
-                    }
-                } else if (aiDecisionExecutionService != null) {
+                        sessionId, request.decisionType(), request.selectedOptionIds(), false));
+                if (agentLoopService == null && aiDecisionExecutionService != null) {
                     aiDecisionExecutionService.execute(sessionId);
                 }
             });
@@ -167,6 +163,12 @@ public class UserDecisionService {
                 sessionId,
                 "사용자 결정이 처리되었습니다."
         );
+
+        if (agentLoopService != null && !agentLoopService.resume(sessionId)) {
+            restoreDecisionRequired(saved.get());
+            throw new UserDecisionResumeException(
+                    new IllegalStateException("Agent loop 재개를 예약할 수 없습니다."));
+        }
 
         return saved.get();
     }
@@ -248,6 +250,15 @@ public class UserDecisionService {
             DecisionType decisionType,
             List<String> selectedOptionIds
     ) {
+        return applyDecision(sessionId, decisionType, selectedOptionIds, true);
+    }
+
+    private AutomationSession applyDecision(
+            String sessionId,
+            DecisionType decisionType,
+            List<String> selectedOptionIds,
+            boolean publishStatus
+    ) {
         decisionValidator.validate(
                 decisionType,
                 selectedOptionIds
@@ -268,14 +279,13 @@ public class UserDecisionService {
                         session
                 );
 
-        statusEventPublisher.publish(
-                savedSession.getSessionId(),
-                savedSession.getStatus(),
-                decisionType
-                        == DecisionType.ADDITIONAL_INFORMATION
-                        ? "추가 정보가 제출되었습니다."
-                        : "사용자 선택이 제출되었습니다."
-        );
+        if (publishStatus) {
+            statusEventPublisher.publish(
+                    savedSession.getSessionId(), savedSession.getStatus(),
+                    decisionType == DecisionType.ADDITIONAL_INFORMATION
+                            ? "추가 정보가 제출되었습니다."
+                            : "사용자 선택이 제출되었습니다.");
+        }
 
         return savedSession;
     }

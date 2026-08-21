@@ -400,6 +400,7 @@ public final class BrowserActionPolicyContextResolver {
                 "select-account",
                 "account-option",
                 "select-product",
+                "select-deposit",
                 "product-option",
                 "select-recipient",
                 "recipient-option",

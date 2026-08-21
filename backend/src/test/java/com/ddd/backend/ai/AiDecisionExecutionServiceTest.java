@@ -643,6 +643,21 @@ class AiDecisionExecutionServiceTest {
     }
 
     @Test
+    void Snapshot_생성실패시_AI_EXECUTING과_AI호출을_생성하지_않는다() {
+        when(snapshotService.createSnapshot(session.getSessionId()))
+                .thenThrow(new IllegalStateException("snapshot failed"));
+
+        assertThatThrownBy(() -> service.execute(session.getSessionId()))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(session.getStatus()).isEqualTo(WorkflowStatus.ERROR);
+        verify(aiDecisionClient, never()).decide(any(AiDecisionRequest.class));
+        verify(statusEventPublisher, never()).publish(
+                session.getSessionId(), WorkflowStatus.AI_EXECUTING,
+                "AI가 다음 행동을 판단하고 있습니다.");
+    }
+
+    @Test
     void 가입금액은_사용자요청에_명시된_값만_TYPE한다() {
         session = AutomationSession.create(
                 "100만 원을 12개월 정기예금 상품에 가입하고 싶다");
@@ -705,6 +720,29 @@ class AiDecisionExecutionServiceTest {
         assertThat(session.getStatus()).isEqualTo(WorkflowStatus.CANCELLED);
         verify(actionExecutionService, never()).executeAiElementAction(
                 any(), any(), any(), any());
+    }
+
+    @Test
+    void 동일_DOM의_동일_금융_Action은_두번째_executor_호출전에_차단한다() {
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.CLICK, "el-a1b2c3d4-001", null,
+                null, null, null);
+        when(aiDecisionClient.decide(any(AiDecisionRequest.class))).thenReturn(response);
+        when(responseValidator.validate(response, snapshot)).thenReturn(response);
+        when(actionExecutionService.executeAiElementAction(
+                session.getSessionId(), BrowserActionType.CLICK,
+                "el-a1b2c3d4-001", null))
+                .thenReturn(BrowserActionExecutionResult.executed(BrowserActionType.CLICK));
+
+        service.execute(session.getSessionId());
+        assertThatThrownBy(() -> service.execute(session.getSessionId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("반복");
+
+        verify(actionExecutionService, org.mockito.Mockito.times(1))
+                .executeAiElementAction(session.getSessionId(),
+                        BrowserActionType.CLICK, "el-a1b2c3d4-001", null);
+        assertThat(session.getStatus()).isEqualTo(WorkflowStatus.ERROR);
     }
 
     @Test

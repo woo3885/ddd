@@ -152,15 +152,7 @@ class BrowserActionExecutionServiceTest {
 
         assertSessionStatus(
                 session.getSessionId(),
-                WorkflowStatus.AI_EXECUTING
-        );
-
-        verify(
-                statusEventPublisher
-        ).publish(
-                session.getSessionId(),
-                WorkflowStatus.AI_EXECUTING,
-                "브라우저 행동을 실행했습니다."
+                WorkflowStatus.PAGE_LOADING
         );
 
         /*
@@ -202,8 +194,6 @@ class BrowserActionExecutionServiceTest {
         eventOrder.verify(browserFrameStore).publishAfterAction(
                 session.getSessionId(), capturedFrame);
         eventOrder.verify(frameWebSocketHandler).sendLatest(session.getSessionId());
-        eventOrder.verify(statusEventPublisher).publish(session.getSessionId(),
-                WorkflowStatus.AI_EXECUTING, "브라우저 행동을 실행했습니다.");
     }
 
     @Test
@@ -511,7 +501,7 @@ class BrowserActionExecutionServiceTest {
 
         assertSessionStatus(
                 session.getSessionId(),
-                WorkflowStatus.AI_EXECUTING
+                WorkflowStatus.PAGE_LOADING
         );
 
         /*
@@ -587,7 +577,7 @@ class BrowserActionExecutionServiceTest {
 
         assertSessionStatus(
                 session.getSessionId(),
-                WorkflowStatus.AI_EXECUTING
+                WorkflowStatus.PAGE_LOADING
         );
 
         verify(
@@ -670,7 +660,7 @@ class BrowserActionExecutionServiceTest {
 
         assertSessionStatus(
                 session.getSessionId(),
-                WorkflowStatus.AI_EXECUTING
+                WorkflowStatus.PAGE_LOADING
         );
 
         /*

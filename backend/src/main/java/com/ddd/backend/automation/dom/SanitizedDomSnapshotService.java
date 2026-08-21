@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 public final class SanitizedDomSnapshotService {
@@ -133,6 +135,8 @@ public final class SanitizedDomSnapshotService {
                             sanitizedElements =
                             new ArrayList<>();
 
+                    Set<String> userDecisionLabels = new HashSet<>();
+
                     /*
                      * D16 Registry 등록용 데이터.
                      *
@@ -225,8 +229,15 @@ public final class SanitizedDomSnapshotService {
                         String sanitizedInputType =
                                 sanitizer
                                         .sanitizeNullableText(
-                                                element.inputType()
+                                        element.inputType()
                                         );
+
+                        if (securityPolicy == SanitizedDomSnapshot.SecurityPolicy.USER_DECISION
+                                && !sanitizedText.isBlank()
+                                && !userDecisionLabels.add(sanitizedText)) {
+                            throw new IllegalStateException(
+                                    "사용자 선택 label을 안전하게 구분할 수 없습니다.");
+                        }
 
                         sanitizedElements.add(
                                 new SanitizedDomSnapshot

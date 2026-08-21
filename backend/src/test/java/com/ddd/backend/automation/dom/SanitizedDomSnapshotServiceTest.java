@@ -466,4 +466,30 @@ class SanitizedDomSnapshotServiceTest {
                 .extracting(SanitizedDomSnapshot.ElementSnapshot::checked)
                 .containsExactly(true, false);
     }
+
+    @Test
+    void 실제_Demo_상품버튼은_가까운_heading으로_고유_label을_생성한다() {
+        manager.execute(SESSION_ID, Duration.ofSeconds(5), page -> {
+            page.setContent("""
+                    <article id="product-deposit-12m">
+                      <h2>12개월 정기예금</h2>
+                      <button id="btn-select-deposit-12m">이 상품 선택</button>
+                    </article>
+                    <article id="product-deposit-preferred">
+                      <h2>우대금리 정기예금</h2>
+                      <button id="btn-select-deposit-preferred">이 상품 선택</button>
+                    </article>
+                    """);
+            return null;
+        });
+
+        SanitizedDomSnapshot snapshot = service.createSnapshot(SESSION_ID);
+
+        assertThat(snapshot.elements())
+                .extracting(SanitizedDomSnapshot.ElementSnapshot::text)
+                .containsExactly("12개월 정기예금", "우대금리 정기예금");
+        assertThat(snapshot.elements())
+                .extracting(SanitizedDomSnapshot.ElementSnapshot::securityPolicy)
+                .containsOnly(SanitizedDomSnapshot.SecurityPolicy.USER_DECISION);
+    }
 }
