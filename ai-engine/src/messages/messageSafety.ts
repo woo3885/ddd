@@ -21,6 +21,10 @@ const FORBIDDEN_TECHNICAL_CONTENT = [
   /\/api\//i,
   /\blocalhost(?::\d+)?\b/i,
   /<\/?[a-z][^>]*>/i,
+  /\belementId\b/i,
+  /\b(?:selector|xpath|raw dom)\b/i,
+  /(?:가입|인증|거래).{0,12}(?:완료|성공)/,
+  /(?:추천 상품|추천드|가장 좋|자동 선택|자동 동의)/,
 ];
 
 const SENSITIVE_VALUE_PATTERNS = [

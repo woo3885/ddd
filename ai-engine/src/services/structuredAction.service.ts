@@ -32,6 +32,12 @@ import {
   enforceUserDecisionPolicy,
 } from "../policy/userDecision.policy.js";
 
+import {
+  classifyDepositScenarioStage,
+  enforceDepositScenarioPolicy,
+  finalizeDepositScenarioGuidance,
+} from "../deposit/depositScenario.policy.js";
+
 export type StructuredActionTextGenerator = (
   input: GenerateTextInput,
 ) => Promise<GenerateTextResult>;
@@ -66,9 +72,17 @@ export async function generateStructuredAction(
   });
 
   if (result.source === "FALLBACK") {
-    return createStructuredFallbackResponse(
+    const fallback = createStructuredFallbackResponse(
       request.requestId,
     );
+
+    return classifyDepositScenarioStage(request) ===
+      "SECURE_INPUT"
+      ? enforceDepositScenarioPolicy(
+          fallback,
+          request,
+        )
+      : fallback;
   }
 
   try {
@@ -85,18 +99,39 @@ export async function generateStructuredAction(
         request.requestId,
       );
 
-    const policyChecked =
-      enforceUserDecisionPolicy(
+    const depositStage =
+      classifyDepositScenarioStage(request);
+
+    const depositChecked =
+      enforceDepositScenarioPolicy(
         structured,
         request,
       );
 
+    const policyChecked =
+      enforceUserDecisionPolicy(
+        depositChecked,
+        request,
+      );
+
+    /*
+     * D24 remains authoritative for decision option membership and labels.
+     * Its generic wait message must not erase D25's stage-specific, static
+     * guidance after those checks have succeeded.
+     */
+    const guided =
+      finalizeDepositScenarioGuidance(
+        policyChecked,
+        depositChecked,
+        depositStage,
+      );
+
     validateTargetElementId(
-      policyChecked,
+      guided,
       request,
     );
 
-    return policyChecked;
+    return guided;
   } catch {
     console.error(
       "[AI Engine] Structured response validation failed. Fallback is returned.",

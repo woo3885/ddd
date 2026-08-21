@@ -100,6 +100,10 @@ export interface AiActionRequest {
     intent: string;
     amount?: number;
     recipient?: string;
+    duration?: {
+      value: number;
+      unit: string;
+    };
     conditions?: string[];
   };
 
