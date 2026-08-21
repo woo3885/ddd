@@ -704,6 +704,27 @@ class AiDecisionExecutionServiceTest {
     }
 
     @Test
+    void C의_금액누락_blocked_NONE을_추가정보_상태로_소비한다() {
+        snapshot = snapshotAt(
+                "http://127.0.0.1:5190/deposit/conditions/deposit-12m");
+        when(snapshotService.createSnapshot(session.getSessionId())).thenReturn(snapshot);
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.NONE, null, null, null, null, null,
+                "AI_EXECUTING", "가입 금액이 필요합니다.", true, true,
+                null, null, List.of(), List.of());
+        when(aiDecisionClient.decide(any(AiDecisionRequest.class))).thenReturn(response);
+        when(responseValidator.validate(response, snapshot)).thenReturn(response);
+
+        AiDecisionExecutionResult result = service.execute(session.getSessionId());
+
+        assertThat(session.getStatus())
+                .isEqualTo(WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED);
+        assertThat(result.status())
+                .isEqualTo(BrowserActionExecutionStatus.USER_ACTION_REQUIRED);
+        verify(actionExecutionService, never()).execute(any(), any());
+    }
+
+    @Test
     void AI_응답_대기중_취소된_세션은_Action을_실행하지_않는다() {
         AiDecisionResponse response = new AiDecisionResponse(
                 BrowserActionType.CLICK, "el-a1b2c3d4-001", null,
@@ -746,7 +767,7 @@ class AiDecisionExecutionServiceTest {
     }
 
     @Test
-    void 가입기간이_사용자요청에_없으면_금액_Action도_중단한다() {
+    void 가입기간이_없어도_사용자가_요청한_금액은_Action으로_실행한다() {
         session = AutomationSession.create("100만 원 정기예금에 가입하고 싶다");
         snapshot = snapshotAt(
                 "http://127.0.0.1:5190/deposit/conditions/deposit-12m");
@@ -756,13 +777,17 @@ class AiDecisionExecutionServiceTest {
                 null, null, null);
         when(aiDecisionClient.decide(any(AiDecisionRequest.class))).thenReturn(response);
         when(responseValidator.validate(response, snapshot)).thenReturn(response);
+        when(actionExecutionService.executeAiElementAction(
+                session.getSessionId(), BrowserActionType.TYPE,
+                "el-a1b2c3d4-001", "1000000"))
+                .thenReturn(BrowserActionExecutionResult.executed(BrowserActionType.TYPE));
 
-        service.execute(session.getSessionId());
+        AiDecisionExecutionResult result = service.execute(session.getSessionId());
 
-        assertThat(session.getStatus())
-                .isEqualTo(WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED);
-        verify(actionExecutionService, never()).executeAiElementAction(
-                any(), any(), any(), any());
+        assertThat(result.status()).isEqualTo(BrowserActionExecutionStatus.EXECUTED);
+        verify(actionExecutionService).executeAiElementAction(
+                session.getSessionId(), BrowserActionType.TYPE,
+                "el-a1b2c3d4-001", "1000000");
     }
 
     private void stubCurrentSessionAndSnapshot() {

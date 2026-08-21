@@ -271,6 +271,8 @@ public final class AiDecisionExecutionService {
                 executionResult =
                 isUnauthorizedDepositInput(session, snapshot, validatedResponse)
                         ? requireAdditionalInformation(session)
+                        : isBlockedDepositInformationRequest(snapshot, validatedResponse)
+                        ? requireAdditionalInformation(session)
                         : reserveThenExecute(
                         sessionId,
                         snapshot,
@@ -307,15 +309,24 @@ public final class AiDecisionExecutionService {
                 || !snapshot.page().url().contains("/deposit/conditions/")) {
             return false;
         }
-        if (!session.getUserRequest().matches("(?s).*12\\s*개월.*")) {
-            return true;
-        }
         if (response.actionType() != BrowserActionType.TYPE) {
             return false;
         }
         Long requestedAmount = extractRequestedAmount(session.getUserRequest());
         Long proposedAmount = parseDigits(response.value());
         return requestedAmount == null || !requestedAmount.equals(proposedAmount);
+    }
+
+    private boolean isBlockedDepositInformationRequest(
+            SanitizedDomSnapshot snapshot,
+            AiDecisionResponse response
+    ) {
+        return snapshot.page() != null
+                && snapshot.page().url() != null
+                && snapshot.page().url().contains("/deposit/conditions/")
+                && response.actionType() == BrowserActionType.NONE
+                && Boolean.TRUE.equals(response.requiresUserAction())
+                && Boolean.TRUE.equals(response.executionBlocked());
     }
 
     private BrowserActionExecutionResult requireAdditionalInformation(
