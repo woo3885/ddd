@@ -1081,13 +1081,20 @@ URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 �
 - 상품 목록: `PRODUCT_SELECTION`, `WAIT_FOR_USER`, `USER_DECISION_REQUIRED`로
   자동 실행을 차단한다. 현재 snapshot의 visible/enabled `USER_DECISION` 요소만
   options 후보로 만들고, D24 정책이 membership과 snapshot 기반 label을 다시 검증한다.
+  Demo의 표시 문구는 두 버튼 모두 `이 상품 선택`이지만 명시적 aria-label은 각각
+  `12개월 정기예금 선택`, `우대금리 정기예금 선택`이다. Backend extractor는 같은
+  카드의 heading을 sanitized text로 전달하며 C는 ariaLabel을 우선해 option label을
+  만든다. 빈 label과 중복 canonical label은 금융 Action 없이 fail closed한다.
 - 상품 선택 재개: Backend가 검증한 네 필드 context와 selected ID 순서를 그대로
   사용한다. 선택 요소를 재CLICK하거나 동일 결정을 재발행하지 않고 새 snapshot의
-  NORMAL navigation만 찾는다.
-- 상품 상세: 현재 snapshot에 실제 존재하는 NORMAL button/link 중 가입·다음 의미의
-  target이 하나이거나 모델 target과 일치할 때만 `CLICK`한다.
+  enabled NORMAL `선택한 상품 상세 보기`만 `CLICK`한다.
+- 상품 상세: 현재 snapshot에 실제 존재하고 visible/enabled/NORMAL인
+  `가입 금액 입력하기`만 `CLICK`한다.
 - 가입 금액: 기존 UserGoal parser가 원 요청에서 읽은 양의 safe integer만 사용한다.
-  NORMAL 금액 입력란에만 `TYPE`하며, 금액이 없으면 `ADDITIONAL_INFORMATION` wire를
+  `약관 확인으로 이동` enabled, `입력 금액 확인` enabled, 금액 input 순서로 phase를
+  판정한다. 따라서 sanitizer가 input value를 제거해도 enabled 버튼이 있으면 TYPE을
+  반복하지 않는다. 아직 입력 phase일 때만 NORMAL 금액 입력란에 `TYPE`한다.
+  금액이 없으면 `ADDITIONAL_INFORMATION` wire를
   임의 생성하지 않고 안내 message를 가진 안전한 `NONE`을 반환한다. 이 응답은
   `AI_EXECUTING`, `requiresUserAction=true`, `executionBlocked=true`, null Action payload와
   null decision metadata, 빈 `options`/`terms`를 가진 기존 14필드 계약이다.
@@ -1095,7 +1102,9 @@ URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 �
   차단한다. `terms` 순서와 snapshot의 실제 `checked`를 보존하며 `required`는 현재
   label의 필수 marker에서 D24 정책이 canonicalize한다.
 - 약관 재개: selected IDs를 다시 실행하거나 선택 약관을 추가하지 않는다. Backend가
-  적용한 새 snapshot에서 활성화된 NORMAL 다음 target만 실행한다.
+  적용한 새 snapshot에서 `약관 선택 확인`을 실행한다. 다음 snapshot에서
+  `비밀번호 입력으로 이동`이 enabled이면 userDecision이 이미 소비됐더라도 약관
+  decision을 반복하지 않고 해당 NORMAL navigation을 실행한다.
 - 보안 입력: password/PIN/OTP/인증번호 또는 `SECURE_INPUT` 요소를 감지하면
   `PAUSE_FOR_SECURE_INPUT`, `SECURE_INPUT_REQUIRED`, `requiresUserAction=true`,
   `executionBlocked=true`를 반환한다. Action payload와 decision metadata는 비우고
@@ -1132,10 +1141,14 @@ Production Action allowlist와 C → B 14필드 rich response는 D23/D24 계약�
 ```text
 상품 선택: 가입할 예금 상품을 직접 선택해 주세요.
 상품 상세: 가입 기간과 금리를 확인해 주세요.
-가입 금액: 가입 금액 입력 내용을 확인하고 다음 단계로 이동합니다.
+가입 금액: 가입 금액을 확인해 주세요.
+금액 확인: 입력한 가입 금액을 확인해 주세요.
 금액 없음: 가입 금액을 확인하려면 추가 정보가 필요합니다.
-약관: 필수 약관과 선택 약관을 확인한 뒤 직접 선택해 주세요.
-보안 입력: 비밀번호는 금융 화면에 직접 입력해 주세요. 입력 내용은 AI가 확인하지 않습니다.
+약관 이동: 약관 내용을 확인해 주세요.
+약관: 필수 약관과 선택 약관을 직접 선택해 주세요.
+약관 확인: 약관 선택 내용을 확인해 주세요.
+보안 화면 이동: 비밀번호 입력 화면으로 이동합니다.
+보안 입력: 비밀번호는 금융 화면에 직접 입력해 주세요.
 ```
 
 message sanitizer는 prompt/reasoning, 내부 endpoint, selector/elementId/raw DOM,
@@ -1152,20 +1165,22 @@ Browser Action을 실행하지 않으며 secure/final/risk 보호와 STOP/COMPLE
 
 ## Production route와 검증
 
-synthetic fixture로 실제 `POST /api/ai/action`의 request validation, stage/context 정책,
-Structured Output 처리, D24 option 검증, 14필드 adapter와 HTTP response까지 상품 선택,
-상세, 금액, 약관, 약관 재개, 보안 중단 순서로 검증한다. 실제 고객정보, 계좌번호,
-비밀번호, API key 또는 raw Gemini output은 fixture와 로그에 포함하지 않는다.
+Demo Bank React DOM, Backend extractor 순서와 Sanitized DOM 직렬화에서 파생한 fixture로
+실제 `POST /api/ai/action`의 request validation, stage/context 정책, Structured Output,
+D24 option 검증, 14필드 adapter와 HTTP response를 검증한다. 순서는 상품 선택,
+상품 선택 적용, 상세, 금액 TYPE, 금액 확인, 약관 이동, 약관 선택, 약관 확인,
+비밀번호 이동, 보안 중단이다. 실제 고객정보, 계좌번호, 비밀번호, API key 또는 raw
+Gemini output은 fixture와 로그에 포함하지 않는다.
 
 2026-08-21 오프라인 검증 기준:
 
 ```text
 npm.cmd run check                 PASS
-npm.cmd test                      63/63 PASS
+npm.cmd test                      65/65 PASS
 npm.cmd run test:d23               6/6 PASS
 npm.cmd run test:d24              31/31 PASS
 npm.cmd run test:d24:response      8/8 PASS
-npm.cmd run test:d25              16/16 PASS
+npm.cmd run test:d25              18/18 PASS
 git diff --check                  PASS
 ```
 
