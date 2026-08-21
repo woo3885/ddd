@@ -13,6 +13,7 @@ import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
 import com.ddd.backend.frame.BrowserFrameMetadata;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
+import com.ddd.backend.service.decision.SelectedDepositProductStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.ddd.backend.ai.AiDecisionExecutionService;
 import com.ddd.backend.ai.AgentLoopService;
@@ -38,6 +39,7 @@ public class UserDecisionService {
     private final AiDecisionExecutionService aiDecisionExecutionService;
     private final ElementLocatorResolver locatorResolver;
     private final AgentLoopService agentLoopService;
+    private final SelectedDepositProductStore selectedProductStore;
 
     @Autowired
     public UserDecisionService(
@@ -50,7 +52,8 @@ public class UserDecisionService {
             BrowserActionExecutionService actionExecutionService,
             AiDecisionExecutionService aiDecisionExecutionService,
             ElementLocatorResolver locatorResolver,
-            AgentLoopService agentLoopService
+            AgentLoopService agentLoopService,
+            SelectedDepositProductStore selectedProductStore
     ) {
         this.sessionRepository = sessionRepository;
         this.decisionValidator = decisionValidator;
@@ -62,6 +65,25 @@ public class UserDecisionService {
         this.aiDecisionExecutionService = aiDecisionExecutionService;
         this.locatorResolver = locatorResolver;
         this.agentLoopService = agentLoopService;
+        this.selectedProductStore = selectedProductStore;
+    }
+
+    public UserDecisionService(
+            AutomationSessionRepository sessionRepository,
+            UserDecisionValidator decisionValidator,
+            BrowserSessionManager browserSessionManager,
+            AutomationStatusEventPublisher statusEventPublisher,
+            UserDecisionSessionState decisionState,
+            BrowserFrameStore frameStore,
+            BrowserActionExecutionService actionExecutionService,
+            AiDecisionExecutionService aiDecisionExecutionService,
+            ElementLocatorResolver locatorResolver,
+            AgentLoopService agentLoopService
+    ) {
+        this(sessionRepository, decisionValidator, browserSessionManager,
+                statusEventPublisher, decisionState, frameStore,
+                actionExecutionService, aiDecisionExecutionService,
+                locatorResolver, agentLoopService, null);
     }
 
     public UserDecisionService(
@@ -78,7 +100,7 @@ public class UserDecisionService {
         this(sessionRepository, decisionValidator, browserSessionManager,
                 statusEventPublisher, decisionState, frameStore,
                 actionExecutionService, aiDecisionExecutionService, locatorResolver,
-                null);
+                null, null);
     }
 
     public UserDecisionService(
@@ -106,7 +128,7 @@ public class UserDecisionService {
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
                 statusEventPublisher, decisionState, frameStore, null, null, null,
-                null);
+                null, null);
     }
 
     public UserDecisionService(
@@ -116,7 +138,7 @@ public class UserDecisionService {
             AutomationStatusEventPublisher statusEventPublisher
     ) {
         this(sessionRepository, decisionValidator, browserSessionManager,
-                statusEventPublisher, null, null, null, null, null, null);
+                statusEventPublisher, null, null, null, null, null, null, null);
     }
 
     public AutomationSession submitDecision(
@@ -189,6 +211,16 @@ public class UserDecisionService {
             AutomationDecisionPrompt prompt,
             List<String> selectedOptionIds
     ) {
+        if (prompt.decisionType() == DecisionType.PRODUCT_SELECTION
+                && selectedProductStore != null) {
+            if (selectedOptionIds.size() != 1 || locatorResolver == null) {
+                throw new IllegalStateException("선택 상품 context를 확인할 수 없습니다.");
+            }
+            String selectedElementId = selectedOptionIds.getFirst();
+            String domId = locatorResolver.withLocator(sessionId, selectedElementId,
+                    locator -> locator.getAttribute("id"));
+            selectedProductStore.select(sessionId, domId, prompt.sourceSnapshotId());
+        }
         if (prompt.decisionType() != DecisionType.TERMS_AGREEMENT) {
             executeSelectedOptions(sessionId, selectedOptionIds);
             return;

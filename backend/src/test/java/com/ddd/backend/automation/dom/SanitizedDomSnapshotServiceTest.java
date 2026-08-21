@@ -492,4 +492,30 @@ class SanitizedDomSnapshotServiceTest {
                 .extracting(SanitizedDomSnapshot.ElementSnapshot::securityPolicy)
                 .containsOnly(SanitizedDomSnapshot.SecurityPolicy.USER_DECISION);
     }
+
+    @Test
+    void 상품상세_Snapshot은_C가_추론없이_읽을_상품_semantic_context를_포함한다() {
+        manager.execute(SESSION_ID, Duration.ofSeconds(5), page -> {
+            page.route("**/*", route -> route.fulfill(
+                    new com.microsoft.playwright.Route.FulfillOptions()
+                            .setStatus(200)
+                            .setContentType("text/html; charset=utf-8")
+                            .setBody("""
+                                    <main id="page-deposit-product-detail">
+                                      <h2 id="summary-deposit-product-name">우대금리 정기예금</h2>
+                                      <span id="summary-deposit-product-period">12개월</span>
+                                      <button id="btn-deposit-amount-start">가입 금액 입력</button>
+                                    </main>
+                                    """)));
+            page.navigate("http://127.0.0.1:5190/deposit/products/deposit-preferred");
+            return null;
+        });
+
+        SanitizedDomSnapshot snapshot = service.createSnapshot(SESSION_ID);
+
+        assertThat(snapshot.page().productId()).isEqualTo("deposit-preferred");
+        assertThat(snapshot.page().productName()).isEqualTo("우대금리 정기예금");
+        assertThat(snapshot.page().productPeriod()).isEqualTo("12개월");
+        assertThat(snapshot.snapshotId()).startsWith("snap-");
+    }
 }

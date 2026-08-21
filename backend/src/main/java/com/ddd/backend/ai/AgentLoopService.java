@@ -10,6 +10,7 @@ import com.ddd.backend.security.capture.FrameCaptureGuard;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.frame.BrowserFrameMetadata;
+import com.ddd.backend.service.decision.SelectedDepositProductStore;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,7 @@ public final class AgentLoopService {
     private final Duration loopTimeout;
     private final ActionReplayGuard replayGuard;
     private final BrowserFrameStore frameStore;
+    private final SelectedDepositProductStore selectedProductStore;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final Set<String> scheduled = ConcurrentHashMap.newKeySet();
     private final Set<String> resumeRequested = ConcurrentHashMap.newKeySet();
@@ -68,11 +70,12 @@ public final class AgentLoopService {
             AutomationStatusEventPublisher statusEventPublisher,
             DepositScreenInspector screenInspector,
             ActionReplayGuard replayGuard,
-            BrowserFrameStore frameStore
+            BrowserFrameStore frameStore,
+            SelectedDepositProductStore selectedProductStore
     ) {
         this(sessionRepository, executionService, frameCaptureGuard,
                 statusEventPublisher, screenInspector, replayGuard,
-                frameStore, MAX_STEPS, LOOP_TIMEOUT);
+                frameStore, selectedProductStore, MAX_STEPS, LOOP_TIMEOUT);
     }
 
     AgentLoopService(
@@ -84,7 +87,7 @@ public final class AgentLoopService {
     ) {
         this(sessionRepository, executionService, frameCaptureGuard,
                 statusEventPublisher, screenInspector, new ActionReplayGuard(),
-                null, MAX_STEPS, LOOP_TIMEOUT);
+                null, null, MAX_STEPS, LOOP_TIMEOUT);
     }
 
     AgentLoopService(
@@ -97,7 +100,7 @@ public final class AgentLoopService {
     ) {
         this(sessionRepository, executionService, frameCaptureGuard,
                 statusEventPublisher, screenInspector, new ActionReplayGuard(),
-                frameStore, MAX_STEPS, LOOP_TIMEOUT);
+                frameStore, null, MAX_STEPS, LOOP_TIMEOUT);
     }
 
     AgentLoopService(
@@ -111,7 +114,7 @@ public final class AgentLoopService {
     ) {
         this(sessionRepository, executionService, frameCaptureGuard,
                 statusEventPublisher, screenInspector, new ActionReplayGuard(),
-                null, maxSteps, loopTimeout);
+                null, null, maxSteps, loopTimeout);
     }
 
     private AgentLoopService(
@@ -122,6 +125,7 @@ public final class AgentLoopService {
             DepositScreenInspector screenInspector,
             ActionReplayGuard replayGuard,
             BrowserFrameStore frameStore,
+            SelectedDepositProductStore selectedProductStore,
             int maxSteps,
             Duration loopTimeout
     ) {
@@ -137,6 +141,7 @@ public final class AgentLoopService {
         this.loopTimeout = loopTimeout;
         this.replayGuard = replayGuard;
         this.frameStore = frameStore;
+        this.selectedProductStore = selectedProductStore;
     }
 
     /** REST 응답을 막지 않고 최초/재개 실행을 exactly-once로 예약한다. */
@@ -165,6 +170,7 @@ public final class AgentLoopService {
             scheduled.remove(sessionId);
             resumeRequested.remove(sessionId);
             replayGuard.removeSession(sessionId);
+            if (selectedProductStore != null) selectedProductStore.removeSession(sessionId);
         }
     }
 
@@ -199,6 +205,9 @@ public final class AgentLoopService {
                         screenInspector.inspect(sessionId);
                 if (!inspection.valid()) {
                     failSafely(session, "예금 화면의 안전 계약을 확인할 수 없습니다.");
+                    return;
+                }
+                if (!validateSelectedProduct(session, inspection)) {
                     return;
                 }
                 FrameCaptureDecision captureDecision = frameCaptureGuard.evaluate(sessionId);
@@ -253,6 +262,36 @@ public final class AgentLoopService {
                 }
             }
         }
+    }
+
+    private boolean validateSelectedProduct(
+            AutomationSession session,
+            DepositScreenInspector.Inspection inspection
+    ) {
+        if (selectedProductStore == null) return true;
+        if (inspection.screen() == DepositPageClassifier.DepositPage.PRODUCT_DETAIL) {
+            SelectedDepositProductStore.Verification result =
+                    selectedProductStore.observeDetail(session.getSessionId(),
+                            inspection.productId(), inspection.productName(),
+                            inspection.periodLabel(),
+                            session.getUserRequest());
+            if (result == SelectedDepositProductStore.Verification.PERIOD_CONFLICT) {
+                transition(session, WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED,
+                        "요청 기간과 선택 상품 기간이 일치하지 않습니다.");
+                return false;
+            }
+            if (result == SelectedDepositProductStore.Verification.INVALID) {
+                failSafely(session, "선택 상품과 상세 화면을 검증할 수 없습니다.");
+                return false;
+            }
+        }
+        if (inspection.screen() == DepositPageClassifier.DepositPage.CONDITIONS
+                && !selectedProductStore.validatesAmountPage(
+                session.getSessionId(), inspection.productId())) {
+            failSafely(session, "선택 상품과 가입 금액 화면이 일치하지 않습니다.");
+            return false;
+        }
+        return true;
     }
 
     private BrowserFrameMetadata latestFrame(String sessionId) {

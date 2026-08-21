@@ -19,6 +19,8 @@ import com.ddd.backend.automation.dom.DomSanitizer;
 import com.ddd.backend.automation.dom.InteractiveElementExtractor;
 import com.ddd.backend.automation.dom.SanitizedDomSnapshot;
 import com.ddd.backend.automation.dom.SanitizedDomSnapshotService;
+import com.ddd.backend.ai.DepositPageClassifier;
+import com.ddd.backend.ai.DepositScreenInspector;
 
 @EnabledIfEnvironmentVariable(
         named = "RUN_DEMO_BANK_INTEGRATION",
@@ -181,6 +183,43 @@ class DemoBankIntegrationTest {
                     .anyMatch(element -> "password".equals(element.inputType())
                             && element.securityPolicy()
                             == SanitizedDomSnapshot.SecurityPolicy.SECURE_INPUT);
+        }
+    }
+
+    @Test
+    void D25_실제_Demo_두_예금상품의_URL과_DOM기간을_검증한다() {
+        try (PlaywrightWorker worker = new PlaywrightWorker();
+             BrowserSessionManager manager = new BrowserSessionManager(worker)) {
+            String sessionId = "demo-deposit-products-period";
+            manager.createSession(sessionId);
+            DepositScreenInspector inspector = new DepositScreenInspector(
+                    manager, new DepositPageClassifier());
+
+            for (String productId : java.util.List.of(
+                    "deposit-12m", "deposit-preferred")) {
+                manager.navigate(sessionId, java.net.URI.create(
+                        BASE_URL + "/deposit/products/" + productId));
+
+                DepositScreenInspector.Inspection result = inspector.inspect(sessionId);
+                SanitizedDomSnapshotService snapshots = new SanitizedDomSnapshotService(
+                        manager, new InteractiveElementExtractor(manager),
+                        new BrowserActionPolicyContextResolver(manager), new DomSanitizer());
+                SanitizedDomSnapshot snapshot = snapshots.createSnapshot(sessionId);
+
+                org.assertj.core.api.Assertions.assertThat(result.valid()).isTrue();
+                org.assertj.core.api.Assertions.assertThat(result.productId())
+                        .isEqualTo(productId);
+                org.assertj.core.api.Assertions.assertThat(result.productName())
+                        .isNotBlank();
+                org.assertj.core.api.Assertions.assertThat(result.periodLabel())
+                        .isEqualTo("12개월");
+                org.assertj.core.api.Assertions.assertThat(snapshot.page().productId())
+                        .isEqualTo(productId);
+                org.assertj.core.api.Assertions.assertThat(snapshot.page().productName())
+                        .isEqualTo(result.productName());
+                org.assertj.core.api.Assertions.assertThat(snapshot.page().productPeriod())
+                        .isEqualTo(result.periodLabel());
+            }
         }
     }
 

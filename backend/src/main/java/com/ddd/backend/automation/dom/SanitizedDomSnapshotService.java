@@ -299,7 +299,12 @@ public final class SanitizedDomSnapshotService {
                                     ),
                                     sanitizer.sanitizeText(
                                             page.title()
-                                    )
+                                    ),
+                                    detailProductId(page.url(), page),
+                                    detailSemanticText(page,
+                                            "#summary-deposit-product-name"),
+                                    detailSemanticText(page,
+                                            "#summary-deposit-product-period")
                             );
 
                     /*
@@ -326,6 +331,19 @@ public final class SanitizedDomSnapshotService {
                     );
                 }
         );
+    }
+
+    private String detailProductId(String url, com.microsoft.playwright.Page page) {
+        if (page.locator("#page-deposit-product-detail").count() != 1) return null;
+        String path = java.net.URI.create(url).getPath();
+        String productId = path.substring(path.lastIndexOf('/') + 1);
+        return sanitizer.sanitizeNullableText(productId);
+    }
+
+    private String detailSemanticText(com.microsoft.playwright.Page page, String selector) {
+        com.microsoft.playwright.Locator locator = page.locator(selector);
+        if (locator.count() != 1 || !locator.first().isVisible()) return null;
+        return sanitizer.sanitizeNullableText(locator.first().textContent());
     }
 
     private SanitizedDomSnapshot.SecurityPolicy

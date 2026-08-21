@@ -35,6 +35,7 @@ public final class DepositScreenInspector {
                     && visible(page, "#btn-select-deposit-preferred")
                     && visible(page, "#btn-deposit-product-next");
             case PRODUCT_DETAIL -> visible(page, "#page-deposit-product-detail")
+                    && visible(page, "#summary-deposit-product-name")
                     && visible(page, "#summary-deposit-product-period")
                     && visible(page, "#btn-deposit-amount-start");
             case CONDITIONS -> visible(page, "#page-deposit-amount")
@@ -52,7 +53,16 @@ public final class DepositScreenInspector {
             case OTHER -> true;
             case UNKNOWN -> false;
         };
-        return new Inspection(screen, valid);
+        String productId = productId(page.url(), screen);
+        String periodLabel = screen == DepositPageClassifier.DepositPage.PRODUCT_DETAIL
+                && page.locator("#summary-deposit-product-period").count() == 1
+                ? page.locator("#summary-deposit-product-period").first().textContent().trim()
+                : null;
+        String productName = screen == DepositPageClassifier.DepositPage.PRODUCT_DETAIL
+                && page.locator("#summary-deposit-product-name").count() == 1
+                ? page.locator("#summary-deposit-product-name").first().textContent().trim()
+                : null;
+        return new Inspection(screen, valid, productId, productName, periodLabel);
     }
 
     private boolean safeTermsNext(Page page) {
@@ -93,6 +103,22 @@ public final class DepositScreenInspector {
 
     public record Inspection(
             DepositPageClassifier.DepositPage screen,
-            boolean valid
-    ) {}
+            boolean valid,
+            String productId,
+            String productName,
+            String periodLabel
+    ) {
+        public Inspection(DepositPageClassifier.DepositPage screen, boolean valid) {
+            this(screen, valid, null, null, null);
+        }
+    }
+
+    private String productId(String url, DepositPageClassifier.DepositPage screen) {
+        if (screen != DepositPageClassifier.DepositPage.PRODUCT_DETAIL
+                && screen != DepositPageClassifier.DepositPage.CONDITIONS
+                && screen != DepositPageClassifier.DepositPage.TERMS
+                && screen != DepositPageClassifier.DepositPage.SECURE_PASSWORD) return null;
+        String path = java.net.URI.create(url).getPath();
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
 }

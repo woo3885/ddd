@@ -34,8 +34,14 @@ public record SanitizedDomSnapshot(
 
     public record PageSnapshot(
             String url,
-            String title
+            String title,
+            String productId,
+            String productName,
+            String productPeriod
     ) {
+        public PageSnapshot(String url, String title) {
+            this(url, title, null, null, null);
+        }
     }
 
     public record ElementSnapshot(

@@ -80,6 +80,24 @@ class DepositScreenInspectorTest {
         assertThat(result.valid()).isTrue();
     }
 
+    @Test
+    void 상품상세는_URL상품과_실제_DOM기간을_함께_반환한다() {
+        navigate("/deposit/products/deposit-preferred", """
+                <main id="page-deposit-product-detail">
+                  <h2 id="summary-deposit-product-name">우대금리 정기예금</h2>
+                  <span id="summary-deposit-product-period">12개월</span>
+                  <button id="btn-deposit-amount-start">가입 금액 입력</button>
+                </main>
+                """);
+
+        DepositScreenInspector.Inspection result = inspector.inspect("deposit-screen");
+
+        assertThat(result.valid()).isTrue();
+        assertThat(result.productId()).isEqualTo("deposit-preferred");
+        assertThat(result.productName()).isEqualTo("우대금리 정기예금");
+        assertThat(result.periodLabel()).isEqualTo("12개월");
+    }
+
     private void navigate(String path, String html) {
         manager.execute("deposit-screen", Duration.ofSeconds(5), page -> {
             page.route("**/*", route -> route.fulfill(
