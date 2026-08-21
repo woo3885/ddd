@@ -81,6 +81,7 @@ export default function DepositProductsPage() {
                 type="button"
                 className="primary-button"
                 aria-pressed={isSelected}
+                aria-label={`${product.name} 선택`}
                 aria-describedby={
                   ELEMENT_IDS.STATUS_SELECTED_DEPOSIT_PRODUCT
                 }
