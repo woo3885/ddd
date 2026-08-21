@@ -204,6 +204,20 @@ function applyPolicies(
   );
 }
 
+async function generateFromCandidate(
+  currentRequest: AiActionRequest,
+  candidate: StructuredAIResponse,
+): Promise<StructuredAIResponse> {
+  return generateStructuredAction(
+    currentRequest,
+    async () => ({
+      model: "offline-test",
+      source: "GEMINI",
+      text: JSON.stringify(candidate),
+    }),
+  );
+}
+
 test("existing UserGoal parser preserves the requested 12 months and 5,000,000 won", () => {
   const adapted = adaptBackendRequestToAiActionRequest({
     userRequest:
@@ -381,7 +395,7 @@ test("amount entry uses only the amount from UserGoal and never a model recommen
   assert.equal(safe.message, DEPOSIT_GUIDANCE.amount);
 });
 
-test("missing amount and secure fields never receive an amount TYPE", () => {
+test("missing amount emits the exact non-financial 14-field NONE wire response", () => {
   const noAmountRequest = request(snapshot("snap-no-amount", [
     amountInput(),
   ]));
@@ -395,10 +409,35 @@ test("missing amount and secure fields never receive an amount TYPE", () => {
     noAmountRequest,
   );
 
-  assert.equal(missing.action, "NONE");
-  assert.equal(missing.inputValue, null);
-  assert.equal(missing.message, DEPOSIT_GUIDANCE.amountMissing);
+  const wire = adaptStructuredResponseToBackend(
+    missing,
+    noAmountRequest.domSnapshot.snapshotId,
+  );
 
+  assert.deepEqual(noAmountRequest.userGoal.duration, {
+    value: 12,
+    unit: "MONTH",
+  });
+  assert.deepEqual(Object.keys(wire), RESPONSE_FIELDS);
+  assert.deepEqual(wire, {
+    actionType: "NONE",
+    elementId: null,
+    value: null,
+    scrollX: null,
+    scrollY: null,
+    waitMillis: null,
+    status: "AI_EXECUTING",
+    message: DEPOSIT_GUIDANCE.amountMissing,
+    requiresUserAction: true,
+    executionBlocked: true,
+    decisionType: null,
+    sourceSnapshotId: null,
+    options: [],
+    terms: [],
+  });
+});
+
+test("secure fields never receive an amount TYPE", () => {
   const secureRequest = request(snapshot("snap-password", [
     secureInput(),
   ]));
@@ -412,6 +451,75 @@ test("missing amount and secure fields never receive an amount TYPE", () => {
   );
   assert.equal(secure.action, "PAUSE_FOR_SECURE_INPUT");
   assert.equal(secure.inputValue, null);
+});
+
+test("D25 rejects model-authored final confirmation while preserving secure and risk boundaries", async () => {
+  const finalCandidate = response({
+    status: "FINAL_CONFIRMATION_REQUIRED",
+    action: "REQUEST_FINAL_CONFIRMATION",
+    requiresUserAction: true,
+    confirmationId: "confirmation-d27",
+    summary: {
+      product: "synthetic-deposit",
+    },
+  });
+  const stageRequests = [
+    request(snapshot("snap-final-products", [
+      productChoice("el-final-product", "12개월 정기예금"),
+    ])),
+    request(snapshot("snap-final-detail", [
+      element("el-final-rate", "가입 기간과 금리", {
+        tag: "div",
+        role: null,
+      }),
+      element("el-final-next", "가입하기"),
+    ])),
+    request(snapshot("snap-final-amount", [
+      amountInput(),
+    ])),
+    request(snapshot("snap-final-terms", [
+      termChoice("el-final-term", "[필수] 예금 약관", false),
+    ])),
+    request(snapshot("snap-final-unknown", [])),
+  ];
+
+  for (const currentRequest of stageRequests) {
+    const safe = await generateFromCandidate(
+      currentRequest,
+      finalCandidate,
+    );
+    assert.equal(safe.status, "AI_EXECUTING");
+    assert.equal(safe.action, "NONE");
+    assert.equal(safe.confirmationId, null);
+    assert.equal(safe.summary, null);
+    assert.notEqual(safe.status, "FINAL_CONFIRMATION_REQUIRED");
+    assert.notEqual(safe.action, "REQUEST_FINAL_CONFIRMATION");
+  }
+
+  const secure = await generateFromCandidate(
+    request(snapshot("snap-final-secure", [
+      secureInput(),
+    ])),
+    finalCandidate,
+  );
+  assert.equal(secure.status, "SECURE_INPUT_REQUIRED");
+  assert.equal(secure.action, "PAUSE_FOR_SECURE_INPUT");
+
+  const risk = await generateFromCandidate(
+    request(snapshot("snap-risk-amount", [
+      amountInput(),
+    ])),
+    response({
+      status: "RISK_WARNING",
+      action: "NONE",
+      requiresUserAction: true,
+      riskType: "SUSPICIOUS_DEPOSIT",
+    }),
+  );
+  assert.equal(risk.status, "ERROR");
+  assert.equal(risk.action, "NONE");
+  assert.equal(risk.targetElementId, null);
+  assert.equal(risk.inputValue, null);
 });
 
 test("terms keep snapshot order, required markers, and authoritative checked values", () => {

@@ -28,6 +28,8 @@ export const DEPOSIT_GUIDANCE = Object.freeze({
     "가입 금액 입력 내용을 확인하고 다음 단계로 이동합니다.",
   amountMissing:
     "가입 금액을 확인하려면 추가 정보가 필요합니다.",
+  finalBoundary:
+    "현재 단계에서는 최종 확인을 진행하지 않습니다.",
   terms:
     "필수 약관과 선택 약관을 확인한 뒤 직접 선택해 주세요.",
   termsResume:
@@ -334,18 +336,25 @@ function createNoneResponse(
   };
 }
 
-function hasProtectedModelSignal(
+function hasRiskOrSecureModelSignal(
   response: StructuredAIResponse,
 ): boolean {
   return (
     response.status === "RISK_WARNING" ||
     response.riskType !== null ||
-    response.status === "FINAL_CONFIRMATION_REQUIRED" ||
-    response.action === "REQUEST_FINAL_CONFIRMATION" ||
-    response.confirmationId !== null ||
     response.status === "SECURE_INPUT_REQUIRED" ||
     response.action === "PAUSE_FOR_SECURE_INPUT" ||
     response.secureInputType !== null
+  );
+}
+
+function hasFinalConfirmationModelSignal(
+  response: StructuredAIResponse,
+): boolean {
+  return (
+    response.status === "FINAL_CONFIRMATION_REQUIRED" ||
+    response.action === "REQUEST_FINAL_CONFIRMATION" ||
+    response.confirmationId !== null
   );
 }
 
@@ -560,8 +569,24 @@ export function enforceDepositScenarioPolicy(
     return enforceSecureInput(response);
   }
 
-  if (hasProtectedModelSignal(response)) {
+  if (hasRiskOrSecureModelSignal(response)) {
     return response;
+  }
+
+  /*
+   * D25 ends at SECURE_INPUT_REQUIRED. A model-authored D27 signal must not
+   * cross the deposit Production boundary, including a semantically unknown
+   * deposit screen. Non-deposit UNKNOWN requests retain the existing global
+   * final-confirmation behavior.
+   */
+  if (
+    isDepositRequest(request) &&
+    hasFinalConfirmationModelSignal(response)
+  ) {
+    return createNoneResponse(
+      response,
+      DEPOSIT_GUIDANCE.finalBoundary,
+    );
   }
 
   switch (stage) {

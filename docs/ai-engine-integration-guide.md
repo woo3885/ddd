@@ -1088,7 +1088,9 @@ URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 �
   target이 하나이거나 모델 target과 일치할 때만 `CLICK`한다.
 - 가입 금액: 기존 UserGoal parser가 원 요청에서 읽은 양의 safe integer만 사용한다.
   NORMAL 금액 입력란에만 `TYPE`하며, 금액이 없으면 `ADDITIONAL_INFORMATION` wire를
-  임의 생성하지 않고 안내 message를 가진 안전한 `NONE`을 반환한다.
+  임의 생성하지 않고 안내 message를 가진 안전한 `NONE`을 반환한다. 이 응답은
+  `AI_EXECUTING`, `requiresUserAction=true`, `executionBlocked=true`, null Action payload와
+  null decision metadata, 빈 `options`/`terms`를 가진 기존 14필드 계약이다.
 - 약관: `TERMS_AGREEMENT`, `WAIT_FOR_USER`, `USER_DECISION_REQUIRED`로 자동 동의를
   차단한다. `terms` 순서와 snapshot의 실제 `checked`를 보존하며 `required`는 현재
   label의 필수 marker에서 D24 정책이 canonicalize한다.
@@ -1098,6 +1100,25 @@ URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 �
   `PAUSE_FOR_SECURE_INPUT`, `SECURE_INPUT_REQUIRED`, `requiresUserAction=true`,
   `executionBlocked=true`를 반환한다. Action payload와 decision metadata는 비우고
   Agent Loop를 즉시 중단한다.
+
+모델이 D25 예금 요청에서 `FINAL_CONFIRMATION_REQUIRED`,
+`REQUEST_FINAL_CONFIRMATION` 또는 `confirmationId`를 생성해도 Product/Detail/Amount/Terms와
+semantic UNKNOWN 단계에서 D27 상태로 전달하지 않고 안전한 `NONE`으로 차단한다.
+secure 및 risk 보호는 이 경계보다 우선한다.
+
+## 금액 누락 Backend integration limitation
+
+기간(예: 12개월)은 있지만 가입 금액이 없는 요청에서 C가 반환하는 `NONE`은 현재
+Backend에서 자동으로 `ADDITIONAL_INFORMATION_REQUIRED`로 전환되지 않는다.
+`AiDecisionExecutionService`의 추가정보 분기는 조건 화면에서 기간 누락 또는 잘못된
+`TYPE` 금액을 검사하지만, 기간이 존재하고 응답이 `NONE`이면 일반 Action 실행 경로로
+진입한다. 이후 `BrowserActionExecutionService`의 `NO_ACTION`을
+`BrowserActionStatusEventMapper`가 `AI_EXECUTING`으로 매핑한다.
+
+따라서 이 경우에는 Backend consumer가 C의 blocked `NONE`을
+`ADDITIONAL_INFORMATION_REQUIRED`로 전환하는 별도 계약이 추가로 필요하다. 현재 C는
+새 status/decisionType이나 wire 필드를 임의로 추가하지 않으며, 이 항목은 D25 통합
+blocker/limitation으로 남는다.
 
 Production Action allowlist와 C → B 14필드 rich response는 D23/D24 계약을 그대로
 유지한다. `SELECT`, `SCROLL`, `WAIT`를 활성화하지 않으며 Production 전역
@@ -1140,11 +1161,11 @@ Structured Output 처리, D24 option 검증, 14필드 adapter와 HTTP response�
 
 ```text
 npm.cmd run check                 PASS
-npm.cmd test                      61/61 PASS
+npm.cmd test                      63/63 PASS
 npm.cmd run test:d23               6/6 PASS
 npm.cmd run test:d24              31/31 PASS
 npm.cmd run test:d24:response      8/8 PASS
-npm.cmd run test:d25              14/14 PASS
+npm.cmd run test:d25              16/16 PASS
 git diff --check                  PASS
 ```
 
