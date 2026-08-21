@@ -78,6 +78,9 @@ function snapshot(
     page: {
       url: "https://example.test/decision",
       title: "사용자 선택",
+      productId: null,
+      productName: null,
+      productPeriod: null,
     },
     elements,
   };

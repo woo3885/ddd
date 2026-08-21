@@ -1088,7 +1088,15 @@ URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 �
 - 상품 선택 재개: Backend가 검증한 네 필드 context와 selected ID 순서를 그대로
   사용한다. 선택 요소를 재CLICK하거나 동일 결정을 재발행하지 않고 새 snapshot의
   enabled NORMAL `선택한 상품 상세 보기`만 `CLICK`한다.
-- 상품 상세: 현재 snapshot에 실제 존재하고 visible/enabled/NORMAL인
+- 상품 상세: Backend가 검증해 `page.productId`, `page.productName`,
+  `page.productPeriod`로 전달한 semantic context만 실제 선택 상품 조건으로 사용한다.
+  C는 product ID와 canonical detail path가 일치하고 product period가 양의 정수
+  `개월` 한 값일 때만 context를 수용한다. URL 숫자, element ID, 상품 순번, 모델 출력,
+  hardcoded 상품명 매핑으로 기간을 만들지 않는다.
+- 요청 기간과 실제 기간: 초기 요청의 기간은 선택 조건이고 생략 가능하다. 기간이
+  없으면 검증된 실제 상품 기간을 변경하지 않은 채 진행한다. 기간이 있으면 월 단위로
+  비교하며 불일치, 모호한 복수 기간, 잘못된 semantic context에서는 금융 Action 없는
+  blocked `NONE`을 반환한다. 정상 상세에서는 visible/enabled/NORMAL
   `가입 금액 입력하기`만 `CLICK`한다.
 - 가입 금액: 기존 UserGoal parser가 원 요청에서 읽은 양의 safe integer만 사용한다.
   `약관 확인으로 이동` enabled, `입력 금액 확인` enabled, 금액 input 순서로 phase를
@@ -1115,19 +1123,19 @@ URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 �
 semantic UNKNOWN 단계에서 D27 상태로 전달하지 않고 안전한 `NONE`으로 차단한다.
 secure 및 risk 보호는 이 경계보다 우선한다.
 
-## 금액 누락 Backend integration limitation
+## Backend 선택 상품 및 추가정보 계약
 
-기간(예: 12개월)은 있지만 가입 금액이 없는 요청에서 C가 반환하는 `NONE`은 현재
-Backend에서 자동으로 `ADDITIONAL_INFORMATION_REQUIRED`로 전환되지 않는다.
-`AiDecisionExecutionService`의 추가정보 분기는 조건 화면에서 기간 누락 또는 잘못된
-`TYPE` 금액을 검사하지만, 기간이 존재하고 응답이 `NONE`이면 일반 Action 실행 경로로
-진입한다. 이후 `BrowserActionExecutionService`의 `NO_ACTION`을
-`BrowserActionStatusEventMapper`가 `AI_EXECUTING`으로 매핑한다.
+Backend는 사용자가 확정한 PRODUCT_SELECTION의 실제 DOM ID를 세션별 선택 상품
+context에 기록한다. 상품 상세에서 실제 product ID/name/period와 원 요청 기간을
+검증하며, 기간이 없으면 유효한 선택 상품 조건으로 계속 진행하고 기간이 다르면
+`ADDITIONAL_INFORMATION_REQUIRED`로 전환한 뒤 C 호출 전에 Agent Loop를 중단한다.
+금액 화면도 같은 선택 상품 context와 canonical product ID가 일치해야 C를 호출한다.
 
-따라서 이 경우에는 Backend consumer가 C의 blocked `NONE`을
-`ADDITIONAL_INFORMATION_REQUIRED`로 전환하는 별도 계약이 추가로 필요하다. 현재 C는
-새 status/decisionType이나 wire 필드를 임의로 추가하지 않으며, 이 항목은 D25 통합
-blocker/limitation으로 남는다.
+금액이 없어서 C가 조건 화면에서 반환한 14필드 blocked `NONE`은 Backend
+`AiDecisionExecutionService`가 `ADDITIONAL_INFORMATION_REQUIRED`로 전환한다. C는
+`ADDITIONAL_INFORMATION` decisionType이나 새 status/DTO를 생성하지 않는다. C의
+period mismatch `NONE`은 direct route의 fail-closed 경계이며, 실제 Production 상태
+전환의 authoritative owner는 Backend다.
 
 Production Action allowlist와 C → B 14필드 rich response는 D23/D24 계약을 그대로
 유지한다. `SELECT`, `SCROLL`, `WAIT`를 활성화하지 않으며 Production 전역
@@ -1144,6 +1152,8 @@ Production Action allowlist와 C → B 14필드 rich response는 D23/D24 계약�
 가입 금액: 가입 금액을 확인해 주세요.
 금액 확인: 입력한 가입 금액을 확인해 주세요.
 금액 없음: 가입 금액을 확인하려면 추가 정보가 필요합니다.
+상품 검증 실패: 선택한 상품의 상세 조건을 다시 확인해 주세요.
+기간 불일치: 선택한 상품의 가입 기간을 다시 확인해 주세요.
 약관 이동: 약관 내용을 확인해 주세요.
 약관: 필수 약관과 선택 약관을 직접 선택해 주세요.
 약관 확인: 약관 선택 내용을 확인해 주세요.
@@ -1172,15 +1182,21 @@ D24 option 검증, 14필드 adapter와 HTTP response를 검증한다. 순서는 
 비밀번호 이동, 보안 중단이다. 실제 고객정보, 계좌번호, 비밀번호, API key 또는 raw
 Gemini output은 fixture와 로그에 포함하지 않는다.
 
+기간이 없는 100만 원 요청은 두 Demo 상품 각각에서 실제 상세 metadata의 12개월을
+검증한 후 `TYPE 1000000`, 금액 확인, 약관 이동까지 진행한다. 요청 12개월과 실제
+12개월 일치는 진행하고, 요청 6개월과 실제 12개월 불일치는 기간을 덮어쓰거나 다른
+상품을 선택하지 않고 blocked `NONE`으로 종료한다. Backend Production Agent Loop에서는
+동일 충돌을 `ADDITIONAL_INFORMATION_REQUIRED`로 전환한다.
+
 2026-08-21 오프라인 검증 기준:
 
 ```text
 npm.cmd run check                 PASS
-npm.cmd test                      65/65 PASS
+npm.cmd test                      70/70 PASS
 npm.cmd run test:d23               6/6 PASS
 npm.cmd run test:d24              31/31 PASS
 npm.cmd run test:d24:response      8/8 PASS
-npm.cmd run test:d25              18/18 PASS
+npm.cmd run test:d25              23/23 PASS
 git diff --check                  PASS
 ```
 

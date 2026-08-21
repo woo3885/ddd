@@ -21,6 +21,14 @@ const USER_DECISION_FIELDS = new Set([
   "sourceSnapshotId",
 ]);
 
+const PAGE_FIELDS = new Set([
+  "url",
+  "title",
+  "productId",
+  "productName",
+  "productPeriod",
+]);
+
 const MAX_SELECTED_OPTION_COUNT = 20;
 
 function isRecord(
@@ -79,6 +87,28 @@ function requireExactId(
   }
 
   return id;
+}
+
+function requireNullableExactString(
+  value: unknown,
+  fieldName: string,
+): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  const exact = requireNonBlankString(
+    value,
+    fieldName,
+  );
+
+  if (exact !== exact.trim()) {
+    throw new Error(
+      `[AI Engine] ${fieldName} must be preserved exactly.`,
+    );
+  }
+
+  return exact;
 }
 
 function validateSelectedOptionIds(
@@ -200,6 +230,39 @@ export function validateBackendAiDecisionRequest(
   requireNonBlankString(
     snapshot.snapshotId,
     "snapshot.snapshotId",
+  );
+
+  if (!isRecord(snapshot.page)) {
+    throw new Error(
+      "[AI Engine] snapshot.page must be an object.",
+    );
+  }
+
+  rejectUnknownFields(
+    snapshot.page,
+    PAGE_FIELDS,
+    "snapshot.page",
+  );
+
+  requireNonBlankString(
+    snapshot.page.url,
+    "snapshot.page.url",
+  );
+  requireNonBlankString(
+    snapshot.page.title,
+    "snapshot.page.title",
+  );
+  requireNullableExactString(
+    snapshot.page.productId,
+    "snapshot.page.productId",
+  );
+  requireNullableExactString(
+    snapshot.page.productName,
+    "snapshot.page.productName",
+  );
+  requireNullableExactString(
+    snapshot.page.productPeriod,
+    "snapshot.page.productPeriod",
   );
 
   if (!("userDecision" in value)) {

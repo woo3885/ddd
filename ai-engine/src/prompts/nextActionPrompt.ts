@@ -97,6 +97,9 @@ export function createNextActionPrompt(
 - 원문: ${goal.rawMessage}
 - Intent: ${goal.intent ?? "UNKNOWN"}
 - 금액: ${goal.amount ?? "없음"}
+- 요청 기간: ${goal.duration
+    ? `${goal.duration.value} ${goal.duration.unit}`
+    : "없음"}
 - 수취인: ${goal.recipient ?? "없음"}
 - 조건: ${goal.conditions?.join(", ") || "없음"}
 
@@ -113,7 +116,10 @@ ${verifiedDecisionSection}
 - 상품 option label은 current snapshot의 ariaLabel을 우선 사용하십시오. 빈 label이나 중복 label을 만들지 마십시오.
 - 사용자가 선택한 상품을 다른 상품으로 바꾸거나 selectedOptionIds를 다시 CLICK하지 마십시오.
 - PRODUCT_SELECTION context 이후에는 enabled NORMAL "선택한 상품 상세 보기"만 CLICK하십시오.
-- 상품 상세에서는 enabled NORMAL "가입 금액 입력하기"만 CLICK하고 가입 기간과 금리를 확인하도록 안내하십시오.
+- 상품 상세의 실제 상품 ID, 상품명, 가입 기간은 Backend가 검증해 current snapshot page에 제공한 productId/productName/productPeriod만 신뢰하십시오.
+- 사용자 요청 기간이 없으면 current snapshot의 실제 상품 기간을 확인한 뒤 진행할 수 있습니다. 기간 기본값을 만들지 마십시오.
+- 사용자 요청 기간이 있으면 실제 상품 기간과 비교하고, 다르면 기간을 바꾸거나 다른 상품을 자동 선택하지 마십시오.
+- 상품 상세에서는 기간 계약이 일치할 때 enabled NORMAL "가입 금액 입력하기"만 CLICK하고 가입 기간과 금리를 확인하도록 안내하십시오.
 - 금액 화면에서는 enabled NORMAL "약관 확인으로 이동", enabled NORMAL "입력 금액 확인", NORMAL 가입 금액 input 순서로 판단하십시오.
 - "입력 금액 확인"이 enabled이면 input이 계속 보여도 TYPE하지 마십시오. "약관 확인으로 이동"이 enabled이면 금액을 다시 TYPE하거나 확인하지 마십시오.
 - 가입 금액은 사용자 요청에 명시된 금액만 NORMAL 금액 입력란에 TYPE하십시오. 금액이 없으면 TYPE하지 말고 NONE으로 안전하게 중단하십시오.

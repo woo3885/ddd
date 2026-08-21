@@ -35,6 +35,9 @@ const secureInputSnapshot:
 
     title:
       "OTP 인증",
+    productId: null,
+    productName: null,
+    productPeriod: null,
   },
 
   elements: [

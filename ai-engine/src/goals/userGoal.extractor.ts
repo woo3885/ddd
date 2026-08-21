@@ -144,7 +144,7 @@ function extractConditions(text: string): string[] {
 function findMissingFields(
   goal: Pick<
     UserGoal,
-    "intent" | "amount" | "recipient" | "duration"
+    "intent" | "amount" | "recipient"
   >,
 ): string[] {
   const missingFields: string[] = [];
@@ -156,12 +156,6 @@ function findMissingFields(
 
     if (goal.recipient === null) {
       missingFields.push("recipient");
-    }
-  }
-
-  if (goal.intent === "DEPOSIT") {
-    if (goal.duration === null) {
-      missingFields.push("duration");
     }
   }
 

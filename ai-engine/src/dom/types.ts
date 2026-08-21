@@ -64,6 +64,9 @@ export interface DomModelInput {
   page: {
     url: string;
     title: string;
+    productId?: string | null;
+    productName?: string | null;
+    productPeriod?: string | null;
   };
 
   elements: ModelDomElement[];

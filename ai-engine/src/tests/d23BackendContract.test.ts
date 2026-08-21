@@ -62,6 +62,9 @@ const snapshot: BackendSanitizedDomSnapshot = {
   page: {
     url: "https://example.test",
     title: "test",
+    productId: null,
+    productName: null,
+    productPeriod: null,
   },
   elements: [],
 };

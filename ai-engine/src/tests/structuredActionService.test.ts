@@ -21,6 +21,9 @@ const request: AiActionRequest = {
     page: {
       url: "https://example.test/deposit",
       title: "예금 상품",
+      productId: null,
+      productName: null,
+      productPeriod: null,
     },
     elements: [
       {
