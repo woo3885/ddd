@@ -9,6 +9,8 @@ import com.ddd.backend.infrastructure.session.InMemoryAutomationSessionRepositor
 import com.ddd.backend.security.capture.FrameCaptureDecision;
 import com.ddd.backend.security.capture.FrameCaptureGuard;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
+import com.ddd.backend.frame.BrowserFrameStore;
+import com.ddd.backend.security.capture.CapturedBrowserFrame;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,17 +84,6 @@ class AgentLoopServiceTest {
     }
 
     @Test
-    void 동일_Action_연속_반복을_두번째_step에서_차단한다() {
-        when(executionService.execute(sessionId)).thenReturn(executed("same-action"));
-
-        loop.runNowForTest(sessionId);
-
-        assertEquals(WorkflowStatus.ERROR,
-                repository.findById(sessionId).orElseThrow().getStatus());
-        verify(executionService, org.mockito.Mockito.times(2)).execute(sessionId);
-    }
-
-    @Test
     void 같은_세션의_최초_AI는_동시에_한번만_예약한다() throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -127,6 +118,43 @@ class AgentLoopServiceTest {
         verify(executionService, times(1)).execute(sessionId);
         assertEquals(WorkflowStatus.ERROR,
                 repository.findById(sessionId).orElseThrow().getStatus());
+    }
+
+    @Test
+    void Action후_Frame_sequence가_증가하지_않으면_다음_AI를_호출하지_않는다() {
+        BrowserFrameStore frames = frameStoreWithInitialFrame();
+        AgentLoopService stableLoop = new AgentLoopService(repository,
+                executionService, captureGuard,
+                mock(AutomationStatusEventPublisher.class), screenInspector, frames);
+        when(captureGuard.evaluate(sessionId)).thenReturn(
+                FrameCaptureDecision.ALLOW, FrameCaptureDecision.ALLOW);
+        when(executionService.execute(sessionId)).thenReturn(executed("first"));
+
+        stableLoop.runNowForTest(sessionId);
+
+        assertEquals(WorkflowStatus.ERROR,
+                repository.findById(sessionId).orElseThrow().getStatus());
+        verify(executionService, times(1)).execute(sessionId);
+        stableLoop.close();
+    }
+
+    @Test
+    void Action후_secure_capture_차단은_ERROR가_아닌_secure상태로_중단한다() {
+        BrowserFrameStore frames = frameStoreWithInitialFrame();
+        AgentLoopService stableLoop = new AgentLoopService(repository,
+                executionService, captureGuard,
+                mock(AutomationStatusEventPublisher.class), screenInspector, frames);
+        when(captureGuard.evaluate(sessionId)).thenReturn(
+                FrameCaptureDecision.ALLOW,
+                FrameCaptureDecision.SECURE_INPUT_BLOCKED);
+        when(executionService.execute(sessionId)).thenReturn(executed("terms-next"));
+
+        stableLoop.runNowForTest(sessionId);
+
+        assertEquals(WorkflowStatus.SECURE_INPUT_REQUIRED,
+                repository.findById(sessionId).orElseThrow().getStatus());
+        verify(executionService, times(1)).execute(sessionId);
+        stableLoop.close();
     }
 
     @Test
@@ -241,5 +269,12 @@ class AgentLoopServiceTest {
         return new AiDecisionExecutionResult("snap-test", BrowserActionType.CLICK,
                 BrowserActionType.CLICK, BrowserActionExecutionStatus.EXECUTED,
                 "실행", key);
+    }
+
+    private BrowserFrameStore frameStoreWithInitialFrame() {
+        BrowserFrameStore frames = new BrowserFrameStore();
+        frames.publish(sessionId, new CapturedBrowserFrame(
+                new byte[]{1, 2, 3}, 1280, 720, "image/png"));
+        return frames;
     }
 }

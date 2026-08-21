@@ -2,6 +2,7 @@ package com.ddd.backend.service;
 
 import com.ddd.backend.automation.session.BrowserSessionManager;
 import com.ddd.backend.ai.AiDecisionExecutionService;
+import com.ddd.backend.ai.AgentLoopService;
 import com.ddd.backend.automation.BrowserActionExecutionResult;
 import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.automation.dom.ElementLocatorResolver;
@@ -150,6 +151,42 @@ class UserDecisionServiceTest {
 
         verify(actionService).executeElementClick(session.getSessionId(), "term-required");
         verify(aiService).execute(session.getSessionId());
+    }
+
+    @Test
+    void production_resume은_Decision_resolved_후_loop를_exactly_once_예약한다() {
+        AutomationSession session = createSession(WorkflowStatus.USER_DECISION_REQUIRED);
+        BrowserFrameStore frameStore = new BrowserFrameStore();
+        var frame = frameStore.publish(session.getSessionId(),
+                new CapturedBrowserFrame(new byte[]{1}, 1280, 720, "image/png"));
+        UserDecisionSessionState state = new UserDecisionSessionState();
+        state.register(session.getSessionId(), new AutomationDecisionPrompt(
+                "req-order", "dec-order", DecisionType.PRODUCT_SELECTION,
+                List.of(new AutomationDecisionOption("product", "상품")),
+                frame.metadata().frameId(), frame.metadata().sequence(), "snap-order"));
+        BrowserActionExecutionService actions = mock(BrowserActionExecutionService.class);
+        when(actions.executeElementClick(session.getSessionId(), "product"))
+                .thenReturn(BrowserActionExecutionResult.executed(BrowserActionType.CLICK));
+        AgentLoopService coordinator = mock(AgentLoopService.class);
+        when(coordinator.resume(session.getSessionId())).thenReturn(true);
+        UserDecisionService secured = new UserDecisionService(
+                sessionRepository, new UserDecisionValidator(), browserSessionManager,
+                statusEventPublisher, state, frameStore, actions,
+                mock(AiDecisionExecutionService.class), null, coordinator);
+
+        secured.submitDecision(session.getSessionId(), new SubmitDecisionRequest(
+                "req-order", "dec-order", DecisionType.PRODUCT_SELECTION,
+                List.of("product"), frame.metadata().frameId(), frame.metadata().sequence()));
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(
+                statusEventPublisher, coordinator);
+        order.verify(statusEventPublisher).publishDecisionResolved(
+                session.getSessionId(), "사용자 결정이 처리되었습니다.");
+        order.verify(coordinator).resume(session.getSessionId());
+        verify(coordinator, org.mockito.Mockito.times(1)).resume(session.getSessionId());
+        verify(statusEventPublisher, never()).publish(
+                session.getSessionId(), WorkflowStatus.AI_EXECUTING,
+                "사용자 선택이 제출되었습니다.");
     }
 
     @Test

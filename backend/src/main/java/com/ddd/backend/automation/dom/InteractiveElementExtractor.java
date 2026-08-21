@@ -113,6 +113,24 @@ public final class InteractiveElementExtractor {
             String text =
                     candidate.textContent();
 
+            /*
+             * 같은 상품 카드 안의 선택 버튼은 버튼 문구 대신 가까운
+             * semantic heading만 사용한다. 카드 전체 텍스트나 금리는 읽지 않는다.
+             */
+            if ("button".equals(tagName)) {
+                Object cardHeading = candidate.evaluate(
+                        """
+                        element => {
+                          const container = element.closest('article');
+                          const heading = container?.querySelector('h1, h2, h3');
+                          return heading?.innerText?.trim() || null;
+                        }
+                        """);
+                if (cardHeading instanceof String heading && !heading.isBlank()) {
+                    text = heading;
+                }
+            }
+
             if (text == null || text.isBlank()) {
                 Object associatedLabel = candidate.evaluate(
                         """
