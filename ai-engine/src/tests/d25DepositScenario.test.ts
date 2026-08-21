@@ -25,6 +25,7 @@ import type {
 } from "../api/aiRequest.types.js";
 import {
   classifyDepositScenarioStage,
+  DEPOSIT_DEMO_BUTTON_LABELS,
   DEPOSIT_GUIDANCE,
   enforceDepositScenarioPolicy,
   finalizeDepositScenarioGuidance,
@@ -144,9 +145,11 @@ function response(
 
 function productChoice(
   id: string,
-  label: string,
+  productName: string,
+  ariaLabel = `${productName} 선택`,
 ): BackendSanitizedDomElement {
-  return element(id, label, {
+  return element(id, productName, {
+    ariaLabel,
     securityPolicy: "USER_DECISION",
   });
 }
@@ -295,14 +298,57 @@ test("product list creates PRODUCT_SELECTION without automatic product selection
     wire.options.map((option) => option.id),
     ["el-product-12m", "el-product-preferred"],
   );
+  assert.deepEqual(
+    wire.options.map((option) => option.label),
+    ["12개월 정기예금 선택", "우대금리 정기예금 선택"],
+  );
   assert.equal(wire.elementId, null);
   assert.equal(wire.value, null);
 });
 
+test("product labels use snapshot ariaLabel and fail closed when duplicate or blank", async () => {
+  const duplicate = await generateFromCandidate(
+    request(snapshot("snap-products-duplicate", [
+      productChoice(
+        "el-product-12m",
+        "12개월 정기예금",
+        "예금 상품 선택",
+      ),
+      productChoice(
+        "el-product-preferred",
+        "우대금리 정기예금",
+        "예금 상품 선택",
+      ),
+    ])),
+    response(),
+  );
+  assert.equal(duplicate.status, "ERROR");
+  assert.equal(duplicate.action, "NONE");
+
+  const blank = await generateFromCandidate(
+    request(snapshot("snap-products-blank", [
+      element("el-product-blank", "", {
+        ariaLabel: null,
+        securityPolicy: "USER_DECISION",
+      }),
+    ])),
+    response({
+      action: "CLICK",
+      targetElementId: "el-product-blank",
+    }),
+  );
+  assert.equal(blank.status, "ERROR");
+  assert.equal(blank.action, "NONE");
+});
+
 test("verified product resume preserves context and clicks only a new NORMAL navigation target", () => {
   const currentRequest = request(snapshot("snap-products-resumed", [
-    productChoice("el-new-product", "다른 정기예금"),
-    element("el-product-next", "다음"),
+    productChoice("el-product-12m-new", "12개월 정기예금"),
+    productChoice("el-product-preferred-new", "우대금리 정기예금"),
+    element(
+      "el-product-next",
+      DEPOSIT_DEMO_BUTTON_LABELS.productNext,
+    ),
   ]), {
     userDecisionContext: {
       decisionId: "dec-product",
@@ -343,7 +389,10 @@ test("product detail allows only a semantic NORMAL navigation action", () => {
       tag: "div",
       role: null,
     }),
-    element("el-join", "가입하기"),
+    element(
+      "el-join",
+      DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+    ),
   ]), {
     userDecisionContext: {
       decisionId: "dec-product",
@@ -369,6 +418,23 @@ test("product detail allows only a semantic NORMAL navigation action", () => {
   assert.equal(safe.targetElementId, "el-join");
   assert.equal(safe.message, DEPOSIT_GUIDANCE.productDetail);
   assert.doesNotMatch(safe.message, /추천|완료|성공/);
+
+  const disabledRequest = request(snapshot("snap-detail-disabled", [
+    element(
+      "el-join-disabled",
+      DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+      { enabled: false },
+    ),
+  ]));
+  const disabled = applyPolicies(
+    response({
+      action: "CLICK",
+      targetElementId: "el-join-disabled",
+    }),
+    disabledRequest,
+  );
+  assert.equal(disabled.action, "NONE");
+  assert.equal(disabled.targetElementId, null);
 });
 
 test("amount entry uses only the amount from UserGoal and never a model recommendation", () => {
@@ -393,6 +459,57 @@ test("amount entry uses only the amount from UserGoal and never a model recommen
   assert.equal(safe.targetElementId, "el-amount");
   assert.equal(safe.inputValue, "5000000");
   assert.equal(safe.message, DEPOSIT_GUIDANCE.amount);
+});
+
+test("amount enabled buttons advance confirm and terms phases without repeated TYPE", () => {
+  const confirmRequest = request(snapshot("snap-amount-confirm", [
+    amountInput(),
+    element(
+      "el-amount-confirm",
+      DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+    ),
+    element(
+      "el-terms-start-disabled",
+      DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+      { enabled: false },
+    ),
+  ]));
+  const confirm = applyPolicies(
+    response({
+      action: "TYPE",
+      targetElementId: "el-amount",
+      inputValue: "1",
+    }),
+    confirmRequest,
+  );
+  assert.equal(confirm.action, "CLICK");
+  assert.equal(confirm.targetElementId, "el-amount-confirm");
+  assert.equal(confirm.inputValue, null);
+  assert.equal(confirm.message, DEPOSIT_GUIDANCE.amountConfirm);
+
+  const termsRequest = request(snapshot("snap-amount-terms", [
+    amountInput(),
+    element(
+      "el-amount-confirm",
+      DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+    ),
+    element(
+      "el-terms-start",
+      DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+    ),
+  ]));
+  const terms = applyPolicies(
+    response({
+      action: "TYPE",
+      targetElementId: "el-amount",
+      inputValue: "1",
+    }),
+    termsRequest,
+  );
+  assert.equal(terms.action, "CLICK");
+  assert.equal(terms.targetElementId, "el-terms-start");
+  assert.equal(terms.inputValue, null);
+  assert.equal(terms.message, DEPOSIT_GUIDANCE.termsNavigation);
 });
 
 test("missing amount emits the exact non-financial 14-field NONE wire response", () => {
@@ -562,7 +679,15 @@ test("verified terms resume never replays terms and uses only the new NORMAL nex
   const currentRequest = request(snapshot("snap-terms-resumed", [
     termChoice("el-new-service", "[필수] 서비스 약관", true),
     termChoice("el-new-marketing", "[선택] 마케팅 동의", false),
-    element("el-terms-next", "다음"),
+    element(
+      "el-terms-confirm",
+      DEPOSIT_DEMO_BUTTON_LABELS.termsConfirm,
+    ),
+    element(
+      "el-terms-next",
+      DEPOSIT_DEMO_BUTTON_LABELS.passwordStart,
+      { enabled: false },
+    ),
   ]), {
     userDecisionContext: {
       decisionId: "dec-terms",
@@ -583,7 +708,7 @@ test("verified terms resume never replays terms and uses only the new NORMAL nex
   );
 
   assert.equal(safe.action, "CLICK");
-  assert.equal(safe.targetElementId, "el-terms-next");
+  assert.equal(safe.targetElementId, "el-terms-confirm");
   assert.equal(safe.decisionType, null);
   assert.equal(safe.options, null);
   assert.equal(safe.message, DEPOSIT_GUIDANCE.termsResume);
@@ -717,7 +842,10 @@ test("Gemini failure has no financial action while secure DOM still fails closed
 test("guidance messages are TTS-safe and suppress completion, recommendation, and technical disclosure", () => {
   for (const message of Object.values(DEPOSIT_GUIDANCE)) {
     assert.equal(message.includes("\n"), false);
-    assert.ok(message.length <= 80);
+    assert.ok(message.length >= 15 && message.length <= 40);
+    assert.equal(message.match(/[.!?]/g)?.length, 1);
+    assert.match(message, /\.$/);
+    assert.doesNotMatch(message, /하고|한 뒤|다음 단계/);
     assert.doesNotMatch(
       message,
       /elementId|selector|raw dom|추천 상품|자동 선택|가입 완료|인증 성공/i,
@@ -737,7 +865,68 @@ test("guidance messages are TTS-safe and suppress completion, recommendation, an
   }
 });
 
-test("POST /api/ai/action validates the deterministic D25 production scenario through secure pause", async () => {
+function demoElementId(
+  token: string,
+  sequence: number,
+): string {
+  return `el-${token}-${String(sequence).padStart(3, "0")}`;
+}
+
+function demoNavigation(
+  token: string,
+): BackendSanitizedDomElement[] {
+  return [
+    element(demoElementId(token, 1), "메인", {
+      tag: "a",
+      role: "link",
+    }),
+    element(demoElementId(token, 2), "예금 상품", {
+      tag: "a",
+      role: "link",
+    }),
+    element(demoElementId(token, 3), "출금 계좌", {
+      tag: "a",
+      role: "link",
+    }),
+  ];
+}
+
+function demoSnapshot(
+  token: string,
+  path: string,
+  elements: BackendSanitizedDomElement[],
+): BackendSanitizedDomSnapshot {
+  return snapshot(
+    `snap-${token}`,
+    [...demoNavigation(token), ...elements],
+    `http://127.0.0.1:5190${path}`,
+  );
+}
+
+function demoTerms(
+  token: string,
+  checked: readonly [boolean, boolean, boolean],
+): BackendSanitizedDomElement[] {
+  return [
+    termChoice(
+      demoElementId(token, 4),
+      "필수 서비스 이용약관 데모 예금 서비스 이용 조건을 안내하는 Mock 약관입니다.",
+      checked[0],
+    ),
+    termChoice(
+      demoElementId(token, 5),
+      "필수 개인정보 수집·이용 데모 흐름에 필요한 개인정보 처리 범위를 안내합니다.",
+      checked[1],
+    ),
+    termChoice(
+      demoElementId(token, 6),
+      "선택 마케팅 정보 수신 데모 상품과 혜택 안내 수신 여부를 선택하는 항목입니다.",
+      checked[2],
+    ),
+  ];
+}
+
+test("POST /api/ai/action follows the real Demo sanitized DOM through secure pause", async () => {
   const app = express();
   app.use(express.json());
   app.use(
@@ -750,30 +939,48 @@ test("POST /api/ai/action validates the deterministic D25 production scenario th
             string,
             StructuredAIResponse
           > = {
-            "snap-route-products": response({
+            "snap-prod0001": response({
               action: "CLICK",
-              targetElementId: "el-product-12m",
+              targetElementId: "el-prod0001-004",
             }),
-            "snap-route-detail": response({
+            "snap-prod0002": response({
               action: "CLICK",
-              targetElementId: "el-detail-next",
+              targetElementId: "el-prod0001-004",
             }),
-            "snap-route-amount": response({
+            "snap-detail01": response({
+              action: "CLICK",
+              targetElementId: "el-detail01-005",
+            }),
+            "snap-amount01": response({
               action: "TYPE",
-              targetElementId: "el-amount",
+              targetElementId: "el-amount01-004",
               inputValue: "1",
             }),
-            "snap-route-terms": response({
-              action: "CLICK",
-              targetElementId: "el-term-service",
-            }),
-            "snap-route-terms-resumed": response({
-              action: "CLICK",
-              targetElementId: "el-terms-next",
-            }),
-            "snap-route-secure": response({
+            "snap-amount02": response({
               action: "TYPE",
-              targetElementId: "el-password",
+              targetElementId: "el-amount02-004",
+              inputValue: "1",
+            }),
+            "snap-amount03": response({
+              action: "TYPE",
+              targetElementId: "el-amount03-004",
+              inputValue: "1",
+            }),
+            "snap-terms001": response({
+              action: "CLICK",
+              targetElementId: "el-terms001-004",
+            }),
+            "snap-terms002": response({
+              action: "CLICK",
+              targetElementId: "el-terms001-004",
+            }),
+            "snap-terms003": response({
+              action: "CLICK",
+              targetElementId: "el-terms003-004",
+            }),
+            "snap-secure01": response({
+              action: "TYPE",
+              targetElementId: "el-secure01-004",
               inputValue: "synthetic-ignored",
             }),
           };
@@ -824,87 +1031,258 @@ test("POST /api/ai/action validates the deterministic D25 production scenario th
       >;
     };
 
-    const products = await post(snapshot(
-      "snap-route-products",
+    const products = await post(demoSnapshot(
+      "prod0001",
+      "/deposit/products",
       [
-        productChoice("el-product-12m", "12개월 정기예금"),
-        productChoice("el-product-other", "다른 정기예금"),
+        productChoice(
+          demoElementId("prod0001", 4),
+          "12개월 정기예금",
+        ),
+        productChoice(
+          demoElementId("prod0001", 5),
+          "우대금리 정기예금",
+        ),
+        element(
+          demoElementId("prod0001", 6),
+          "상품 선택 후 다음",
+          { enabled: false },
+        ),
       ],
     ));
+    assert.deepEqual(Object.keys(products), RESPONSE_FIELDS);
     assert.equal(products.actionType, "WAIT_FOR_USER");
     assert.equal(products.decisionType, "PRODUCT_SELECTION");
-    assert.equal(products.sourceSnapshotId, "snap-route-products");
+    assert.equal(products.sourceSnapshotId, "snap-prod0001");
+    assert.deepEqual(products.options, [
+      {
+        id: "el-prod0001-004",
+        label: "12개월 정기예금 선택",
+        required: false,
+        checked: null,
+      },
+      {
+        id: "el-prod0001-005",
+        label: "우대금리 정기예금 선택",
+        required: false,
+        checked: null,
+      },
+    ]);
+    assert.equal(products.elementId, null);
 
-    const detail = await post(snapshot(
-      "snap-route-detail",
+    const selectedProductNext = await post(demoSnapshot(
+      "prod0002",
+      "/deposit/products",
       [
-        element("el-rate", "금리 연 3.2%", {
-          tag: "div",
-          role: null,
-        }),
-        element("el-detail-next", "가입하기"),
+        productChoice(
+          demoElementId("prod0002", 4),
+          "12개월 정기예금",
+        ),
+        productChoice(
+          demoElementId("prod0002", 5),
+          "우대금리 정기예금",
+        ),
+        element(
+          demoElementId("prod0002", 6),
+          DEPOSIT_DEMO_BUTTON_LABELS.productNext,
+        ),
       ],
     ), {
       decisionId: "dec-route-product",
       decisionType: "PRODUCT_SELECTION",
-      selectedOptionIds: ["el-product-12m"],
-      sourceSnapshotId: "snap-route-products",
+      selectedOptionIds: ["el-prod0001-004"],
+      sourceSnapshotId: "snap-prod0001",
     });
-    assert.equal(detail.actionType, "CLICK");
-    assert.equal(detail.elementId, "el-detail-next");
+    assert.equal(selectedProductNext.actionType, "CLICK");
+    assert.equal(selectedProductNext.elementId, "el-prod0002-006");
+    assert.notEqual(selectedProductNext.elementId, "el-prod0001-004");
 
-    const amount = await post(snapshot(
-      "snap-route-amount",
-      [amountInput()],
-    ), {
-      decisionId: "dec-route-product",
-      decisionType: "PRODUCT_SELECTION",
-      selectedOptionIds: ["el-product-12m"],
-      sourceSnapshotId: "snap-route-products",
-    });
+    const detail = await post(demoSnapshot(
+      "detail01",
+      "/deposit/products/deposit-12m",
+      [
+        element(demoElementId("detail01", 4), "예금 상품 목록으로 돌아가기"),
+        element(
+          demoElementId("detail01", 5),
+          DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+        ),
+      ],
+    ));
+    assert.equal(detail.actionType, "CLICK");
+    assert.equal(detail.elementId, "el-detail01-005");
+
+    const amount = await post(demoSnapshot(
+      "amount01",
+      "/deposit/conditions/deposit-12m",
+      [
+        element(demoElementId("amount01", 4), "가입 금액", {
+          tag: "input",
+          role: "textbox",
+          inputType: "text",
+        }),
+        element(demoElementId("amount01", 5), "상품 상세로 돌아가기"),
+        element(
+          demoElementId("amount01", 6),
+          DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+          { enabled: false },
+        ),
+        element(
+          demoElementId("amount01", 7),
+          DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+          { enabled: false },
+        ),
+      ],
+    ));
     assert.equal(amount.actionType, "TYPE");
     assert.equal(amount.value, "5000000");
+    assert.equal(amount.elementId, "el-amount01-004");
 
-    const terms = await post(snapshot(
-      "snap-route-terms",
+    const amountConfirm = await post(demoSnapshot(
+      "amount02",
+      "/deposit/conditions/deposit-12m",
       [
-        termChoice("el-term-service", "[필수] 서비스 약관", false),
-        termChoice("el-term-marketing", "[선택] 마케팅 동의", false),
+        element(demoElementId("amount02", 4), "가입 금액", {
+          tag: "input",
+          role: "textbox",
+          inputType: "text",
+        }),
+        element(demoElementId("amount02", 5), "상품 상세로 돌아가기"),
+        element(
+          demoElementId("amount02", 6),
+          DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+        ),
+        element(
+          demoElementId("amount02", 7),
+          DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+          { enabled: false },
+        ),
       ],
-    ), {
-      decisionId: "dec-route-product",
-      decisionType: "PRODUCT_SELECTION",
-      selectedOptionIds: ["el-product-12m"],
-      sourceSnapshotId: "snap-route-products",
-    });
+    ));
+    assert.equal(amountConfirm.actionType, "CLICK");
+    assert.equal(amountConfirm.elementId, "el-amount02-006");
+    assert.equal(amountConfirm.value, null);
+
+    const termsStart = await post(demoSnapshot(
+      "amount03",
+      "/deposit/conditions/deposit-12m",
+      [
+        element(demoElementId("amount03", 4), "가입 금액", {
+          tag: "input",
+          role: "textbox",
+          inputType: "text",
+        }),
+        element(demoElementId("amount03", 5), "상품 상세로 돌아가기"),
+        element(
+          demoElementId("amount03", 6),
+          DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+        ),
+        element(
+          demoElementId("amount03", 7),
+          DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+        ),
+      ],
+    ));
+    assert.equal(termsStart.actionType, "CLICK");
+    assert.equal(termsStart.elementId, "el-amount03-007");
+    assert.equal(termsStart.value, null);
+
+    const terms = await post(demoSnapshot(
+      "terms001",
+      "/deposit/terms/deposit-12m",
+      [
+        ...demoTerms("terms001", [false, false, false]),
+        element(demoElementId("terms001", 7), "가입 금액 입력으로 돌아가기"),
+        element(
+          demoElementId("terms001", 8),
+          DEPOSIT_DEMO_BUTTON_LABELS.termsConfirm,
+          { enabled: false },
+        ),
+        element(
+          demoElementId("terms001", 9),
+          DEPOSIT_DEMO_BUTTON_LABELS.passwordStart,
+          { enabled: false },
+        ),
+      ],
+    ));
     assert.equal(terms.actionType, "WAIT_FOR_USER");
     assert.equal(terms.decisionType, "TERMS_AGREEMENT");
-
-    const termsResumed = await post(snapshot(
-      "snap-route-terms-resumed",
+    assert.deepEqual(
+      (terms.terms as Array<{ id: string; checked: boolean }>).map(
+        (term) => ({ id: term.id, checked: term.checked }),
+      ),
       [
-        termChoice("el-new-service", "[필수] 서비스 약관", true),
-        termChoice("el-new-marketing", "[선택] 마케팅 동의", false),
-        element("el-terms-next", "다음"),
+        { id: "el-terms001-004", checked: false },
+        { id: "el-terms001-005", checked: false },
+        { id: "el-terms001-006", checked: false },
+      ],
+    );
+
+    const termsConfirm = await post(demoSnapshot(
+      "terms002",
+      "/deposit/terms/deposit-12m",
+      [
+        ...demoTerms("terms002", [true, true, false]),
+        element(demoElementId("terms002", 7), "가입 금액 입력으로 돌아가기"),
+        element(
+          demoElementId("terms002", 8),
+          DEPOSIT_DEMO_BUTTON_LABELS.termsConfirm,
+        ),
+        element(
+          demoElementId("terms002", 9),
+          DEPOSIT_DEMO_BUTTON_LABELS.passwordStart,
+          { enabled: false },
+        ),
       ],
     ), {
       decisionId: "dec-route-terms",
       decisionType: "TERMS_AGREEMENT",
-      selectedOptionIds: ["el-term-service"],
-      sourceSnapshotId: "snap-route-terms",
+      selectedOptionIds: [
+        "el-terms001-004",
+        "el-terms001-005",
+      ],
+      sourceSnapshotId: "snap-terms001",
     });
-    assert.equal(termsResumed.actionType, "CLICK");
-    assert.equal(termsResumed.elementId, "el-terms-next");
+    assert.equal(termsConfirm.actionType, "CLICK");
+    assert.equal(termsConfirm.elementId, "el-terms002-008");
+    assert.equal(termsConfirm.decisionType, null);
 
-    const secure = await post(snapshot(
-      "snap-route-secure",
-      [secureInput()],
-    ), {
-      decisionId: "dec-route-terms",
-      decisionType: "TERMS_AGREEMENT",
-      selectedOptionIds: ["el-term-service"],
-      sourceSnapshotId: "snap-route-terms",
-    });
+    const passwordStart = await post(demoSnapshot(
+      "terms003",
+      "/deposit/terms/deposit-12m",
+      [
+        ...demoTerms("terms003", [true, true, false]),
+        element(demoElementId("terms003", 7), "가입 금액 입력으로 돌아가기"),
+        element(
+          demoElementId("terms003", 8),
+          DEPOSIT_DEMO_BUTTON_LABELS.termsConfirm,
+        ),
+        element(
+          demoElementId("terms003", 9),
+          DEPOSIT_DEMO_BUTTON_LABELS.passwordStart,
+        ),
+      ],
+    ));
+    assert.equal(passwordStart.actionType, "CLICK");
+    assert.equal(passwordStart.elementId, "el-terms003-009");
+    assert.equal(passwordStart.decisionType, null);
+
+    const secure = await post(demoSnapshot(
+      "secure01",
+      "/deposit/secure/password/deposit-12m",
+      [
+        element(demoElementId("secure01", 4), "계좌 비밀번호", {
+          tag: "input",
+          role: "textbox",
+          inputType: "password",
+          securityPolicy: "SECURE_INPUT",
+        }),
+        element(demoElementId("secure01", 5), "약관 화면으로 돌아가기"),
+        element(demoElementId("secure01", 6), "입력 완료", {
+          enabled: false,
+        }),
+        element(demoElementId("secure01", 7), "데모 흐름 나가기"),
+      ],
+    ));
     assert.deepEqual(Object.keys(secure), RESPONSE_FIELDS);
     assert.equal(secure.actionType, "PAUSE_FOR_SECURE_INPUT");
     assert.equal(secure.status, "SECURE_INPUT_REQUIRED");

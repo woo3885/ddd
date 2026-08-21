@@ -8,6 +8,8 @@ import type {
 } from "../output/aiResponse.types.js";
 
 import {
+  SAFE_DECISION_LABEL,
+  sanitizeDecisionLabel,
   sanitizeInternalMessage,
 } from "../messages/messageSafety.js";
 
@@ -25,17 +27,32 @@ export const DEPOSIT_GUIDANCE = Object.freeze({
   productDetail:
     "가입 기간과 금리를 확인해 주세요.",
   amount:
-    "가입 금액 입력 내용을 확인하고 다음 단계로 이동합니다.",
+    "가입 금액을 확인해 주세요.",
+  amountConfirm:
+    "입력한 가입 금액을 확인해 주세요.",
+  termsNavigation:
+    "약관 내용을 확인해 주세요.",
   amountMissing:
     "가입 금액을 확인하려면 추가 정보가 필요합니다.",
   finalBoundary:
     "현재 단계에서는 최종 확인을 진행하지 않습니다.",
   terms:
-    "필수 약관과 선택 약관을 확인한 뒤 직접 선택해 주세요.",
+    "필수 약관과 선택 약관을 직접 선택해 주세요.",
   termsResume:
-    "약관 선택 내용을 확인하고 다음 단계로 이동합니다.",
+    "약관 선택 내용을 확인해 주세요.",
+  secureNavigation:
+    "비밀번호 입력 화면으로 이동합니다.",
   secureInput:
-    "비밀번호는 금융 화면에 직접 입력해 주세요. 입력 내용은 AI가 확인하지 않습니다.",
+    "비밀번호는 금융 화면에 직접 입력해 주세요.",
+} as const);
+
+export const DEPOSIT_DEMO_BUTTON_LABELS = Object.freeze({
+  productNext: "선택한 상품 상세 보기",
+  amountStart: "가입 금액 입력하기",
+  amountConfirm: "입력 금액 확인",
+  termsStart: "약관 확인으로 이동",
+  termsConfirm: "약관 선택 확인",
+  passwordStart: "비밀번호 입력으로 이동",
 } as const);
 
 const PRODUCT_KEYWORDS = [
@@ -99,6 +116,19 @@ function elementText(
     .join(" ");
 }
 
+function preferredDecisionLabel(
+  element: BackendSanitizedDomElement,
+): string {
+  return [
+    element.ariaLabel,
+    element.text,
+    element.placeholder,
+  ].find((value) =>
+    typeof value === "string" &&
+    value.trim().length > 0,
+  )?.trim() ?? "";
+}
+
 function includesAny(
   value: string,
   keywords: readonly string[],
@@ -150,6 +180,45 @@ function isNormalClickable(
   );
 }
 
+function isVisibleNormalButton(
+  element: BackendSanitizedDomElement,
+): boolean {
+  const tag = normalize(element.tag);
+  const role = normalize(element.role);
+  return (
+    element.visible &&
+    element.securityPolicy === "NORMAL" &&
+    (
+      tag === "button" ||
+      role === "button"
+    )
+  );
+}
+
+function matchesExactLabel(
+  element: BackendSanitizedDomElement,
+  label: string,
+): boolean {
+  const expected = normalize(label);
+  return (
+    normalize(element.text) === expected ||
+    normalize(element.ariaLabel) === expected
+  );
+}
+
+function findDemoButton(
+  request: AiActionRequest,
+  label: string,
+  enabledOnly: boolean,
+): BackendSanitizedDomElement | null {
+  return request.domSnapshot.elements.find(
+    (element) =>
+      isVisibleNormalButton(element) &&
+      (!enabledOnly || element.enabled) &&
+      matchesExactLabel(element, label),
+  ) ?? null;
+}
+
 function isAmountInput(
   element: BackendSanitizedDomElement,
 ): boolean {
@@ -186,6 +255,32 @@ function productChoices(
       );
     },
   );
+}
+
+function validatedProductChoices(
+  request: AiActionRequest,
+): BackendSanitizedDomElement[] {
+  const choices = productChoices(request);
+  const labels = new Set<string>();
+
+  for (const choice of choices) {
+    const label = sanitizeDecisionLabel(
+      preferredDecisionLabel(choice),
+    );
+    const normalizedLabel = normalize(label);
+    if (
+      label === SAFE_DECISION_LABEL ||
+      normalizedLabel.length === 0 ||
+      labels.has(normalizedLabel)
+    ) {
+      throw new Error(
+        "[AI Engine] deposit product labels must be non-blank and unique in the current snapshot.",
+      );
+    }
+    labels.add(normalizedLabel);
+  }
+
+  return choices;
 }
 
 function termChoices(
@@ -271,13 +366,40 @@ export function classifyDepositScenarioStage(
   }
 
   if (
-    request.domSnapshot.elements.some(isAmountInput)
+    request.domSnapshot.elements.some(isAmountInput) ||
+    findDemoButton(
+      request,
+      DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+      false,
+    ) !== null ||
+    findDemoButton(
+      request,
+      DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+      false,
+    ) !== null
   ) {
     return "AMOUNT_ENTRY";
   }
 
-  if (productChoices(request).length > 0) {
+  if (
+    productChoices(request).length > 0 ||
+    findDemoButton(
+      request,
+      DEPOSIT_DEMO_BUTTON_LABELS.productNext,
+      false,
+    ) !== null
+  ) {
     return "PRODUCT_LIST";
+  }
+
+  if (
+    findDemoButton(
+      request,
+      DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+      false,
+    ) !== null
+  ) {
+    return "PRODUCT_DETAIL";
   }
 
   const visibleText = request.domSnapshot.elements
@@ -378,7 +500,7 @@ function createDecisionResponse(
     riskType: null,
     options: choices.map((choice) => ({
       id: choice.elementId,
-      label: elementText(choice),
+      label: preferredDecisionLabel(choice),
       ...(decisionType === "TERMS_AGREEMENT"
         ? { required: false }
         : {}),
@@ -386,26 +508,6 @@ function createDecisionResponse(
     confirmationId: null,
     summary: null,
   };
-}
-
-function chooseNavigationTarget(
-  response: StructuredAIResponse,
-  request: AiActionRequest,
-): BackendSanitizedDomElement | null {
-  const targets = navigationTargets(request);
-  const modelTarget = targets.find(
-    (target) =>
-      response.action === "CLICK" &&
-      response.targetElementId === target.elementId,
-  );
-
-  if (modelTarget) {
-    return modelTarget;
-  }
-
-  return targets.length === 1
-    ? targets[0] ?? null
-    : null;
 }
 
 function createNavigationResponse(
@@ -435,9 +537,10 @@ function enforceProductList(
     request.userDecisionContext?.decisionType ===
     "PRODUCT_SELECTION"
   ) {
-    const target = chooseNavigationTarget(
-      response,
+    const target = findDemoButton(
       request,
+      DEPOSIT_DEMO_BUTTON_LABELS.productNext,
+      true,
     );
     return target
       ? createNavigationResponse(
@@ -454,7 +557,7 @@ function enforceProductList(
   return createDecisionResponse(
     response,
     "PRODUCT_SELECTION",
-    productChoices(request),
+    validatedProductChoices(request),
     DEPOSIT_GUIDANCE.productSelection,
   );
 }
@@ -463,23 +566,37 @@ function enforceTerms(
   response: StructuredAIResponse,
   request: AiActionRequest,
 ): StructuredAIResponse {
+  const passwordTarget = findDemoButton(
+    request,
+    DEPOSIT_DEMO_BUTTON_LABELS.passwordStart,
+    true,
+  );
+  if (passwordTarget) {
+    return createNavigationResponse(
+      response,
+      passwordTarget,
+      DEPOSIT_GUIDANCE.secureNavigation,
+    );
+  }
+
   if (
     request.userDecisionContext?.decisionType ===
     "TERMS_AGREEMENT"
   ) {
-    const target = chooseNavigationTarget(
-      response,
+    const confirmTarget = findDemoButton(
       request,
+      DEPOSIT_DEMO_BUTTON_LABELS.termsConfirm,
+      true,
     );
-    return target
+    return confirmTarget
       ? createNavigationResponse(
           response,
-          target,
+          confirmTarget,
           DEPOSIT_GUIDANCE.termsResume,
         )
       : createNoneResponse(
           response,
-          DEPOSIT_GUIDANCE.terms,
+          DEPOSIT_GUIDANCE.termsResume,
         );
   }
 
@@ -495,6 +612,32 @@ function enforceAmountEntry(
   response: StructuredAIResponse,
   request: AiActionRequest,
 ): StructuredAIResponse {
+  const termsTarget = findDemoButton(
+    request,
+    DEPOSIT_DEMO_BUTTON_LABELS.termsStart,
+    true,
+  );
+  if (termsTarget) {
+    return createNavigationResponse(
+      response,
+      termsTarget,
+      DEPOSIT_GUIDANCE.termsNavigation,
+    );
+  }
+
+  const confirmTarget = findDemoButton(
+    request,
+    DEPOSIT_DEMO_BUTTON_LABELS.amountConfirm,
+    true,
+  );
+  if (confirmTarget) {
+    return createNavigationResponse(
+      response,
+      confirmTarget,
+      DEPOSIT_GUIDANCE.amountConfirm,
+    );
+  }
+
   const amount = request.userGoal.amount;
   if (
     amount === undefined ||
@@ -593,9 +736,10 @@ export function enforceDepositScenarioPolicy(
     case "PRODUCT_LIST":
       return enforceProductList(response, request);
     case "PRODUCT_DETAIL": {
-      const target = chooseNavigationTarget(
-        response,
+      const target = findDemoButton(
         request,
+        DEPOSIT_DEMO_BUTTON_LABELS.amountStart,
+        true,
       );
       return target
         ? createNavigationResponse(
