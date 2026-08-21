@@ -13,6 +13,7 @@ import {
 } from '@/features/Integration/model/session-ui-state';
 import { Button } from '@/shared/ui/Button';
 import { Panel } from '@/shared/ui/Panel';
+import { SecureInputPanel } from '@/shared/ui/SecureInputPanel';
 import { StatusBadge, type StatusBadgeVariant } from '@/shared/ui/StatusBadge';
 import { Text } from '@/shared/ui/Text';
 import { TermsAgreementPanel } from '@/shared/ui/TermsAgreementPanel';
@@ -58,6 +59,9 @@ const DECISION_TITLES = {
   RECIPIENT_SELECTION: '수취인 선택',
   TERMS_AGREEMENT: '약관 선택'
 } as const;
+
+const SECURE_INPUT_MESSAGE =
+  '비밀번호는 금융 화면에 직접 입력하고 화면 캡처와 자동 안내는 멈춥니다.';
 
 function elementIdentity(id: string) {
   return { id, 'data-testid': id };
@@ -131,7 +135,10 @@ export default function SessionIntegrationView({
     decisionIntegration.isBusy ||
     statusIntegration.connectionPhase === 'CONNECTING' ||
     statusIntegration.connectionPhase === 'RESYNCING';
+  const secureInputRequired =
+    statusIntegration.workflowStatus === 'SECURE_INPUT_REQUIRED';
   const showDecisionPanel =
+    statusIntegration.workflowStatus === 'USER_DECISION_REQUIRED' &&
     statusIntegration.activeDecision !== null &&
     statusIntegration.decisionSubmitPhase !== 'WAITING_FOR_RESUME';
 
@@ -196,10 +203,20 @@ export default function SessionIntegrationView({
         </div>
       </Panel>
 
-      <WorkflowStatusPanel
-        status={statusIntegration.workflowStatus}
-        message={statusIntegration.guideMessage}
-      />
+      {secureInputRequired ? (
+        <SecureInputPanel
+          message={SECURE_INPUT_MESSAGE}
+          completionRequested={false}
+          disabled
+          isBusy={false}
+          onComplete={() => undefined}
+        />
+      ) : (
+        <WorkflowStatusPanel
+          status={statusIntegration.workflowStatus}
+          message={statusIntegration.guideMessage}
+        />
+      )}
 
       {showDecisionPanel && statusIntegration.activeDecision?.decisionType ===
       'TERMS_AGREEMENT' ? (

@@ -328,6 +328,20 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
                       >
                         {task.description}
                       </Text>
+                      <Text
+                        as="span"
+                        variant="caption"
+                        className="mt-3 block font-bold text-text-primary"
+                      >
+                        데모 요청
+                      </Text>
+                      <Text
+                        as="span"
+                        variant="body"
+                        className="mt-1 block text-text-secondary"
+                      >
+                        {task.userRequest}
+                      </Text>
                     </span>
                   </label>
                 );

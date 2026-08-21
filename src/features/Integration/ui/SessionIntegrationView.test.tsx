@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BackendSession } from '@/features/Integration/api/session-rest-client';
 import type { SessionTarget } from '@/features/Integration/api/session-status-transport';
+import { SECURE_INPUT_PANEL_SELECTORS } from '@/shared/ui/SecureInputPanel';
+import { WORKFLOW_STATUS_PANEL_SELECTORS } from '@/shared/ui/WorkflowStatusPanel';
 import SessionIntegrationView, {
   SESSION_INTEGRATION_SELECTORS
 } from './SessionIntegrationView';
@@ -154,6 +156,10 @@ beforeEach(() => {
   mocks.overlayProps.mockClear();
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('SessionIntegrationView', () => {
   it('동일 session을 Frame·Status Hook에 전달하고 live 상태를 표시한다', () => {
     render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
@@ -218,6 +224,46 @@ describe('SessionIntegrationView', () => {
     );
   });
 
+  it('SECURE_INPUT_REQUIRED에서는 보호 Panel만 발표하고 Action과 Target을 차단한다', () => {
+    const fetchMock = vi.fn();
+    const submitViewerAction = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.frameHook.mockReturnValue(
+      frameHook({ submitViewerAction })
+    );
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'SECURE_INPUT_REQUIRED',
+        guideMessage: '비밀번호 원문을 입력해 주세요.',
+        target: TARGET
+      })
+    );
+
+    const { container } = render(
+      <SessionIntegrationView session={SESSION} onExit={vi.fn()} />
+    );
+
+    expect(
+      screen.getByTestId(SECURE_INPUT_PANEL_SELECTORS.panel)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(WORKFLOW_STATUS_PANEL_SELECTORS.panel)
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(
+      screen.getByTestId(SECURE_INPUT_PANEL_SELECTORS.completeButton)
+    ).toBeDisabled();
+    expect(container.querySelector('input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mock-f3-overlay')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-f2-viewer')).toHaveAttribute(
+      'data-interaction-disabled',
+      'true'
+    );
+    expect(submitViewerAction).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(/인증 성공|가입 성공/)).not.toBeInTheDocument();
+  });
+
   it('종료 버튼은 session reset 후 Dashboard 복귀 경계만 호출한다', async () => {
     const user = userEvent.setup();
     const reset = vi.fn().mockResolvedValue(undefined);
@@ -277,6 +323,99 @@ describe('SessionIntegrationView', () => {
     );
   });
 
+  it('상품 option 순서를 유지하고 직접 선택과 확인을 분리한다', async () => {
+    const user = userEvent.setup();
+    const selectOption = vi.fn();
+    const confirmOption = vi.fn();
+    mocks.decisionHook.mockReturnValue(
+      decisionHook({ selectOption, confirmOption })
+    );
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'USER_DECISION_REQUIRED',
+        activeDecision: {
+          requestId: 'req-products',
+          decisionId: 'dec-products',
+          decisionType: 'PRODUCT_SELECTION',
+          options: [
+            {
+              id: 'product-12m',
+              label: '12개월 정기예금 선택',
+              required: false,
+              checked: false,
+              disabled: false
+            },
+            {
+              id: 'product-preferred',
+              label: '우대금리 정기예금 선택',
+              required: false,
+              checked: false,
+              disabled: false
+            }
+          ],
+          frameId: 'frm-001',
+          frameSequence: 3,
+          sourceSnapshotId: 'snap-products'
+        },
+        selectedOptionId: null
+      })
+    );
+
+    const { rerender } = render(
+      <SessionIntegrationView session={SESSION} onExit={vi.fn()} />
+    );
+    const radios = screen.getAllByRole('radio');
+
+    expect(radios).toHaveLength(2);
+    expect(radios[0]).toHaveAccessibleName(/12개월 정기예금 선택/);
+    expect(radios[1]).toHaveAccessibleName(/우대금리 정기예금 선택/);
+    expect(radios[0]).not.toBeChecked();
+    expect(radios[1]).not.toBeChecked();
+    expect(
+      screen.getByRole('button', { name: '선택 확인' })
+    ).toBeDisabled();
+
+    await user.click(radios[1]);
+    expect(selectOption).toHaveBeenCalledWith('product-preferred');
+    expect(confirmOption).not.toHaveBeenCalled();
+
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'USER_DECISION_REQUIRED',
+        activeDecision: {
+          requestId: 'req-products',
+          decisionId: 'dec-products',
+          decisionType: 'PRODUCT_SELECTION',
+          options: [
+            {
+              id: 'product-12m',
+              label: '12개월 정기예금 선택',
+              required: false,
+              checked: false,
+              disabled: false
+            },
+            {
+              id: 'product-preferred',
+              label: '우대금리 정기예금 선택',
+              required: false,
+              checked: false,
+              disabled: false
+            }
+          ],
+          frameId: 'frm-001',
+          frameSequence: 3,
+          sourceSnapshotId: 'snap-products'
+        },
+        selectedOptionId: 'product-preferred'
+      })
+    );
+    rerender(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: '선택 확인' }));
+    expect(confirmOption).toHaveBeenCalledTimes(1);
+    expect(confirmOption).toHaveBeenCalledWith('product-preferred');
+  });
+
   it('약관의 checked 초기 상태를 controlled checkbox로 표시하고 확인을 분리한다', async () => {
     const user = userEvent.setup();
     const confirmTerms = vi.fn();
@@ -310,6 +449,51 @@ describe('SessionIntegrationView', () => {
     expect(confirmTerms).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: '약관 선택 확인' }));
     expect(confirmTerms).toHaveBeenCalledWith(['term-required']);
+  });
+
+  it('약관 순서와 기존 checked를 유지하고 필수 약관 Gate를 적용한다', () => {
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'USER_DECISION_REQUIRED',
+        activeDecision: {
+          requestId: 'req-terms-order',
+          decisionId: 'dec-terms-order',
+          decisionType: 'TERMS_AGREEMENT',
+          options: [
+            {
+              id: 'term-privacy',
+              label: '개인정보 필수 약관',
+              required: true,
+              checked: false,
+              disabled: false
+            },
+            {
+              id: 'term-marketing',
+              label: '마케팅 선택 약관',
+              required: false,
+              checked: true,
+              disabled: false
+            }
+          ],
+          frameId: 'frm-001',
+          frameSequence: 3,
+          sourceSnapshotId: 'snap-terms-order'
+        },
+        selectedTermIds: new Set(['term-marketing'])
+      })
+    );
+
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+    const checkboxes = screen.getAllByRole('checkbox');
+
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]).toHaveAccessibleName(/개인정보 필수 약관/);
+    expect(checkboxes[1]).toHaveAccessibleName(/마케팅 선택 약관/);
+    expect(checkboxes[0]).not.toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+    expect(
+      screen.getByRole('button', { name: '약관 선택 확인' })
+    ).toBeDisabled();
   });
 
   it('ACK 대기 상태와 안전한 제출 오류를 고정 selector로 안내한다', () => {

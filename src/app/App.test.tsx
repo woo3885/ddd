@@ -116,7 +116,7 @@ describe('App', () => {
 
     expect(createSessionSpy).toHaveBeenCalledTimes(1);
     expect(createSessionSpy).toHaveBeenCalledWith({
-      userRequest: '예금 가입 절차를 시작해 주세요.',
+      userRequest: '100만 원으로 정기예금 가입 절차를 시작해 주세요.',
       siteId: 'demo-bank',
       initialPath: '/deposit/products'
     });

@@ -23,8 +23,9 @@ describe('createDashboardSessionRequest', () => {
       taskType: 'OPEN_DEPOSIT',
       initialPath: '/deposit/products',
       initialUrl: `${DEFAULT_DEMO_BANK_BASE_URL}/deposit/products`,
-      userRequest: '예금 가입 절차를 시작해 주세요.'
+      userRequest: '100만 원으로 정기예금 가입 절차를 시작해 주세요.'
     });
+    expect(request.userRequest).not.toContain('12개월');
     expect(request).not.toHaveProperty('intent');
   });
 
