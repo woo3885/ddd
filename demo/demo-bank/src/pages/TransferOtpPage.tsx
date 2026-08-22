@@ -26,27 +26,29 @@ export default function TransferOtpPage({
   const otpInputRef = useRef<HTMLInputElement>(null);
   const [inputState, setInputState] =
     useState<TransferOtpInputState>('EMPTY');
-  const [otpInputCompleted, setOtpInputCompleted] = useState(false);
+  const otpInputCompleted = inputState === 'COMPLETION_RECORDED';
 
   const handleOtpInput = (event: FormEvent<HTMLInputElement>) => {
     setInputState(
       getTransferOtpInputState(event.currentTarget.value.length > 0)
     );
-    setOtpInputCompleted(false);
   };
 
   const handleInputComplete = () => {
-    if (inputState !== 'ENTERED' || !otpInputRef.current) {
+    if (
+      inputState !== 'ENTERED' ||
+      !otpInputRef.current ||
+      otpInputRef.current.value.length === 0
+    ) {
       return;
     }
 
     otpInputRef.current.value = '';
-    setInputState('EMPTY');
-    setOtpInputCompleted(true);
+    setInputState('COMPLETION_RECORDED');
   };
 
   const inputStatusMessage = otpInputCompleted
-    ? '입력한 데모 OTP는 화면에서 제거되었습니다.'
+    ? '보안 입력 절차가 완료 요청 상태로 전환되었습니다. 안전 확인이 끝날 때까지 기다려 주세요.'
     : inputState === 'ENTERED'
       ? 'OTP 입력값이 존재합니다. 입력 완료 버튼을 눌러 주세요.'
       : '데모 OTP를 사용자가 직접 입력해 주세요.';
@@ -106,19 +108,23 @@ export default function TransferOtpPage({
         </aside>
 
         <div className="transfer-password-field">
-          <label htmlFor={ELEMENT_IDS.INPUT_OTP}>OTP</label>
-          <input
-            {...elementIdentity(ELEMENT_IDS.INPUT_OTP)}
-            ref={otpInputRef}
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            autoCorrect="off"
-            autoCapitalize="none"
-            data-ddd-policy="secure-input"
-            aria-describedby={`${ELEMENT_IDS.NOTICE_TRANSFER_OTP_SECURE_INPUT} ${ELEMENT_IDS.STATUS_TRANSFER_OTP_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_OTP}`}
-            onInput={handleOtpInput}
-          />
+          {!otpInputCompleted ? (
+            <>
+              <label htmlFor={ELEMENT_IDS.INPUT_OTP}>OTP</label>
+              <input
+                {...elementIdentity(ELEMENT_IDS.INPUT_OTP)}
+                ref={otpInputRef}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="none"
+                data-ddd-policy="secure-input"
+                aria-describedby={`${ELEMENT_IDS.NOTICE_TRANSFER_OTP_SECURE_INPUT} ${ELEMENT_IDS.STATUS_TRANSFER_OTP_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_OTP}`}
+                onInput={handleOtpInput}
+              />
+            </>
+          ) : null}
 
           <p
             {...elementIdentity(ELEMENT_IDS.STATUS_TRANSFER_OTP_INPUT)}
@@ -136,9 +142,12 @@ export default function TransferOtpPage({
             className="transfer-password-completion-status"
             role="status"
             aria-live="polite"
+            data-ddd-secure-state={
+              otpInputCompleted ? 'completed' : undefined
+            }
           >
             {otpInputCompleted
-              ? '데모 OTP 입력 절차를 로컬에서 완료하고 DOM의 입력값을 제거했습니다. 실제 인증과 송금은 진행하지 않습니다.'
+              ? '보안 입력 절차가 완료 요청 상태로 전환되었습니다. 실제 인증과 송금 완료를 의미하지 않습니다.'
               : ''}
           </p>
         </div>
@@ -166,7 +175,7 @@ export default function TransferOtpPage({
             aria-describedby={`${ELEMENT_IDS.STATUS_TRANSFER_OTP_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_OTP}`}
             onClick={handleInputComplete}
           >
-            입력 완료
+            {otpInputCompleted ? '입력 완료 요청됨' : '입력 완료'}
           </button>
           <button
             {...elementIdentity(

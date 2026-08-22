@@ -1,4 +1,7 @@
-export type DepositPasswordInputState = 'EMPTY' | 'ENTERED';
+export type DepositPasswordInputState =
+  | 'EMPTY'
+  | 'ENTERED'
+  | 'COMPLETION_RECORDED';
 
 export function getDepositPasswordInputState(
   hasInput: boolean

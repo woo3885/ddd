@@ -94,7 +94,8 @@ D11은 계좌이체 금액 확인 이후 계좌 비밀번호 보안 입력 화�
 
 - 실제 금융 비밀번호가 아닌 데모 전용 임의 입력만 사용한다.
 - 브라우저 trace, screenshot, video, 콘솔 수집을 끈다.
-- 완료 후 입력 DOM이 비워지고 완료 상태만 표시되는지 확인한다.
+- 완료 후 입력 DOM과 `data-ddd-policy="secure-input"` 요소가 제거되고 완료 상태만 표시되는지 확인한다.
+- `status-confirmed-transfer-password`에 `data-ddd-secure-state="completed"`가 표시되는지 확인한다.
 - 입력값 자체는 어떤 보고서에도 기록하지 않는다.
 
 ## 7. 개발자 B 연동 책임
@@ -107,6 +108,20 @@ D11은 계좌이체 금액 확인 이후 계좌 비밀번호 보안 입력 화�
 4. 완료 신호 이후에만 자동화와 캡처 재개 여부를 판단한다.
 
 D11 데모 화면은 위 API나 이벤트를 구현하지 않으며, 입력 완료 버튼은 로컬 Mock 상태만 갱신한다.
+
+## 7-1. D26 완료 상태 계약
+
+입력 상태는 `EMPTY | ENTERED | COMPLETION_RECORDED`만 사용한다. 사용자가
+`btn-secure-input-complete`를 직접 누르면 DOM 원문을 먼저 지우고
+`COMPLETION_RECORDED`로 전환한다. 그 뒤 password input과
+`[data-ddd-policy="secure-input"]`은 DOM에서 제거되며, 기존 안전 상태 요소
+`status-confirmed-transfer-password`에만
+`data-ddd-secure-state="completed"`가 생긴다. 완료 전에는 이 마커가 없다.
+
+이 마커는 사용자의 로컬 입력 완료 요청일 뿐 실제 인증 성공·송금 성공이나
+자동화 재개 허가가 아니다. Backend는 보안 입력 요소가 사라진 사실과 완료
+마커를 함께 검증하고 별도 정책에 따라 재개해야 한다. OTP 이동은 기존 별도
+사용자 버튼으로만 수행하며 D26은 자동 이동하지 않는다.
 
 금액 화면 복귀는 `/transfer/amount/:accountId/:recipientId`로 이동한다. query나 저장소로 금액을 전달하지 않으므로 이전 금액 로컬 상태는 초기화될 수 있다.
 

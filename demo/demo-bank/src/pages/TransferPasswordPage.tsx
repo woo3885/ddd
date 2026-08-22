@@ -26,27 +26,28 @@ export default function TransferPasswordPage({
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const [inputState, setInputState] =
     useState<TransferPasswordInputState>('EMPTY');
-  const [passwordInputCompleted, setPasswordInputCompleted] =
-    useState(false);
+  const passwordInputCompleted = inputState === 'COMPLETION_RECORDED';
 
   const handlePasswordInput = (event: FormEvent<HTMLInputElement>) => {
     const hasInput = event.currentTarget.value.length > 0;
     setInputState(resolveTransferPasswordInputState(hasInput));
-    setPasswordInputCompleted(false);
   };
 
   const handleInputComplete = () => {
-    if (inputState !== 'ENTERED' || !passwordInputRef.current) {
+    if (
+      inputState !== 'ENTERED' ||
+      !passwordInputRef.current ||
+      passwordInputRef.current.value.length === 0
+    ) {
       return;
     }
 
     passwordInputRef.current.value = '';
-    setInputState('EMPTY');
-    setPasswordInputCompleted(true);
+    setInputState('COMPLETION_RECORDED');
   };
 
   const inputStatusMessage = passwordInputCompleted
-    ? '입력한 비밀번호는 화면에서 제거되었습니다.'
+    ? '보안 입력 절차가 완료 요청 상태로 전환되었습니다. 안전 확인이 끝날 때까지 기다려 주세요.'
     : inputState === 'ENTERED'
       ? '비밀번호가 입력되었습니다. 입력 완료 버튼을 눌러 주세요.'
       : '비밀번호를 사용자가 직접 입력해 주세요.';
@@ -105,21 +106,25 @@ export default function TransferPasswordPage({
         </aside>
 
         <div className="transfer-password-field">
-          <label htmlFor={ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD}>
-            계좌 비밀번호
-          </label>
-          <input
-            {...elementIdentity(ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD)}
-            ref={passwordInputRef}
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            autoCorrect="off"
-            autoCapitalize="none"
-            data-ddd-policy="secure-input"
-            aria-describedby={`${ELEMENT_IDS.NOTICE_TRANSFER_SECURE_INPUT} ${ELEMENT_IDS.STATUS_TRANSFER_PASSWORD_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_PASSWORD}`}
-            onInput={handlePasswordInput}
-          />
+          {!passwordInputCompleted ? (
+            <>
+              <label htmlFor={ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD}>
+                계좌 비밀번호
+              </label>
+              <input
+                {...elementIdentity(ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD)}
+                ref={passwordInputRef}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="none"
+                data-ddd-policy="secure-input"
+                aria-describedby={`${ELEMENT_IDS.NOTICE_TRANSFER_SECURE_INPUT} ${ELEMENT_IDS.STATUS_TRANSFER_PASSWORD_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_PASSWORD}`}
+                onInput={handlePasswordInput}
+              />
+            </>
+          ) : null}
 
           <p
             {...elementIdentity(
@@ -139,9 +144,12 @@ export default function TransferPasswordPage({
             className="transfer-password-completion-status"
             role="status"
             aria-live="polite"
+            data-ddd-secure-state={
+              passwordInputCompleted ? 'completed' : undefined
+            }
           >
             {passwordInputCompleted
-              ? '데모 비밀번호 입력이 완료되었습니다. 실제 인증과 송금은 진행하지 않습니다. OTP 입력 시작 버튼을 직접 눌러 주세요.'
+              ? '보안 입력 절차가 완료 요청 상태로 전환되었습니다. 실제 인증과 송금 완료를 의미하지 않습니다. 다음 화면 이동은 사용자가 직접 선택해 주세요.'
               : '아직 완료된 데모 비밀번호 입력이 없습니다.'}
           </p>
         </div>
@@ -167,7 +175,7 @@ export default function TransferPasswordPage({
             aria-describedby={`${ELEMENT_IDS.STATUS_TRANSFER_PASSWORD_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_TRANSFER_PASSWORD}`}
             onClick={handleInputComplete}
           >
-            입력 완료
+            {passwordInputCompleted ? '입력 완료 요청됨' : '입력 완료'}
           </button>
           <button
             {...elementIdentity(ELEMENT_IDS.BUTTON_TRANSFER_OTP_START)}

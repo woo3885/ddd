@@ -294,14 +294,25 @@ D15는 예금 약관을 로컬로 확인한 뒤 별도 다음 버튼으로 예�
 - 정상 직접 접근은 화면·DOM 계약 확인용이며 이전 약관 확인이나 실제 인증을
   증명하지 않는다.
 - 비밀번호는 uncontrolled native input에서 사용자가 직접 입력한다.
-- React에는 `EMPTY | ENTERED`와 로컬 완료 boolean만 저장한다.
-- 입력 완료 시 DOM 값을 즉시 제거하고 실제 인증·가입·잔액 변경은 수행하지
-  않는다.
+- React에는 원문이나 길이 대신
+  `EMPTY | ENTERED | COMPLETION_RECORDED`만 저장한다.
+- 입력 완료 시 DOM 값을 즉시 제거하고 보안 input 자체를 DOM에서 제거한다.
+  기존 안전 상태 요소에 `data-ddd-secure-state="completed"`를 표시하지만 실제
+  인증·가입·잔액 변경은 수행하지 않는다.
 - `data-ddd-policy="secure-input"` 탐지 이후 자동화·AI·캡처 중단과 안전한
   재개는 개발자 B의 후속 통합 책임이다.
 
 Playwright DOM 계약, 자동화 금지 사항과 수동 검증 절차는
 `../docs/demo-bank-d15-playwright-handoff.md`에 있다.
+
+## D26 보안 입력 완료 상태
+
+D26은 예금 비밀번호, 이체 비밀번호와 OTP Mock의 완료 생명주기를 통일한다.
+완료는 사용자의 직접 클릭으로만 기록되고 원문 제거 뒤 secure input이 DOM에서
+사라진다. 완료 마커는 안전한 상태 요소에만 표시되며 인증이나 거래 성공을
+뜻하지 않는다. Backend는 secure-input 요소 부재와 완료 마커를 함께 검증해야
+한다. 다음 화면 이동은 기존 별도 사용자 버튼을 유지하며 D26에서 자동화하지
+않는다. 최종 승인 흐름은 D27 이후 별도 범위다.
 
 ## D3 Mock 데이터
 

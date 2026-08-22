@@ -45,8 +45,9 @@ unknown 상품, 추가 segment와 비정규 encoding은 NotFound 대상이다.
 자동화 대상은 `id`와 `data-testid`가 같다. input은 label과 연결된
 uncontrolled native `type="password"`이며 `autocomplete="off"`,
 `data-ddd-policy="secure-input"`을 제공한다. React에는 원문이나 길이가 아닌
-`EMPTY | ENTERED`와 로컬 완료 boolean만 저장한다. 사용자가 완료 버튼을
-누르면 DOM 값을 즉시 제거하며 실제 인증 성공을 표시하지 않는다.
+`EMPTY | ENTERED | COMPLETION_RECORDED`만 저장한다. 사용자가 완료 버튼을
+누르면 DOM 값을 즉시 제거하고 input 자체를 DOM에서 제거하며 실제 인증
+성공을 표시하지 않는다.
 
 ## 5. 자동 검증 가능 항목
 
@@ -71,9 +72,10 @@ HTTP 200은 SPA fallback일 수 있으므로 화면 루트 또는 NotFound DOM�
 ## 7. 사용자 수동 검증
 
 screenshot, trace, video와 console 수집을 끈 뒤 실제 금융 비밀번호가 아닌
-데모용 임의 값을 사용한다. 입력 후 완료 버튼 활성화, 완료 시 DOM 값 제거,
-실제 인증을 주장하지 않는 안내, 재입력 시 이전 완료 상태 초기화, 약관 화면
-복귀와 데모 흐름 나가기를 확인한다.
+데모용 임의 값을 사용한다. 입력 후 완료 버튼 활성화, 완료 시 password input과
+`[data-ddd-policy="secure-input"]` 제거, 완료 버튼 비활성화와
+`status-confirmed-deposit-password[data-ddd-secure-state="completed"]`, 실제
+인증을 주장하지 않는 안내, 약관 화면 복귀와 데모 흐름 나가기를 확인한다.
 
 ## 8. 개발자 B 책임
 
@@ -81,3 +83,18 @@ screenshot, trace, video와 console 수집을 끈 뒤 실제 금융 비밀번호
 이를 감지해 `SECURE_INPUT_REQUIRED`로 전환하고 자동 입력과 AI·DOM·프레임·
 screenshot·trace·video 수집을 중단해야 한다. 원문 없는 완료 신호 처리와
 안전한 자동화 재개는 아직 후속 통합 범위다.
+
+## 9. D26 완료 상태 계약
+
+두 지원 상품 URL 모두 같은 생명주기를 사용한다.
+
+1. 완료 전에는 password input과 `data-ddd-policy="secure-input"`이 존재하고
+   완료 마커는 없다.
+2. 사용자가 `btn-secure-input-complete`를 직접 누르면 DOM 원문을 먼저 지운다.
+3. 상태를 `COMPLETION_RECORDED`로 전환하여 input을 DOM에서 제거한다.
+4. 기존 안전 상태 요소에만 `data-ddd-secure-state="completed"`를 표시한다.
+5. 완료 버튼을 비활성화하고 `입력 완료 요청됨`으로 상태를 알린다.
+
+완료 마커는 인증·가입·거래 성공이 아니다. Backend는 secure-input 요소 부재와
+완료 마커를 함께 확인하고 별도 정책에 따라 처리해야 한다. D26은 자동 완료,
+자동 이동, 캡처 재개를 구현하지 않으며 최종 승인은 D27 이후 별도 단계다.
