@@ -776,6 +776,20 @@ class AutomationSessionServiceTest {
     }
 
     @Test
+    void 세션취소는_active_secure_latch를_정리한다() {
+        AutomationSession created = sessionService.createSession("보안 입력 취소");
+        var registry = new com.ddd.backend.security.secureinput.SecureInputRegistry();
+        registry.activate(created.getSessionId(),
+                com.ddd.backend.security.secureinput.SecureInputType.ACCOUNT_PASSWORD,
+                "frm-001", 1L, "https://demo/secure");
+        sessionService.setSecureInputRegistry(registry);
+
+        sessionService.cancelSession(created.getSessionId());
+
+        assertFalse(registry.isActive(created.getSessionId()));
+    }
+
+    @Test
     void D17_세션을_취소하면_저장된_Frame도_삭제한다() {
         when(
                 demoNavigationPolicy.resolve(

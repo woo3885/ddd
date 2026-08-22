@@ -17,6 +17,7 @@ import com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.ddd.backend.security.secureinput.SecureInputRegistry;
 
 @Service
 public class AutomationSessionService {
@@ -63,6 +64,12 @@ public class AutomationSessionService {
     private final UserDecisionSessionState userDecisionSessionState;
     private final SanitizedDomSnapshotService snapshotService;
     private final AgentLoopService agentLoopService;
+    private SecureInputRegistry secureInputRegistry;
+
+    @Autowired
+    void setSecureInputRegistry(SecureInputRegistry secureInputRegistry) {
+        this.secureInputRegistry = secureInputRegistry;
+    }
 
     /*
      * 실제 Spring 실행용 생성자.
@@ -458,6 +465,7 @@ public class AutomationSessionService {
         );
         cleanupUserDecisionStateSafely(sessionId);
         cleanupAgentLoopSafely(sessionId);
+        cleanupSecureInputStateSafely(sessionId);
 
         /*
          * Playwright BrowserContext / Page 종료.
@@ -539,6 +547,7 @@ public class AutomationSessionService {
         );
         cleanupUserDecisionStateSafely(sessionId);
         cleanupAgentLoopSafely(sessionId);
+        cleanupSecureInputStateSafely(sessionId);
 
         /*
          * BrowserContext / Page 종료.
@@ -645,6 +654,16 @@ public class AutomationSessionService {
     private void cleanupAgentLoopSafely(String sessionId) {
         if (agentLoopService != null) {
             agentLoopService.cancel(sessionId);
+        }
+    }
+
+    private void cleanupSecureInputStateSafely(String sessionId) {
+        if (secureInputRegistry != null) {
+            try {
+                secureInputRegistry.removeSession(sessionId);
+            } catch (RuntimeException ignored) {
+                // Secure latch cleanup failure must not stop remaining cleanup.
+            }
         }
     }
 

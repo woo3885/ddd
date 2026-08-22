@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Objects;
 import java.util.function.Supplier;
+import com.ddd.backend.security.secureinput.SecureInputRegistry;
 
 @Service
 public final class BrowserActionExecutionService {
@@ -63,6 +64,12 @@ public final class BrowserActionExecutionService {
 
     private final ViewerCoordinateActionExecutor
             coordinateActionExecutor;
+    private SecureInputRegistry secureInputRegistry;
+
+    @Autowired
+    void setSecureInputRegistry(SecureInputRegistry secureInputRegistry) {
+        this.secureInputRegistry = secureInputRegistry;
+    }
 
     @Autowired
     public BrowserActionExecutionService(
@@ -334,6 +341,10 @@ public final class BrowserActionExecutionService {
                 execution,
                 "Browser Action 실행 작업은 필수입니다."
         );
+
+        if (secureInputRegistry != null && secureInputRegistry.isActive(sessionId)) {
+            throw new IllegalStateException("보안 입력 중에는 일반 Browser Action을 실행할 수 없습니다.");
+        }
 
         AutomationSession session =
                 getSession(

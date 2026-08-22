@@ -81,6 +81,31 @@ class DepositScreenInspectorTest {
     }
 
     @Test
+    void 보안입력완료_marker와_input제거가_확인되면_안전한_대기화면이다() {
+        navigate("/deposit/secure/password/deposit-12m", """
+                <main id="page-deposit-password">
+                  <p data-ddd-secure-state="completed">
+                    보안 입력 절차가 완료 요청 상태로 전환되었습니다.
+                  </p>
+                </main>
+                """);
+
+        assertThat(inspector.inspect("deposit-screen").valid()).isTrue();
+    }
+
+    @Test
+    void 완료_marker가_있어도_secure_input이_남아있으면_거부한다() {
+        navigate("/deposit/secure/password/deposit-12m", """
+                <main id="page-deposit-password">
+                  <input data-ddd-policy="secure-input" type="password">
+                  <p data-ddd-secure-state="completed">완료 요청됨</p>
+                </main>
+                """);
+
+        assertThat(inspector.inspect("deposit-screen").valid()).isFalse();
+    }
+
+    @Test
     void 상품상세는_URL상품과_실제_DOM기간을_함께_반환한다() {
         navigate("/deposit/products/deposit-preferred", """
                 <main id="page-deposit-product-detail">

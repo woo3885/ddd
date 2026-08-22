@@ -185,4 +185,47 @@ class AutomationUiEventPublisherTest {
                 () -> {}))
                 .hasMessage("대기 중인 사용자 결정이 없습니다.");
     }
+
+    @Test
+    void secure_request는_event와_reconnect_snapshot에_복원되고_resolve로_정리된다() {
+        var request = new com.ddd.backend.security.secureinput.SecureInputRequest(
+                "sec-001",
+                com.ddd.backend.security.secureinput.SecureInputType.ACCOUNT_PASSWORD,
+                "frm-001", 9L, "직접 입력해 주세요.");
+
+        AutomationUiEvent event = publisher.publishSecureInputRequired(
+                "session-001", request);
+
+        assertThat(event.eventType())
+                .isEqualTo(AutomationUiEventType.SECURE_INPUT_REQUIRED);
+        assertThat(event.secureInput()).isEqualTo(request);
+        assertThat(publisher.latestSnapshot("session-001").orElseThrow()
+                .secureInput().secureInput()).isEqualTo(request);
+
+        publisher.publishSecureInputResolved("session-001", request);
+        assertThat(publisher.latestSnapshot("session-001").orElseThrow()
+                .secureInput()).isNull();
+    }
+
+    @Test
+    void final_risk_terminal_전환은_이전_secure_request를_snapshot에서_정리한다() {
+        for (WorkflowStatus status : new WorkflowStatus[]{
+                WorkflowStatus.FINAL_CONFIRMATION_REQUIRED,
+                WorkflowStatus.RISK_WARNING,
+                WorkflowStatus.CANCELLED,
+                WorkflowStatus.ERROR,
+                WorkflowStatus.TERMINATED}) {
+            String sessionId = "session-secure-" + status.name().replace('_', '-');
+            var request = new com.ddd.backend.security.secureinput.SecureInputRequest(
+                    "sec-001",
+                    com.ddd.backend.security.secureinput.SecureInputType.ACCOUNT_PASSWORD,
+                    "frm-001", 1L, "직접 입력해 주세요.");
+            publisher.publishSecureInputRequired(sessionId, request);
+
+            publisher.publish(sessionId, status, "상태 전환");
+
+            assertThat(publisher.latestSnapshot(sessionId).orElseThrow().secureInput())
+                    .as(status.name()).isNull();
+        }
+    }
 }

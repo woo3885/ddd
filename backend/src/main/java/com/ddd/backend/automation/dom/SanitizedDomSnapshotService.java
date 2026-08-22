@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.HashSet;
 import java.util.Set;
+import com.ddd.backend.security.secureinput.SecureInputRegistry;
 
 @Service
 public final class SanitizedDomSnapshotService {
@@ -38,6 +39,12 @@ public final class SanitizedDomSnapshotService {
     private final DomSanitizer sanitizer;
 
     private final ElementRegistry elementRegistry;
+    private SecureInputRegistry secureInputRegistry;
+
+    @Autowired
+    void setSecureInputRegistry(SecureInputRegistry secureInputRegistry) {
+        this.secureInputRegistry = secureInputRegistry;
+    }
 
     /*
      * 실제 Spring 실행에서는
@@ -103,6 +110,10 @@ public final class SanitizedDomSnapshotService {
         validateSessionId(
                 sessionId
         );
+
+        if (secureInputRegistry != null && secureInputRegistry.isActive(sessionId)) {
+            throw new IllegalStateException("보안 입력 중에는 DOM Snapshot을 생성할 수 없습니다.");
+        }
 
         String token =
                 UUID.randomUUID()

@@ -11,6 +11,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
+import com.ddd.backend.security.secureinput.SecureInputRequest;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -94,6 +95,7 @@ public final class AutomationStatusEventPublisher {
                 event.message(),
                 requiresUserAction(event.status()),
                 null,
+                null,
                 null
         );
 
@@ -114,6 +116,9 @@ public final class AutomationStatusEventPublisher {
                 decisionState.removeSession(event.sessionId());
             }
         }
+        if (clearsSecureInput(event.status())) {
+            publishSecureInputClear(event.sessionId());
+        }
     }
 
     public AutomationUiEvent publishGuide(
@@ -122,7 +127,7 @@ public final class AutomationStatusEventPublisher {
             boolean actionRequired
     ) {
         return publishUiEvent(sessionId, AutomationUiEventType.GUIDE,
-                null, message, actionRequired, null, null);
+                null, message, actionRequired, null, null, null);
     }
 
     public AutomationUiEvent publishTarget(
@@ -132,7 +137,7 @@ public final class AutomationStatusEventPublisher {
     ) {
         Objects.requireNonNull(target, "Target은 필수입니다.");
         return publishUiEvent(sessionId, AutomationUiEventType.TARGET,
-                null, message, false, target, null);
+                null, message, false, target, null, null);
     }
 
     public AutomationUiEvent publishTargetClear(
@@ -140,7 +145,7 @@ public final class AutomationStatusEventPublisher {
             String message
     ) {
         return publishUiEvent(sessionId, AutomationUiEventType.TARGET_CLEAR,
-                null, message, false, null, null);
+                null, message, false, null, null, null);
     }
 
     public AutomationUiEvent publishDecisionRequired(
@@ -151,7 +156,7 @@ public final class AutomationStatusEventPublisher {
         Objects.requireNonNull(decision, "Decision Prompt는 필수입니다.");
         return publishUiEvent(
                 sessionId, AutomationUiEventType.DECISION_REQUIRED,
-                null, message, true, null, decision
+                null, message, true, null, decision, null
         );
     }
 
@@ -161,14 +166,37 @@ public final class AutomationStatusEventPublisher {
     ) {
         return publishUiEvent(
                 sessionId, AutomationUiEventType.DECISION_RESOLVED,
-                null, message, false, null, null
+                null, message, false, null, null, null
         );
     }
 
     public AutomationUiEvent publishDecisionClear(String sessionId, String message) {
         return publishUiEvent(
                 sessionId, AutomationUiEventType.DECISION_CLEAR,
-                null, message, false, null, null);
+                null, message, false, null, null, null);
+    }
+
+    public AutomationUiEvent publishSecureInputRequired(
+            String sessionId, SecureInputRequest secureInput
+    ) {
+        Objects.requireNonNull(secureInput, "Secure input request는 필수입니다.");
+        return publishUiEvent(sessionId, AutomationUiEventType.SECURE_INPUT_REQUIRED,
+                WorkflowStatus.SECURE_INPUT_REQUIRED, secureInput.message(), true,
+                null, null, secureInput);
+    }
+
+    public AutomationUiEvent publishSecureInputResolved(
+            String sessionId, SecureInputRequest secureInput
+    ) {
+        return publishUiEvent(sessionId, AutomationUiEventType.SECURE_INPUT_RESOLVED,
+                null, "보안 입력 완료 요청의 안전 검증이 끝났습니다.", false,
+                null, null, secureInput);
+    }
+
+    public AutomationUiEvent publishSecureInputClear(String sessionId) {
+        return publishUiEvent(sessionId, AutomationUiEventType.SECURE_INPUT_CLEAR,
+                null, "보안 입력 요청이 정리되었습니다.", false,
+                null, null, null);
     }
 
     public Optional<AutomationUiEventSnapshot> latestSnapshot(String sessionId) {
@@ -190,13 +218,15 @@ public final class AutomationStatusEventPublisher {
             String message,
             boolean actionRequired,
             AutomationTarget target,
-            AutomationDecisionPrompt decision
+            AutomationDecisionPrompt decision,
+            SecureInputRequest secureInput
     ) {
         String uiDestination = uiDestination(sessionId);
         SessionUiState state = uiStates.computeIfAbsent(
                 sessionId, ignored -> new SessionUiState());
         AutomationUiEvent event = state.next(
-                sessionId, type, status, message, actionRequired, target, decision);
+                sessionId, type, status, message, actionRequired, target, decision,
+                secureInput);
         messagingTemplate.convertAndSend(uiDestination, event);
         return event;
     }
@@ -252,23 +282,35 @@ public final class AutomationStatusEventPublisher {
                 || status == WorkflowStatus.TERMINATED;
     }
 
+    private boolean clearsSecureInput(WorkflowStatus status) {
+        return status == WorkflowStatus.FINAL_CONFIRMATION_REQUIRED
+                || status == WorkflowStatus.RISK_WARNING
+                || status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.ERROR
+                || status == WorkflowStatus.TERMINATED;
+    }
+
     private static final class SessionUiState {
         private final AtomicLong sequence = new AtomicLong();
         private AutomationUiEvent state;
         private AutomationUiEvent guide;
         private AutomationUiEvent target;
         private AutomationUiEvent decision;
+        private AutomationUiEvent secureInput;
 
         private synchronized AutomationUiEvent next(
                 String sessionId, AutomationUiEventType type,
                 WorkflowStatus status, String message,
                 boolean actionRequired, AutomationTarget targetValue,
-                AutomationDecisionPrompt decisionValue
+                AutomationDecisionPrompt decisionValue,
+                SecureInputRequest secureInputValue
         ) {
             long next = sequence.incrementAndGet();
             AutomationUiEvent event = new AutomationUiEvent(
                     "evt-" + UUID.randomUUID(), next, type, sessionId,
                     status, message, actionRequired, targetValue, decisionValue,
+                    secureInputValue,
                     java.time.Instant.now());
             switch (type) {
                 case STATE -> state = event;
@@ -278,13 +320,16 @@ public final class AutomationStatusEventPublisher {
                 case DECISION_REQUIRED -> decision = event;
                 case DECISION_RESOLVED -> decision = null;
                 case DECISION_CLEAR -> decision = null;
+                case SECURE_INPUT_REQUIRED -> secureInput = event;
+                case SECURE_INPUT_RESOLVED, SECURE_INPUT_CLEAR -> secureInput = null;
             }
             return event;
         }
 
         private synchronized AutomationUiEventSnapshot snapshot(String sessionId) {
             return new AutomationUiEventSnapshot(
-                    sessionId, sequence.get(), state, guide, target, decision);
+                    sessionId, sequence.get(), state, guide, target, decision,
+                    secureInput);
         }
     }
 }

@@ -17,6 +17,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class BrowserFrameCaptureServiceTest {
 
@@ -41,6 +42,20 @@ class BrowserFrameCaptureServiceTest {
                         browserSessionManager,
                         frameCaptureGuard
                 );
+    }
+
+    @Test
+    void secure_latch_중에는_BrowserSession과_screenshot에_접근하지_않는다() {
+        var registry = new com.ddd.backend.security.secureinput.SecureInputRegistry();
+        registry.activate("session-001",
+                com.ddd.backend.security.secureinput.SecureInputType.ACCOUNT_PASSWORD,
+                "frm-001", 1L, "https://demo/secure");
+        service.setSecureInputRegistry(registry);
+
+        FrameCaptureAttempt result = service.capture("session-001");
+
+        assertThat(result.decision()).isEqualTo(FrameCaptureDecision.SECURE_INPUT_BLOCKED);
+        verifyNoInteractions(browserSessionManager);
     }
 
     @Test

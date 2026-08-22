@@ -4,10 +4,16 @@ import com.ddd.backend.api.dto.session.AutomationSessionResponse;
 import com.ddd.backend.api.dto.session.CreateSessionRequest;
 import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
+import com.ddd.backend.api.dto.session.SubmitSecureInputRequest;
+import com.ddd.backend.api.dto.session.SecureInputSubmissionResponse;
 import com.ddd.backend.common.response.ApiResponse;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.service.AutomationSessionService;
 import com.ddd.backend.service.UserDecisionService;
+import com.ddd.backend.security.secureinput.SecureInputService;
+import com.ddd.backend.security.secureinput.SecureInputTransportPolicy;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,13 +30,45 @@ public class AutomationSessionController {
 
     private final AutomationSessionService sessionService;
     private final UserDecisionService userDecisionService;
+    private final SecureInputService secureInputService;
+    private final SecureInputTransportPolicy secureInputTransportPolicy;
+
+    @Autowired
+    public AutomationSessionController(
+            AutomationSessionService sessionService,
+            UserDecisionService userDecisionService,
+            SecureInputService secureInputService,
+            SecureInputTransportPolicy secureInputTransportPolicy
+    ) {
+        this.sessionService = sessionService;
+        this.userDecisionService = userDecisionService;
+        this.secureInputService = secureInputService;
+        this.secureInputTransportPolicy = secureInputTransportPolicy;
+    }
 
     public AutomationSessionController(
             AutomationSessionService sessionService,
             UserDecisionService userDecisionService
     ) {
-        this.sessionService = sessionService;
-        this.userDecisionService = userDecisionService;
+        this(sessionService, userDecisionService, null, null);
+    }
+
+    @PostMapping("/{sessionId}/secure-inputs/{secureRequestId}/submit")
+    public ApiResponse<SecureInputSubmissionResponse> submitSecureInput(
+            @PathVariable String sessionId,
+            @PathVariable String secureRequestId,
+            @Valid @RequestBody SubmitSecureInputRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        if (secureInputService == null) {
+            throw new IllegalStateException("보안 입력 서비스를 사용할 수 없습니다.");
+        }
+        if (secureInputTransportPolicy != null) {
+            secureInputTransportPolicy.verify(httpRequest);
+        }
+        return ApiResponse.success(
+                secureInputService.submit(sessionId, secureRequestId, request),
+                "보안 입력 완료 요청을 처리했습니다. 인증 성공을 의미하지 않습니다.");
     }
 
     @PostMapping

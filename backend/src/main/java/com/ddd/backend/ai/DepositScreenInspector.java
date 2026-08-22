@@ -49,7 +49,7 @@ public final class DepositScreenInspector {
                     && visible(page, "#btn-deposit-terms-confirm")
                     && safeTermsNext(page);
             case SECURE_PASSWORD -> visible(page, "#page-deposit-password")
-                    && securePassword(page);
+                    && (securePassword(page) || completedSecureInput(page));
             case OTHER -> true;
             case UNKNOWN -> false;
         };
@@ -80,6 +80,13 @@ public final class DepositScreenInspector {
                 && "password".equalsIgnoreCase(input.first().getAttribute("type"))
                 && "secure-input".equalsIgnoreCase(
                         input.first().getAttribute("data-ddd-policy"));
+    }
+
+    private boolean completedSecureInput(Page page) {
+        Locator completed = page.locator("[data-ddd-secure-state=\"completed\"]");
+        return page.locator("[data-ddd-policy=\"secure-input\"]").count() == 0
+                && completed.count() == 1
+                && completed.first().isVisible();
     }
 
     private boolean checkbox(Page page, String selector, boolean required) {
