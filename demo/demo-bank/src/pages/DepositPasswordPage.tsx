@@ -23,14 +23,12 @@ export default function DepositPasswordPage({
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const [inputState, setInputState] =
     useState<DepositPasswordInputState>('EMPTY');
-  const [passwordInputCompleted, setPasswordInputCompleted] =
-    useState(false);
+  const passwordInputCompleted = inputState === 'COMPLETION_RECORDED';
 
   const handlePasswordInput = (event: FormEvent<HTMLInputElement>) => {
     setInputState(
       getDepositPasswordInputState(event.currentTarget.value.length > 0)
     );
-    setPasswordInputCompleted(false);
   };
 
   const handleInputComplete = () => {
@@ -43,12 +41,11 @@ export default function DepositPasswordPage({
     }
 
     passwordInputRef.current.value = '';
-    setInputState('EMPTY');
-    setPasswordInputCompleted(true);
+    setInputState('COMPLETION_RECORDED');
   };
 
   const inputStatusMessage = passwordInputCompleted
-    ? '입력값은 화면에서 제거되었습니다.'
+    ? '보안 입력 절차가 완료 요청 상태로 전환되었습니다. 안전 확인이 끝날 때까지 기다려 주세요.'
     : inputState === 'ENTERED'
       ? '데모 비밀번호가 입력되었습니다. 입력 완료 버튼을 눌러 주세요.'
       : '실제 금융 비밀번호가 아닌 데모용 값을 직접 입력해 주세요.';
@@ -109,21 +106,25 @@ export default function DepositPasswordPage({
         </aside>
 
         <div className="deposit-password-field">
-          <label htmlFor={ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD}>
-            계좌 비밀번호
-          </label>
-          <input
-            {...elementIdentity(ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD)}
-            ref={passwordInputRef}
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            autoCorrect="off"
-            autoCapitalize="none"
-            data-ddd-policy="secure-input"
-            aria-describedby={`${ELEMENT_IDS.NOTICE_DEPOSIT_SECURE_INPUT} ${ELEMENT_IDS.STATUS_DEPOSIT_PASSWORD_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_DEPOSIT_PASSWORD}`}
-            onInput={handlePasswordInput}
-          />
+          {!passwordInputCompleted ? (
+            <>
+              <label htmlFor={ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD}>
+                계좌 비밀번호
+              </label>
+              <input
+                {...elementIdentity(ELEMENT_IDS.INPUT_ACCOUNT_PASSWORD)}
+                ref={passwordInputRef}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="none"
+                data-ddd-policy="secure-input"
+                aria-describedby={`${ELEMENT_IDS.NOTICE_DEPOSIT_SECURE_INPUT} ${ELEMENT_IDS.STATUS_DEPOSIT_PASSWORD_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_DEPOSIT_PASSWORD}`}
+                onInput={handlePasswordInput}
+              />
+            </>
+          ) : null}
 
           <p
             {...elementIdentity(ELEMENT_IDS.STATUS_DEPOSIT_PASSWORD_INPUT)}
@@ -141,9 +142,12 @@ export default function DepositPasswordPage({
             className="deposit-password-completion-status"
             role="status"
             aria-live="polite"
+            data-ddd-secure-state={
+              passwordInputCompleted ? 'completed' : undefined
+            }
           >
             {passwordInputCompleted
-              ? '데모 비밀번호 입력 절차를 완료했습니다. 입력값은 화면에서 제거되었으며 실제 인증이나 예금 가입은 진행되지 않았습니다.'
+              ? '보안 입력 절차가 완료 요청 상태로 전환되었습니다. 실제 인증이나 예금 가입 완료를 의미하지 않습니다.'
               : ''}
           </p>
         </div>
@@ -167,7 +171,7 @@ export default function DepositPasswordPage({
             aria-describedby={`${ELEMENT_IDS.STATUS_DEPOSIT_PASSWORD_INPUT} ${ELEMENT_IDS.STATUS_CONFIRMED_DEPOSIT_PASSWORD}`}
             onClick={handleInputComplete}
           >
-            입력 완료
+            {passwordInputCompleted ? '입력 완료 요청됨' : '입력 완료'}
           </button>
           <button
             {...elementIdentity(ELEMENT_IDS.BUTTON_DEPOSIT_PASSWORD_CANCEL)}

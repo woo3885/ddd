@@ -1,4 +1,7 @@
-export type TransferOtpInputState = 'EMPTY' | 'ENTERED';
+export type TransferOtpInputState =
+  | 'EMPTY'
+  | 'ENTERED'
+  | 'COMPLETION_RECORDED';
 
 export function getTransferOtpInputState(
   hasInput: boolean

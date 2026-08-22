@@ -123,12 +123,26 @@ disabled와 오류 URL의 NotFound DOM을 별도로 확인한다.
 데모 전용 임의 입력으로 다음만 확인한다.
 
 - 입력 존재 시 완료 버튼 활성화
-- 완료 클릭 직후 DOM 값 제거
+- 완료 클릭 직후 DOM 값 제거와 password input 제거
+- `[data-ddd-policy="secure-input"]` 부재와
+  `status-confirmed-transfer-otp[data-ddd-secure-state="completed"]` 존재
 - 완료 안내가 실제 인증 성공을 주장하지 않음
-- 다시 입력하면 기존 완료 상태 초기화
 - 비밀번호 화면 복귀
 
 입력값은 검증 보고서에 기록하지 않는다.
+
+## 8-1. D26 완료 상태 계약
+
+OTP 입력 상태는 `EMPTY | ENTERED | COMPLETION_RECORDED`만 사용한다. 완료는
+사용자의 직접 클릭으로만 기록하며, 원문 제거 후 input을 DOM에서 제거한다.
+완료 전에는 `data-ddd-secure-state`가 없고 완료 후 기존 안전 상태 요소에만
+`data-ddd-secure-state="completed"`가 표시된다. 완료 버튼은 비활성화되고
+접근 가능한 문구가 `입력 완료 요청됨`으로 바뀐다.
+
+이 상태는 OTP 인증 성공이나 송금 성공이 아니다. Backend는 secure-input
+요소 부재와 완료 마커를 함께 검증해야 하며, 캡처·AI·자동화 재개 여부는 별도
+정책으로 결정한다. 최종 확인 이동은 기존 별도 사용자 Gate이며 D26은 자동
+이동하지 않는다.
 
 ## 9. D12 제외 범위
 

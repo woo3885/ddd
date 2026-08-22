@@ -244,3 +244,27 @@ D14 selector는 실제 거래 성공이나 영수증을 뜻하지 않는다. 금
 ```
 
 보안 입력의 실제 값은 자동화 스냅샷이나 테스트 로그에 기록하지 않는다. 보안 입력 테스트는 값 자체가 아니라 보호 모드, 입력 요소 존재, 캡처 중단 상태와 완료 이벤트만 검증한다.
+
+## 6. D26 보안 입력 완료 상태 공통 계약
+
+예금 비밀번호, 이체 비밀번호와 이체 OTP 화면은 기존 완료 상태 ID를 그대로
+사용한다. 사용자의 직접 완료 클릭 전에는 `data-ddd-secure-state`가 없으며,
+완료 후 해당 안전 상태 요소에만 다음 마커를 제공한다.
+
+```html
+<p
+  id="status-confirmed-deposit-password"
+  data-testid="status-confirmed-deposit-password"
+  data-ddd-secure-state="completed"
+  role="status"
+  aria-live="polite"
+>
+  보안 입력 절차가 완료 요청 상태로 전환되었습니다.
+</p>
+```
+
+완료 후에는 `input[type="password"]`와
+`[data-ddd-policy="secure-input"]`이 DOM에 남지 않는다. 마커는 실제 인증·
+가입·송금 성공을 의미하지 않는다. 자동화는 보안값 입력, 완료 버튼 클릭,
+screenshot, trace, video와 값 조회를 수행하지 않는다. 실제 전환은 캡처를 끈
+수동 검증으로 확인하며 Backend는 입력 요소 부재와 마커를 함께 검증한다.
