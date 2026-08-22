@@ -11,6 +11,7 @@ import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.frame.BrowserFrameMetadata;
 import com.ddd.backend.service.decision.SelectedDepositProductStore;
+import com.ddd.backend.security.secureinput.SecureInputService;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,9 +59,15 @@ public final class AgentLoopService {
     private final ActionReplayGuard replayGuard;
     private final BrowserFrameStore frameStore;
     private final SelectedDepositProductStore selectedProductStore;
+    private SecureInputService secureInputService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final Set<String> scheduled = ConcurrentHashMap.newKeySet();
     private final Set<String> resumeRequested = ConcurrentHashMap.newKeySet();
+
+    @Autowired
+    void setSecureInputService(SecureInputService secureInputService) {
+        this.secureInputService = secureInputService;
+    }
 
     @Autowired
     public AgentLoopService(
@@ -213,12 +220,7 @@ public final class AgentLoopService {
                 FrameCaptureDecision captureDecision = frameCaptureGuard.evaluate(sessionId);
                 DepositPageClassifier.DepositPage page = inspection.screen();
                 if (captureDecision == FrameCaptureDecision.SECURE_INPUT_BLOCKED) {
-                    transition(session, WorkflowStatus.SECURE_INPUT_REQUIRED,
-                            "민감정보는 사용자가 직접 입력해야 합니다.");
-                    return;
-                }
-                if (page == DepositPageClassifier.DepositPage.SECURE_PASSWORD) {
-                    failSafely(session, "비밀번호 화면의 보안 입력 요소를 확인할 수 없습니다.");
+                    enterSecureInput(session);
                     return;
                 }
                 if (captureDecision != FrameCaptureDecision.ALLOW) {
@@ -313,12 +315,22 @@ public final class AgentLoopService {
         }
         if (frameCaptureGuard.evaluate(sessionId)
                 == FrameCaptureDecision.SECURE_INPUT_BLOCKED) {
-            transition(session, WorkflowStatus.SECURE_INPUT_REQUIRED,
-                    "민감정보는 사용자가 직접 입력해야 합니다.");
+            enterSecureInput(session);
         } else {
             failSafely(session, "Action 후 새 Viewer Frame을 확인할 수 없습니다.");
         }
         return false;
+    }
+
+    private void enterSecureInput(AutomationSession session) {
+        if (secureInputService == null) {
+            transition(session, WorkflowStatus.SECURE_INPUT_REQUIRED,
+                    "민감정보는 사용자가 직접 입력해야 합니다.");
+            return;
+        }
+        secureInputService.activate(session.getSessionId());
+        transition(session, WorkflowStatus.SECURE_INPUT_REQUIRED,
+                "민감정보는 사용자가 직접 입력해야 합니다.");
     }
 
     private AiDecisionExecutionResult executeBeforeDeadline(

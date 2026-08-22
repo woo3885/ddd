@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SanitizedDomSnapshotServiceTest {
 
@@ -58,6 +59,19 @@ class SanitizedDomSnapshotServiceTest {
         manager.createSession(
                 SESSION_ID
         );
+    }
+
+    @Test
+    void secure_latch_중에는_Sanitized_DOM을_생성하지_않는다() {
+        var registry = new com.ddd.backend.security.secureinput.SecureInputRegistry();
+        registry.activate(SESSION_ID,
+                com.ddd.backend.security.secureinput.SecureInputType.ACCOUNT_PASSWORD,
+                "frm-001", 1L, "https://demo/secure");
+        service.setSecureInputRegistry(registry);
+
+        assertThatThrownBy(() -> service.createSnapshot(SESSION_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("보안 입력 중");
     }
 
     @AfterEach

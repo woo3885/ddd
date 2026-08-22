@@ -5,6 +5,8 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.ScreenshotScale;
 import com.microsoft.playwright.options.ScreenshotType;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.ddd.backend.security.secureinput.SecureInputRegistry;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -45,6 +47,12 @@ public class BrowserFrameCaptureService {
 
     private final BrowserSessionManager browserSessionManager;
     private final FrameCaptureGuard frameCaptureGuard;
+    private SecureInputRegistry secureInputRegistry;
+
+    @Autowired
+    void setSecureInputRegistry(SecureInputRegistry secureInputRegistry) {
+        this.secureInputRegistry = secureInputRegistry;
+    }
 
     public BrowserFrameCaptureService(
             BrowserSessionManager browserSessionManager,
@@ -82,6 +90,10 @@ public class BrowserFrameCaptureService {
         validateSessionId(
                 sessionId
         );
+
+        if (secureInputRegistry != null && secureInputRegistry.blocksCapture(sessionId)) {
+            return FrameCaptureAttempt.blocked(FrameCaptureDecision.SECURE_INPUT_BLOCKED);
+        }
 
         return browserSessionManager.execute(
                 sessionId,

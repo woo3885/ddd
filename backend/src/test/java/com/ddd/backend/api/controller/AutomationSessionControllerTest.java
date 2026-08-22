@@ -4,6 +4,8 @@ import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.service.AutomationSessionService;
 import com.ddd.backend.service.UserDecisionService;
+import com.ddd.backend.security.secureinput.SecureInputService;
+import com.ddd.backend.security.secureinput.SecureInputTransportPolicy;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -18,6 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import com.ddd.backend.config.RestCorsProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
@@ -41,6 +44,44 @@ class AutomationSessionControllerTest {
      */
     @MockitoBean
     private UserDecisionService userDecisionService;
+
+    @MockitoBean
+    private SecureInputService secureInputService;
+
+    @MockitoBean
+    private SecureInputTransportPolicy secureInputTransportPolicy;
+
+    @Test
+    void 보안입력은_전용_endpoint로만_접수하고_raw_value를_응답하지_않는다()
+            throws Exception {
+        when(secureInputService.submit(
+                org.mockito.ArgumentMatchers.eq("session-001"),
+                org.mockito.ArgumentMatchers.eq("sec-001"),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.ddd.backend.api.dto.session.SecureInputSubmissionResponse(
+                        "req-001", "sec-001", "COMPLETED",
+                        "안전 검증이 끝났습니다."));
+
+        mockMvc.perform(post(
+                        "/api/v1/sessions/{sessionId}/secure-inputs/{secureRequestId}/submit",
+                        "session-001", "sec-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestId":"req-001",
+                                  "value":"raw-secret-1234",
+                                  "expectedFrameId":"frm-001",
+                                  "expectedSequence":1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requestId").value("req-001"))
+                .andExpect(jsonPath("$.data.secureRequestId").value("sec-001"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$..value").doesNotExist())
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("raw-secret-1234"))));
+    }
 
     @Test
     void 자동화_세션을_생성한다()

@@ -224,6 +224,34 @@ class DemoBankIntegrationTest {
     }
 
     @Test
+    void D26_실제_Demo_보안입력_완료후_secure_DOM이_제거된다() {
+        try (PlaywrightWorker worker = new PlaywrightWorker();
+             BrowserSessionManager manager = new BrowserSessionManager(worker)) {
+            String sessionId = "demo-secure-d26";
+            manager.createSession(sessionId);
+            manager.navigate(sessionId, java.net.URI.create(
+                    BASE_URL + "/deposit/secure/password/deposit-12m"));
+
+            manager.execute(sessionId, COMMAND_TIMEOUT, page -> {
+                page.locator("#input-account-password").fill("demo-only-secret");
+                page.locator("#btn-secure-input-complete").click();
+                assertThat(page.locator("[data-ddd-policy=secure-input]")).hasCount(0);
+                assertThat(page.locator("[data-ddd-secure-state=completed]")).isVisible();
+                return null;
+            });
+
+            com.ddd.backend.ai.DepositScreenInspector inspector =
+                    new com.ddd.backend.ai.DepositScreenInspector(
+                            manager, new com.ddd.backend.ai.DepositPageClassifier());
+            org.assertj.core.api.Assertions.assertThat(inspector.inspect(sessionId).valid())
+                    .isTrue();
+            org.assertj.core.api.Assertions.assertThat(
+                    new FrameCaptureGuard(manager).evaluate(sessionId))
+                    .isEqualTo(FrameCaptureDecision.ALLOW);
+        }
+    }
+
+    @Test
     void 출금_계좌를_선택할_수_있다() {
         try (
                 PlaywrightWorker worker =

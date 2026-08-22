@@ -5,6 +5,7 @@ import com.ddd.backend.security.SensitiveDataMasker;
 
 import java.time.Instant;
 import java.util.Objects;
+import com.ddd.backend.security.secureinput.SecureInputRequest;
 
 public record AutomationUiEvent(
         String eventId,
@@ -16,8 +17,18 @@ public record AutomationUiEvent(
         boolean actionRequired,
         AutomationTarget target,
         AutomationDecisionPrompt decision,
+        SecureInputRequest secureInput,
         Instant occurredAt
 ) {
+    public AutomationUiEvent(
+            String eventId, long eventSequence, AutomationUiEventType eventType,
+            String sessionId, WorkflowStatus status, String message,
+            boolean actionRequired, AutomationTarget target,
+            AutomationDecisionPrompt decision, Instant occurredAt
+    ) {
+        this(eventId, eventSequence, eventType, sessionId, status, message,
+                actionRequired, target, decision, null, occurredAt);
+    }
     public AutomationUiEvent {
         if (eventId == null || eventId.isBlank() || eventSequence < 1) {
             throw new IllegalArgumentException("이벤트 식별 정보가 올바르지 않습니다.");
@@ -38,6 +49,11 @@ public record AutomationUiEvent(
             throw new IllegalArgumentException(
                     "DECISION_REQUIRED 이벤트에는 decision이 필요합니다."
             );
+        }
+        if (eventType == AutomationUiEventType.SECURE_INPUT_REQUIRED
+                && secureInput == null) {
+            throw new IllegalArgumentException(
+                    "SECURE_INPUT_REQUIRED 이벤트에는 secureInput이 필요합니다.");
         }
         if (message == null || message.isBlank()) {
             message = null;

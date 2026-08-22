@@ -100,6 +100,24 @@ class BrowserActionExecutionServiceTest {
                 );
     }
 
+    @Test
+    void secure_latch_중에는_일반_Action을_실행하지_않는다() {
+        AutomationSession session = AutomationSession.create("보안 입력 테스트");
+        sessionRepository.save(session);
+        var registry = new com.ddd.backend.security.secureinput.SecureInputRegistry();
+        registry.activate(session.getSessionId(),
+                com.ddd.backend.security.secureinput.SecureInputType.ACCOUNT_PASSWORD,
+                "frm-001", 1L, "https://demo/secure");
+        service.setSecureInputRegistry(registry);
+
+        assertThatThrownBy(() -> service.execute(
+                session.getSessionId(), new BrowserAction(
+                        BrowserActionType.NONE, null, null, null, null, null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("보안 입력 중");
+        verifyNoInteractions(actionExecutor);
+    }
+
     /*
      * 기존 기능 +
      * D17 Frame 갱신 확인.
