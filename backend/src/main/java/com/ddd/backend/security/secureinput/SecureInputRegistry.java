@@ -8,11 +8,30 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.List;
+import java.time.Duration;
+import java.time.Instant;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import static com.ddd.backend.common.exception.ErrorCode.*;
 
 /** 원문을 저장하지 않는 session별 D26 secure latch. */
 @Component
 public final class SecureInputRegistry {
     private final ConcurrentMap<String, State> states = new ConcurrentHashMap<>();
+    private final Duration completionTimeout;
+
+    public SecureInputRegistry() {
+        this(Duration.ofMinutes(5));
+    }
+
+    @Autowired
+    public SecureInputRegistry(
+            @Value("${ddd.secure-takeover.completion-timeout:5m}")
+            Duration completionTimeout
+    ) {
+        this.completionTimeout = completionTimeout;
+    }
 
     public SecureInputRequest activate(
             String sessionId, SecureInputType type, String frameId, long frameSequence,
@@ -25,6 +44,7 @@ public final class SecureInputRegistry {
                     "sec-" + UUID.randomUUID(), type, frameId, frameSequence,
                     "민감정보는 전용 보안 입력 화면에서 직접 입력해 주세요.");
             state.pageUrl = pageUrl;
+            state.expiresAt = Instant.now().plus(completionTimeout);
             return state.active;
         }
     }
@@ -51,11 +71,13 @@ public final class SecureInputRegistry {
 
     public void allowSingleSafeCapture(String sessionId, String secureRequestId) {
         State state = states.get(sessionId);
-        if (state == null) throw rejected();
+        if (state == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
         synchronized (state) {
-            if (state.active == null
-                    || !state.active.secureRequestId().equals(secureRequestId)
-                    || !state.inFlight) throw rejected();
+            if (state.active == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
+            if (!state.active.secureRequestId().equals(secureRequestId)) {
+                throw new SecureInputException(SECURE_REQUEST_MISMATCH);
+            }
+            if (!state.inFlight) throw new SecureInputException(SECURE_REQUEST_ABORTED);
             state.safeCaptureAllowed = true;
         }
     }
@@ -67,9 +89,9 @@ public final class SecureInputRegistry {
 
     public String activePageUrl(String sessionId) {
         State state = states.get(sessionId);
-        if (state == null) throw rejected();
+        if (state == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
         synchronized (state) {
-            if (state.active == null) throw rejected();
+            if (state.active == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
             return state.pageUrl;
         }
     }
@@ -79,15 +101,24 @@ public final class SecureInputRegistry {
             String expectedFrameId, long expectedSequence
     ) {
         State state = states.get(sessionId);
-        if (state == null) throw rejected();
+        if (state == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
         synchronized (state) {
             SecureInputRequest active = state.active;
-            if (active == null || !active.secureRequestId().equals(secureRequestId)
-                    || !active.frameId().equals(expectedFrameId)
-                    || active.frameSequence() != expectedSequence
-                    || state.inFlight || state.processedRequestIds.contains(requestId)) {
-                throw rejected();
+            if (active == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
+            if (Instant.now().isAfter(state.expiresAt)) {
+                throw new SecureInputException(SECURE_COMPLETION_TIMEOUT);
             }
+            if (!active.secureRequestId().equals(secureRequestId)) {
+                throw new SecureInputException(SECURE_REQUEST_MISMATCH);
+            }
+            if (!active.frameId().equals(expectedFrameId)
+                    || active.frameSequence() != expectedSequence) {
+                throw new SecureInputException(SECURE_STALE_FRAME);
+            }
+            if (state.processedRequestIds.contains(requestId)) {
+                throw new SecureInputException(SECURE_DUPLICATE_REQUEST);
+            }
+            if (state.inFlight) throw new SecureInputException(SECURE_COMPLETION_BUSY);
             state.inFlight = true;
             state.processedRequestIds.add(requestId);
             return active;
@@ -96,10 +127,12 @@ public final class SecureInputRegistry {
 
     public SecureInputRequest resolve(String sessionId, String secureRequestId) {
         State state = states.get(sessionId);
-        if (state == null) throw rejected();
+        if (state == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
         synchronized (state) {
-            if (state.active == null
-                    || !state.active.secureRequestId().equals(secureRequestId)) throw rejected();
+            if (state.active == null) throw new SecureInputException(SECURE_REQUEST_NOT_FOUND);
+            if (!state.active.secureRequestId().equals(secureRequestId)) {
+                throw new SecureInputException(SECURE_REQUEST_MISMATCH);
+            }
             SecureInputRequest resolved = state.active;
             state.active = null;
             state.pageUrl = null;
@@ -118,8 +151,19 @@ public final class SecureInputRegistry {
         if (sessionId != null) states.remove(sessionId);
     }
 
-    private IllegalStateException rejected() {
-        return new IllegalStateException("보안 입력 요청을 처리할 수 없습니다.");
+    public List<String> removeExpired() {
+        Instant now = Instant.now();
+        java.util.ArrayList<String> expired = new java.util.ArrayList<>();
+        states.forEach((sessionId, state) -> {
+            synchronized (state) {
+                if (state.active != null && !state.inFlight
+                        && now.isAfter(state.expiresAt)
+                        && states.remove(sessionId, state)) {
+                    expired.add(sessionId);
+                }
+            }
+        });
+        return List.copyOf(expired);
     }
 
     private static final class State {
@@ -127,6 +171,7 @@ public final class SecureInputRegistry {
         private boolean inFlight;
         private String pageUrl;
         private boolean safeCaptureAllowed;
+        private Instant expiresAt;
         private final Set<String> processedRequestIds = new HashSet<>();
     }
 }

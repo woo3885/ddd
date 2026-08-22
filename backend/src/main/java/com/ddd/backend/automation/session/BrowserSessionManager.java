@@ -13,6 +13,8 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.net.URI;
 import java.time.Duration;
@@ -86,6 +88,7 @@ public class BrowserSessionManager implements AutoCloseable {
             new ConcurrentHashMap<>();
 
     private final PlaywrightWorker playwrightWorker;
+    private final boolean headedSecureTakeoverEnabled;
 
     private final AtomicBoolean closed =
             new AtomicBoolean(false);
@@ -104,11 +107,21 @@ public class BrowserSessionManager implements AutoCloseable {
     public BrowserSessionManager(
             PlaywrightWorker playwrightWorker
     ) {
+        this(playwrightWorker, false);
+    }
+
+    @Autowired
+    public BrowserSessionManager(
+            PlaywrightWorker playwrightWorker,
+            @Value("${ddd.secure-takeover.demo-headed-enabled:false}")
+            boolean headedSecureTakeoverEnabled
+    ) {
         this.playwrightWorker =
                 Objects.requireNonNull(
                         playwrightWorker,
                         "PlaywrightWorker는 필수입니다."
                 );
+        this.headedSecureTakeoverEnabled = headedSecureTakeoverEnabled;
     }
 
     /*
@@ -478,7 +491,7 @@ public class BrowserSessionManager implements AutoCloseable {
                             .launch(
                                     new BrowserType.LaunchOptions()
                                             .setHeadless(
-                                                    true
+                                                    !headedSecureTakeoverEnabled
                                             )
                             );
 

@@ -4,7 +4,7 @@ import com.ddd.backend.api.dto.session.AutomationSessionResponse;
 import com.ddd.backend.api.dto.session.CreateSessionRequest;
 import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
-import com.ddd.backend.api.dto.session.SubmitSecureInputRequest;
+import com.ddd.backend.api.dto.session.CompleteSecureInputRequest;
 import com.ddd.backend.api.dto.session.SecureInputSubmissionResponse;
 import com.ddd.backend.common.response.ApiResponse;
 import com.ddd.backend.domain.session.AutomationSession;
@@ -53,11 +53,11 @@ public class AutomationSessionController {
         this(sessionService, userDecisionService, null, null);
     }
 
-    @PostMapping("/{sessionId}/secure-inputs/{secureRequestId}/submit")
+    @PostMapping("/{sessionId}/secure-inputs/{secureRequestId}/complete")
     public ApiResponse<SecureInputSubmissionResponse> submitSecureInput(
             @PathVariable String sessionId,
             @PathVariable String secureRequestId,
-            @Valid @RequestBody SubmitSecureInputRequest request,
+            @Valid @RequestBody CompleteSecureInputRequest request,
             HttpServletRequest httpRequest
     ) {
         if (secureInputService == null) {
@@ -68,7 +68,7 @@ public class AutomationSessionController {
         }
         return ApiResponse.success(
                 secureInputService.submit(sessionId, secureRequestId, request),
-                "보안 입력 완료 요청을 처리했습니다. 인증 성공을 의미하지 않습니다.");
+                "보안 입력 완료 여부를 확인하고 있습니다. 인증 성공을 의미하지 않습니다.");
     }
 
     @PostMapping

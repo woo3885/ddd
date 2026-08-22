@@ -2,7 +2,7 @@ package com.ddd.backend.security.secureinput;
 
 import com.ddd.backend.ai.AgentLoopService;
 import com.ddd.backend.api.dto.session.SecureInputSubmissionResponse;
-import com.ddd.backend.api.dto.session.SubmitSecureInputRequest;
+import com.ddd.backend.api.dto.session.CompleteSecureInputRequest;
 import com.ddd.backend.automation.session.BrowserSessionManager;
 import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
@@ -20,12 +20,14 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Duration;
 import java.util.Objects;
+import static com.ddd.backend.common.exception.ErrorCode.*;
 
 @Service
 public final class SecureInputService {
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
     private static final String SECURE_SELECTOR = "[data-ddd-policy=\"secure-input\"]";
-    private static final String COMPLETE_SELECTOR = "#btn-secure-input-complete";
+    private static final String COMPLETED_SELECTOR =
+            "[data-ddd-secure-state=\"completed\"]";
 
     private final SecureInputRegistry registry;
     private final BrowserSessionManager browserSessionManager;
@@ -72,34 +74,35 @@ public final class SecureInputService {
 
     public SecureInputSubmissionResponse submit(
             String sessionId, String secureRequestId,
-            SubmitSecureInputRequest submission
+            CompleteSecureInputRequest submission
     ) {
         Objects.requireNonNull(submission, "보안 입력 제출 요청은 필수입니다.");
         AutomationSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException(sessionId));
-        if (session.getStatus() != WorkflowStatus.SECURE_INPUT_REQUIRED) throw rejected();
+        if (isTerminal(session.getStatus())) {
+            throw new SecureInputException(SECURE_SESSION_TERMINATED);
+        }
+        if (session.getStatus() != WorkflowStatus.SECURE_INPUT_REQUIRED) {
+            throw new SecureInputException(SECURE_INVALID_WORKFLOW_STATUS);
+        }
 
         SecureInputRequest active = registry.claim(
                 sessionId, secureRequestId, submission.requestId(),
                 submission.expectedFrameId(), submission.expectedSequence());
 
         try {
-            validateValue(active.secureInputType(), submission.value());
-            browserSessionManager.execute(sessionId, TIMEOUT, page -> {
-                if (!page.url().equals(registry.activePageUrl(sessionId))) throw rejected();
-                Locator secure = page.locator(SECURE_SELECTOR);
-                if (secure.count() != 1 || !secure.first().isVisible()
-                        || !secure.first().isEnabled()
-                        || detectType(secure.first()) != active.secureInputType()) throw rejected();
-                Locator complete = page.locator(COMPLETE_SELECTOR);
-                if (complete.count() != 1 || !complete.first().isVisible()) throw rejected();
-                secure.first().fill(submission.value());
-                complete.first().click();
-                if (page.locator(SECURE_SELECTOR).count() != 0) {
-                    throw new IllegalStateException("보안 입력 화면의 안전 해제를 확인할 수 없습니다.");
-                }
-                return null;
-            });
+            CompletionInspection inspection = browserSessionManager.execute(
+                    sessionId, TIMEOUT, page -> inspectCompletion(
+                            page, registry.activePageUrl(sessionId)));
+            if (inspection == CompletionInspection.PAGE_MISMATCH) {
+                throw new SecureInputException(SECURE_REQUEST_MISMATCH);
+            }
+            if (inspection == CompletionInspection.INPUT_ACTIVE) {
+                throw new SecureInputException(SECURE_INPUT_STILL_ACTIVE);
+            }
+            if (inspection == CompletionInspection.MARKER_MISSING) {
+                throw new SecureInputException(SECURE_MARKER_MISSING);
+            }
 
             registry.allowSingleSafeCapture(sessionId, secureRequestId);
             FrameCaptureAttempt capture;
@@ -109,20 +112,25 @@ public final class SecureInputService {
                 registry.finishSafeCapture(sessionId);
             }
             if (!capture.captured() || capture.frame() == null) {
-                throw new IllegalStateException("안전한 새 화면을 생성할 수 없습니다.");
+                throw new SecureInputException(SECURE_SAFE_FRAME_FAILED);
             }
-            frameStore.publishAfterAction(sessionId, capture.frame());
+            var safeFrame = frameStore.publishAfterAction(sessionId, capture.frame());
             frameWebSocketHandler.sendLatest(sessionId);
             SecureInputRequest resolved = registry.resolve(sessionId, secureRequestId);
-            eventPublisher.publishSecureInputResolved(sessionId, resolved);
+            SecureInputRequest resolvedEvent = new SecureInputRequest(
+                    resolved.secureRequestId(), resolved.secureInputType(),
+                    safeFrame.metadata().frameId(), safeFrame.metadata().sequence(),
+                    "보안 입력 완료 요청 이후의 안전 화면을 확인했습니다.");
+            eventPublisher.publishSecureInputResolved(sessionId, resolvedEvent);
             session.transitionTo(WorkflowStatus.PAGE_LOADING);
             sessionRepository.save(session);
             eventPublisher.publish(sessionId, WorkflowStatus.PAGE_LOADING,
                     "보안 입력 완료 요청 이후의 안전 화면을 확인했습니다.");
             agentLoopProvider.getObject().start(sessionId);
             return new SecureInputSubmissionResponse(
-                    submission.requestId(), secureRequestId, "COMPLETED",
-                    "보안 입력 완료 요청의 안전 검증이 끝났습니다.");
+                    sessionId, submission.requestId(), secureRequestId,
+                    "COMPLETION_ACCEPTED",
+                    "보안 입력 완료 여부를 확인하고 있습니다.");
         } catch (RuntimeException exception) {
             registry.releaseFailedSubmission(sessionId);
             throw exception;
@@ -138,7 +146,9 @@ public final class SecureInputService {
     private Detection detect(com.microsoft.playwright.Page page) {
         Locator secure = page.locator(SECURE_SELECTOR);
         if (secure.count() != 1 || !secure.first().isVisible()
-                || !secure.first().isEnabled()) throw rejected();
+                || !secure.first().isEnabled()) {
+            throw new SecureInputException(SECURE_REQUEST_ABORTED);
+        }
         return new Detection(detectType(secure.first()), page.url());
     }
 
@@ -154,23 +164,30 @@ public final class SecureInputService {
         return SecureInputType.ACCOUNT_PASSWORD;
     }
 
-    private void validateValue(SecureInputType type, String value) {
-        if (value == null || value.isBlank()) throw rejected();
-        boolean valid = switch (type) {
-            case ACCOUNT_PASSWORD -> value.length() <= 64;
-            case CERTIFICATE_PASSWORD -> value.length() <= 128;
-            case OTP -> value.matches("[0-9]{4,8}");
-        };
-        if (!valid) throw rejected();
+    private CompletionInspection inspectCompletion(
+            com.microsoft.playwright.Page page, String expectedPageUrl
+    ) {
+        if (!page.url().equals(expectedPageUrl)) return CompletionInspection.PAGE_MISMATCH;
+        Locator secure = page.locator(SECURE_SELECTOR);
+        if (secure.count() != 0) return CompletionInspection.INPUT_ACTIVE;
+        Locator completed = page.locator(COMPLETED_SELECTOR);
+        if (completed.count() != 1 || !completed.first().isVisible()) {
+            return CompletionInspection.MARKER_MISSING;
+        }
+        return CompletionInspection.VALID;
     }
 
-    private String lower(String value) {
-        return value == null ? "" : value.toLowerCase(java.util.Locale.ROOT);
+    private String lower(String attribute) {
+        return attribute == null ? "" : attribute.toLowerCase(java.util.Locale.ROOT);
     }
 
-    private IllegalStateException rejected() {
-        return new IllegalStateException("보안 입력 요청을 처리할 수 없습니다.");
+    private boolean isTerminal(WorkflowStatus status) {
+        return status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.ERROR
+                || status == WorkflowStatus.TERMINATED;
     }
 
     private record Detection(SecureInputType type, String pageUrl) {}
+    private enum CompletionInspection { VALID, PAGE_MISMATCH, INPUT_ACTIVE, MARKER_MISSING }
 }
