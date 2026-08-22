@@ -16,6 +16,7 @@
     "test:d24": "tsx --test src/tests/d24DecisionResponseContract.test.ts src/tests/d24UserDecision.test.ts",
     "test:d24:response": "tsx --test src/tests/d24DecisionResponseContract.test.ts",
     "test:d25": "tsx --test src/tests/d25DepositScenario.test.ts",
+    "test:d26": "tsx --test src/tests/d26SecureInputEvaluation.test.ts",
     "test:live": "tsx --test src/tests/geminiApi.test.ts src/tests/geminiStructuredOutput.test.ts"
   },
   "dependencies": {

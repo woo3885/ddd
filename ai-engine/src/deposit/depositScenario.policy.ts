@@ -13,6 +13,10 @@ import {
   sanitizeInternalMessage,
 } from "../messages/messageSafety.js";
 
+import {
+  createSecureInputPauseForRequest,
+} from "../secureInput/secureInput.policy.js";
+
 export type DepositScenarioStage =
   | "PRODUCT_LIST"
   | "PRODUCT_DETAIL"
@@ -889,8 +893,9 @@ function enforceProductDetail(
 
 function enforceSecureInput(
   response: StructuredAIResponse,
+  request: AiActionRequest,
 ): StructuredAIResponse {
-  return {
+  return createSecureInputPauseForRequest(request) ?? {
     ...clearDecisionMetadata(response),
     status: "SECURE_INPUT_REQUIRED",
     action: "PAUSE_FOR_SECURE_INPUT",
@@ -899,7 +904,7 @@ function enforceSecureInput(
     message: DEPOSIT_GUIDANCE.secureInput,
     confidence: 1,
     requiresUserAction: true,
-    secureInputType: "PASSWORD",
+    secureInputType: null,
     riskType: null,
   };
 }
@@ -913,7 +918,7 @@ export function enforceDepositScenarioPolicy(
   );
 
   if (stage === "SECURE_INPUT") {
-    return enforceSecureInput(response);
+    return enforceSecureInput(response, request);
   }
 
   if (hasRiskOrSecureModelSignal(response)) {

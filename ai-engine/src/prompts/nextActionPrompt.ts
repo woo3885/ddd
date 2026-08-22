@@ -173,8 +173,8 @@ SECURITY_POLICY:SECURE_INPUT
 - status는 반드시 "SECURE_INPUT_REQUIRED"로 반환하십시오.
 - action은 반드시 "PAUSE_FOR_SECURE_INPUT"으로 반환하십시오.
 - requiresUserAction은 true로 반환하십시오.
-- secureInputType에는 가능한 경우 입력 종류를 반환하십시오.
-  예: "PASSWORD", "OTP", "AUTH_CODE"
+- secureInputType에는 Backend enum과 일치하는 입력 종류만 반환하십시오.
+  허용: "ACCOUNT_PASSWORD", "OTP", "CERTIFICATE_PASSWORD"
 - 판단할 수 없으면 secureInputType은 null로 반환하십시오.
 
 예시:

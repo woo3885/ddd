@@ -42,7 +42,25 @@ function isSecureInputRequired(
     response.status ===
       "SECURE_INPUT_REQUIRED" &&
     response.action ===
-      "PAUSE_FOR_SECURE_INPUT"
+      "PAUSE_FOR_SECURE_INPUT" &&
+    response.targetElementId === null &&
+    response.inputValue === null &&
+    response.requiresUserAction &&
+    response.decisionType === null &&
+    response.options === null &&
+    response.confirmationId === null &&
+    response.summary === null &&
+    response.riskType === null
+  );
+}
+
+function hasVisibleSecureInput(
+  snapshot: BackendSanitizedDomSnapshot,
+): boolean {
+  return snapshot.elements.some(
+    (element) =>
+      element.visible &&
+      element.securityPolicy === "SECURE_INPUT",
   );
 }
 
@@ -446,7 +464,8 @@ export async function resumeAgentLoopAfterSecureInput(
     response.confirmationId !== null ||
     response.decisionType !== null ||
     resumedSnapshot.snapshotId ===
-      pausedResult.finalSnapshot.snapshotId
+      pausedResult.finalSnapshot.snapshotId ||
+    hasVisibleSecureInput(resumedSnapshot)
   ) {
     throw new Error(
       "[AI Engine] only a clean SECURE_INPUT pause can resume through the secure-input path.",
