@@ -81,12 +81,118 @@ function event(
     actionRequired: false,
     target: eventType === 'TARGET' ? TARGET : null,
     decision: eventType === 'DECISION_REQUIRED' ? DECISION : null,
+    secureInput: null,
     occurredAt: '2026-08-19T12:00:00Z',
     ...overrides
   };
 }
 
 describe('sessionUiReducer', () => {
+  it('secure input lifecycle과 completion submit 상태를 fail-closed로 관리한다', () => {
+    const secureInput = {
+      secureRequestId: 'secure-request-001',
+      secureInputType: 'ACCOUNT_PASSWORD' as const,
+      frameId: 'frm-001',
+      frameSequence: 3,
+      message: '원격 화면에서 보안 정보를 직접 입력해 주세요.'
+    };
+    const required = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'SECURE_INPUT_REQUIRED', {
+        status: 'SECURE_INPUT_REQUIRED',
+        actionRequired: true,
+        secureInput
+      })
+    });
+    expect(required).toMatchObject({
+      workflowStatus: 'SECURE_INPUT_REQUIRED',
+      activeSecureInput: secureInput,
+      secureInputSubmitPhase: 'WAITING_FOR_USER'
+    });
+
+    const submitting = sessionUiReducer(required, {
+      type: 'SECURE_INPUT_SUBMIT_STARTED',
+      secureRequestId: secureInput.secureRequestId
+    });
+    const waiting = sessionUiReducer(submitting, {
+      type: 'SECURE_INPUT_SUBMIT_ACKNOWLEDGED',
+      secureRequestId: secureInput.secureRequestId
+    });
+    expect(waiting.secureInputSubmitPhase).toBe('WAITING_FOR_RESUME');
+    expect(waiting.activeSecureInput).toEqual(secureInput);
+
+    const resolved = sessionUiReducer(waiting, {
+      type: 'EVENT_RECEIVED',
+      event: event(2, 'SECURE_INPUT_RESOLVED', {
+        status: 'PAGE_LOADING',
+        secureInput
+      })
+    });
+    expect(resolved.activeSecureInput).toBeNull();
+    expect(resolved.secureInputSubmitPhase).toBe('IDLE');
+    expect(resolved.workflowStatus).toBe('PAGE_LOADING');
+  });
+
+  it('terminal 상태는 secure 상태를 정리하고 늦은 required event의 역행을 차단한다', () => {
+    const secureInput = {
+      secureRequestId: 'secure-request-001',
+      secureInputType: 'OTP' as const,
+      frameId: 'frm-001',
+      frameSequence: 3,
+      message: '원격 화면에서 보안 정보를 직접 입력해 주세요.'
+    };
+    const active = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'SECURE_INPUT_REQUIRED', {
+        status: 'SECURE_INPUT_REQUIRED',
+        actionRequired: true,
+        secureInput
+      })
+    });
+    const terminal = sessionUiReducer(active, {
+      type: 'EVENT_RECEIVED',
+      event: event(2, 'STATE', { status: 'CANCELLED' })
+    });
+    const late = sessionUiReducer(terminal, {
+      type: 'EVENT_RECEIVED',
+      event: event(3, 'SECURE_INPUT_REQUIRED', {
+        status: 'SECURE_INPUT_REQUIRED',
+        actionRequired: true,
+        secureInput
+      })
+    });
+    expect(late.workflowStatus).toBe('CANCELLED');
+    expect(late.activeSecureInput).toBeNull();
+  });
+
+  it('active secure request를 reconnect snapshot에서 복원한다', () => {
+    const secureInputEvent = event(4, 'SECURE_INPUT_REQUIRED', {
+      status: 'SECURE_INPUT_REQUIRED',
+      actionRequired: true,
+      secureInput: {
+        secureRequestId: 'secure-request-001',
+        secureInputType: 'OTP',
+        frameId: 'frm-001',
+        frameSequence: 3,
+        message: '원격 화면에서 보안 정보를 직접 입력해 주세요.'
+      }
+    });
+    const restored = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'SNAPSHOT_REPLACED',
+      snapshot: {
+        sessionId: SESSION_ID,
+        latestEventSequence: 4,
+        state: event(3, 'STATE', { status: 'SECURE_INPUT_REQUIRED' }),
+        guide: null,
+        target: null,
+        decision: null,
+        secureInput: secureInputEvent
+      }
+    });
+    expect(restored.activeSecureInput).toEqual(secureInputEvent.secureInput);
+    expect(restored.secureInputSubmitPhase).toBe('WAITING_FOR_USER');
+  });
+
   it.each(STATUSES)('%s 상태를 live event로 반영한다', (status) => {
     const state = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
       type: 'EVENT_RECEIVED',
@@ -140,7 +246,8 @@ describe('sessionUiReducer', () => {
       state: event(3, 'STATE', { status: 'PAGE_LOADING' }),
       guide: event(4, 'GUIDE', { message: '페이지를 준비하고 있습니다.' }),
       target: event(5, 'TARGET'),
-      decision: null
+      decision: null,
+      secureInput: null
     };
     const replaced = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
       type: 'SNAPSHOT_REPLACED',

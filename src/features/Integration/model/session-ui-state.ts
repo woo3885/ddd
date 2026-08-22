@@ -1,5 +1,6 @@
 import type {
   SessionDecision,
+  SessionSecureInput,
   SessionTarget,
   SessionUiSnapshot
 } from '@/features/Integration/api/session-status-transport';
@@ -20,6 +21,13 @@ export type DecisionSubmitPhase =
   | 'WAITING_FOR_RESUME'
   | 'ERROR';
 
+export type SecureInputSubmitPhase =
+  | 'IDLE'
+  | 'WAITING_FOR_USER'
+  | 'SUBMITTING'
+  | 'WAITING_FOR_RESUME'
+  | 'ERROR';
+
 export interface SessionUiState {
   sessionId: string;
   workflowStatus: WorkflowStatus;
@@ -31,6 +39,9 @@ export interface SessionUiState {
   selectedTermIds: ReadonlySet<string>;
   decisionSubmitPhase: DecisionSubmitPhase;
   safeDecisionError: string;
+  activeSecureInput: SessionSecureInput | null;
+  secureInputSubmitPhase: SecureInputSubmitPhase;
+  safeSecureInputError: string;
   connectionPhase: SessionUiConnectionPhase;
   safeError: string;
 }
@@ -72,8 +83,22 @@ export function createInitialSessionUiState(
     selectedTermIds: new Set<string>(),
     decisionSubmitPhase: 'IDLE',
     safeDecisionError: '',
+    activeSecureInput: null,
+    secureInputSubmitPhase: 'IDLE',
+    safeSecureInputError: '',
     connectionPhase: 'CONNECTING',
     safeError: ''
+  };
+}
+
+export function clearSessionSecureInput(
+  state: SessionUiState
+): SessionUiState {
+  return {
+    ...state,
+    activeSecureInput: null,
+    secureInputSubmitPhase: 'IDLE',
+    safeSecureInputError: ''
   };
 }
 
@@ -148,6 +173,39 @@ export function isDecisionMatchingFrame(
     frame !== null &&
     decision.frameId === frame.frameId &&
     decision.frameSequence === frame.sequence
+  );
+}
+
+export function isSecureInputMatchingFrame(
+  secureInput: SessionSecureInput | null,
+  frame: SessionFrameIdentity | null
+): boolean {
+  return (
+    secureInput !== null &&
+    frame !== null &&
+    secureInput.frameId === frame.frameId &&
+    secureInput.frameSequence === frame.sequence
+  );
+}
+
+export function canSubmitSecureInputCompletion(input: {
+  state: SessionUiState;
+  frame: SessionFrameIdentity | null;
+  frameReady: boolean;
+  frameReconnecting: boolean;
+  viewerActionPending: boolean;
+}): boolean {
+  const { state, frame, frameReady, frameReconnecting, viewerActionPending } = input;
+  return (
+    state.workflowStatus === 'SECURE_INPUT_REQUIRED' &&
+    state.connectionPhase === 'CONNECTED' &&
+    state.activeSecureInput !== null &&
+    (state.secureInputSubmitPhase === 'WAITING_FOR_USER' ||
+      state.secureInputSubmitPhase === 'ERROR') &&
+    frameReady &&
+    !frameReconnecting &&
+    !viewerActionPending &&
+    isSecureInputMatchingFrame(state.activeSecureInput, frame)
   );
 }
 

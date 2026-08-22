@@ -144,6 +144,25 @@ export function useSessionStatusIntegration({
     dispatch({ type: 'DECISION_SUBMIT_ABORTED', decisionId });
   }, []);
 
+  const markSecureInputSubmitStarted = useCallback((secureRequestId: string) => {
+    dispatch({ type: 'SECURE_INPUT_SUBMIT_STARTED', secureRequestId });
+  }, []);
+
+  const markSecureInputSubmitAcknowledged = useCallback((secureRequestId: string) => {
+    dispatch({ type: 'SECURE_INPUT_SUBMIT_ACKNOWLEDGED', secureRequestId });
+  }, []);
+
+  const markSecureInputSubmitFailed = useCallback(
+    (secureRequestId: string, message: string) => {
+      dispatch({ type: 'SECURE_INPUT_SUBMIT_FAILED', secureRequestId, message });
+    },
+    []
+  );
+
+  const markSecureInputSubmitAborted = useCallback((secureRequestId: string) => {
+    dispatch({ type: 'SECURE_INPUT_SUBMIT_ABORTED', secureRequestId });
+  }, []);
+
   return {
     ...state,
     observeFrame,
@@ -152,6 +171,10 @@ export function useSessionStatusIntegration({
     markDecisionSubmitStarted,
     markDecisionSubmitAcknowledged,
     markDecisionSubmitFailed,
-    markDecisionSubmitAborted
+    markDecisionSubmitAborted,
+    markSecureInputSubmitStarted,
+    markSecureInputSubmitAcknowledged,
+    markSecureInputSubmitFailed,
+    markSecureInputSubmitAborted
   };
 }
