@@ -62,6 +62,19 @@ export interface SessionDecision {
   sourceSnapshotId: string;
 }
 
+export type SessionSecureInputType =
+  | 'ACCOUNT_PASSWORD'
+  | 'OTP'
+  | 'CERTIFICATE_PASSWORD';
+
+export interface SessionSecureInput {
+  secureRequestId: string;
+  secureInputType: SessionSecureInputType;
+  frameId: string;
+  frameSequence: number;
+  message: string;
+}
+
 export type SessionUiEventType =
   | 'STATE'
   | 'GUIDE'
@@ -69,7 +82,10 @@ export type SessionUiEventType =
   | 'TARGET_CLEAR'
   | 'DECISION_REQUIRED'
   | 'DECISION_RESOLVED'
-  | 'DECISION_CLEAR';
+  | 'DECISION_CLEAR'
+  | 'SECURE_INPUT_REQUIRED'
+  | 'SECURE_INPUT_RESOLVED'
+  | 'SECURE_INPUT_CLEAR';
 
 export interface SessionTarget {
   elementId: string;
@@ -93,6 +109,7 @@ export interface SessionUiEvent {
   actionRequired: boolean;
   target: SessionTarget | null;
   decision: SessionDecision | null;
+  secureInput: SessionSecureInput | null;
   occurredAt: string;
 }
 
@@ -103,6 +120,7 @@ export interface SessionUiSnapshot {
   guide: SessionUiEvent | null;
   target: SessionUiEvent | null;
   decision: SessionUiEvent | null;
+  secureInput: SessionUiEvent | null;
 }
 
 export type SessionStatusTransportEvent =
@@ -326,6 +344,35 @@ function validateDecision(value: unknown): SessionDecision {
   };
 }
 
+function validateSecureInput(value: unknown): SessionSecureInput {
+  if (!isRecord(value)) return protocolError();
+  const inputTypes: readonly SessionSecureInputType[] = [
+    'ACCOUNT_PASSWORD',
+    'OTP',
+    'CERTIFICATE_PASSWORD'
+  ];
+  const message = sanitizeSessionMessage(value.message, 'SECURE_INPUT_REQUIRED');
+  if (
+    typeof value.secureRequestId !== 'string' ||
+    !EVENT_ID_PATTERN.test(value.secureRequestId) ||
+    !inputTypes.includes(value.secureInputType as SessionSecureInputType) ||
+    typeof value.frameId !== 'string' ||
+    !FRAME_ID_PATTERN.test(value.frameId) ||
+    !Number.isSafeInteger(value.frameSequence) ||
+    Number(value.frameSequence) < 1 ||
+    message === null
+  ) {
+    return protocolError();
+  }
+  return {
+    secureRequestId: value.secureRequestId,
+    secureInputType: value.secureInputType as SessionSecureInputType,
+    frameId: value.frameId,
+    frameSequence: Number(value.frameSequence),
+    message
+  };
+}
+
 function validateTarget(value: unknown): SessionTarget {
   if (!isRecord(value)) return protocolError();
 
@@ -379,7 +426,10 @@ export function validateSessionUiEvent(
       'TARGET_CLEAR',
       'DECISION_REQUIRED',
       'DECISION_RESOLVED',
-      'DECISION_CLEAR'
+      'DECISION_CLEAR',
+      'SECURE_INPUT_REQUIRED',
+      'SECURE_INPUT_RESOLVED',
+      'SECURE_INPUT_CLEAR'
     ].includes(
       String(value.eventType)
     ) ||
@@ -394,17 +444,33 @@ export function validateSessionUiEvent(
   const status = validateWorkflowStatus(value.status);
   const target = value.target === null ? null : validateTarget(value.target);
   const decision = value.decision === null ? null : validateDecision(value.decision);
+  const secureInput =
+    value.secureInput === null ? null : validateSecureInput(value.secureInput);
+
+  const secureEvent =
+    eventType === 'SECURE_INPUT_REQUIRED' ||
+    eventType === 'SECURE_INPUT_RESOLVED';
+  const allowedStatus =
+    eventType === 'STATE' || secureEvent;
 
   if (
     (eventType === 'STATE' && status === null) ||
-    (eventType !== 'STATE' && status !== null) ||
+    (!allowedStatus && status !== null) ||
+    (eventType === 'SECURE_INPUT_REQUIRED' &&
+      status !== 'SECURE_INPUT_REQUIRED') ||
+    (eventType === 'SECURE_INPUT_RESOLVED' && status !== 'PAGE_LOADING') ||
     (eventType === 'TARGET' && target === null) ||
     (eventType !== 'TARGET' && target !== null) ||
     (eventType === 'DECISION_REQUIRED' && decision === null) ||
     (eventType !== 'DECISION_REQUIRED' && decision !== null) ||
+    (secureEvent && secureInput === null) ||
+    (!secureEvent && secureInput !== null) ||
     (eventType === 'DECISION_REQUIRED' && value.actionRequired !== true) ||
+    (eventType === 'SECURE_INPUT_REQUIRED' && value.actionRequired !== true) ||
     ((eventType === 'DECISION_RESOLVED' || eventType === 'DECISION_CLEAR') &&
-      value.actionRequired !== false)
+      value.actionRequired !== false) ||
+    ((eventType === 'SECURE_INPUT_RESOLVED' ||
+      eventType === 'SECURE_INPUT_CLEAR') && value.actionRequired !== false)
   ) {
     return protocolError();
   }
@@ -419,6 +485,7 @@ export function validateSessionUiEvent(
     actionRequired: value.actionRequired,
     target,
     decision,
+    secureInput,
     occurredAt: value.occurredAt
   };
 }
@@ -442,8 +509,9 @@ export function validateSessionUiSnapshot(
   const guide = parseEntry(value.guide);
   const target = parseEntry(value.target);
   const decision = parseEntry(value.decision);
+  const secureInput = parseEntry(value.secureInput);
   const latestEventSequence = Number(value.latestEventSequence);
-  const entries = [state, guide, target, decision].filter(
+  const entries = [state, guide, target, decision, secureInput].filter(
     (entry): entry is SessionUiEvent => entry !== null
   );
 
@@ -452,6 +520,8 @@ export function validateSessionUiSnapshot(
     (guide !== null && guide.eventType !== 'GUIDE') ||
     (target !== null && target.eventType !== 'TARGET') ||
     (decision !== null && decision.eventType !== 'DECISION_REQUIRED') ||
+    (secureInput !== null &&
+      secureInput.eventType !== 'SECURE_INPUT_REQUIRED') ||
     entries.some((entry) => entry.eventSequence > latestEventSequence)
   ) {
     return protocolError();
@@ -463,7 +533,8 @@ export function validateSessionUiSnapshot(
     state,
     guide,
     target,
-    decision
+    decision,
+    secureInput
   };
 }
 

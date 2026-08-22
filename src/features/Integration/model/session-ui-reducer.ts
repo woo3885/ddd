@@ -6,6 +6,7 @@ import type { WorkflowStatus } from '@/types/frontend-state';
 import {
   TERMINAL_WORKFLOW_STATUSES,
   clearSessionDecision,
+  clearSessionSecureInput,
   createInitialSessionUiState,
   defaultWorkflowMessage,
   initialDecisionSelection,
@@ -34,7 +35,11 @@ export type SessionUiAction =
   | { type: 'DECISION_SUBMIT_STARTED'; decisionId: string }
   | { type: 'DECISION_SUBMIT_ACKNOWLEDGED'; decisionId: string }
   | { type: 'DECISION_SUBMIT_FAILED'; decisionId: string; message: string }
-  | { type: 'DECISION_SUBMIT_ABORTED'; decisionId: string };
+  | { type: 'DECISION_SUBMIT_ABORTED'; decisionId: string }
+  | { type: 'SECURE_INPUT_SUBMIT_STARTED'; secureRequestId: string }
+  | { type: 'SECURE_INPUT_SUBMIT_ACKNOWLEDGED'; secureRequestId: string }
+  | { type: 'SECURE_INPUT_SUBMIT_FAILED'; secureRequestId: string; message: string }
+  | { type: 'SECURE_INPUT_SUBMIT_ABORTED'; secureRequestId: string };
 
 function isSameSession(state: SessionUiState, sessionId: string): boolean {
   return state.sessionId === sessionId;
@@ -65,6 +70,13 @@ function applyEvent(
     safeError: ''
   };
 
+  if (
+    TERMINAL_WORKFLOW_STATUSES.has(state.workflowStatus) &&
+    event.eventType === 'SECURE_INPUT_REQUIRED'
+  ) {
+    return sequenceState;
+  }
+
   switch (event.eventType) {
     case 'STATE': {
       const nextStatus = event.status;
@@ -81,9 +93,12 @@ function applyEvent(
         guideMessage: messageForEvent(event, nextStatus),
         target: isTargetAllowed(nextStatus) ? state.target : null
       };
-      return nextStatus === 'USER_DECISION_REQUIRED'
+      const decisionState = nextStatus === 'USER_DECISION_REQUIRED'
         ? nextState
         : clearSessionDecision(nextState);
+      return nextStatus === 'SECURE_INPUT_REQUIRED'
+        ? decisionState
+        : clearSessionSecureInput(decisionState);
     }
     case 'GUIDE':
       return {
@@ -140,6 +155,36 @@ function applyEvent(
     case 'DECISION_RESOLVED':
     case 'DECISION_CLEAR':
       return clearSessionDecision(sequenceState);
+    case 'SECURE_INPUT_REQUIRED': {
+      const secureInput = event.secureInput;
+      if (!secureInput) return clearSessionSecureInput(sequenceState);
+      const sameRequest =
+        state.activeSecureInput?.secureRequestId === secureInput.secureRequestId;
+      return {
+        ...sequenceState,
+        workflowStatus: 'SECURE_INPUT_REQUIRED',
+        guideMessage: event.message ?? secureInput.message,
+        target: null,
+        activeSecureInput: secureInput,
+        secureInputSubmitPhase: sameRequest
+          ? state.secureInputSubmitPhase
+          : 'WAITING_FOR_USER',
+        safeSecureInputError: sameRequest ? state.safeSecureInputError : ''
+      };
+    }
+    case 'SECURE_INPUT_RESOLVED': {
+      const nextStatus = event.status ?? state.workflowStatus;
+      return clearSessionSecureInput(
+        clearSessionDecision({
+          ...sequenceState,
+          workflowStatus: nextStatus,
+          guideMessage: messageForEvent(event, nextStatus),
+          target: null
+        })
+      );
+    }
+    case 'SECURE_INPUT_CLEAR':
+      return clearSessionSecureInput(sequenceState);
   }
 }
 
@@ -178,6 +223,20 @@ function replaceSnapshot(
     target,
     safeError: ''
   };
+  if (
+    workflowStatus === 'SECURE_INPUT_REQUIRED' &&
+    snapshot.secureInput !== null
+  ) {
+    nextState = applyEvent(
+      { ...clearSessionDecision(nextState), lastEventSequence: null },
+      snapshot.secureInput
+    );
+    return {
+      ...nextState,
+      lastEventSequence: snapshot.latestEventSequence
+    };
+  }
+  nextState = clearSessionSecureInput(nextState);
   if (workflowStatus !== 'USER_DECISION_REQUIRED' || snapshot.decision === null) {
     return clearSessionDecision(nextState);
   }
@@ -211,6 +270,10 @@ export function sessionUiReducer(
           state.decisionSubmitPhase === 'SUBMITTING'
             ? 'SELECTING'
             : state.decisionSubmitPhase,
+        secureInputSubmitPhase:
+          state.secureInputSubmitPhase === 'SUBMITTING'
+            ? 'WAITING_FOR_USER'
+            : state.secureInputSubmitPhase,
         safeError: ''
       };
     case 'CONNECTED':
@@ -224,6 +287,10 @@ export function sessionUiReducer(
           state.decisionSubmitPhase === 'SUBMITTING'
             ? 'SELECTING'
             : state.decisionSubmitPhase,
+        secureInputSubmitPhase:
+          state.secureInputSubmitPhase === 'SUBMITTING'
+            ? 'WAITING_FOR_USER'
+            : state.secureInputSubmitPhase,
         safeError: '실시간 상태 연결이 끊겼습니다. 자동으로 복구하고 있습니다.'
       };
     case 'SAFE_ERROR':
@@ -235,6 +302,10 @@ export function sessionUiReducer(
           state.decisionSubmitPhase === 'SUBMITTING'
             ? 'SELECTING'
             : state.decisionSubmitPhase,
+        secureInputSubmitPhase:
+          state.secureInputSubmitPhase === 'SUBMITTING'
+            ? 'WAITING_FOR_USER'
+            : state.secureInputSubmitPhase,
         safeError: action.message
       };
     case 'SNAPSHOT_REPLACED':
@@ -339,6 +410,42 @@ export function sessionUiReducer(
             ...state,
             decisionSubmitPhase: 'SELECTING',
             safeDecisionError: ''
+          }
+        : state;
+    case 'SECURE_INPUT_SUBMIT_STARTED':
+      return state.activeSecureInput?.secureRequestId === action.secureRequestId &&
+        (state.secureInputSubmitPhase === 'WAITING_FOR_USER' ||
+          state.secureInputSubmitPhase === 'ERROR')
+        ? {
+            ...state,
+            secureInputSubmitPhase: 'SUBMITTING',
+            safeSecureInputError: ''
+          }
+        : state;
+    case 'SECURE_INPUT_SUBMIT_ACKNOWLEDGED':
+      return state.activeSecureInput?.secureRequestId === action.secureRequestId &&
+        state.secureInputSubmitPhase === 'SUBMITTING'
+        ? {
+            ...state,
+            secureInputSubmitPhase: 'WAITING_FOR_RESUME',
+            safeSecureInputError: ''
+          }
+        : state;
+    case 'SECURE_INPUT_SUBMIT_FAILED':
+      return state.activeSecureInput?.secureRequestId === action.secureRequestId
+        ? {
+            ...state,
+            secureInputSubmitPhase: 'ERROR',
+            safeSecureInputError: action.message
+          }
+        : state;
+    case 'SECURE_INPUT_SUBMIT_ABORTED':
+      return state.activeSecureInput?.secureRequestId === action.secureRequestId &&
+        state.secureInputSubmitPhase === 'SUBMITTING'
+        ? {
+            ...state,
+            secureInputSubmitPhase: 'WAITING_FOR_USER',
+            safeSecureInputError: ''
           }
         : state;
   }

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   frameHook: vi.fn(),
   statusHook: vi.fn(),
   decisionHook: vi.fn(),
+  secureInputHook: vi.fn(),
   overlayProps: vi.fn()
 }));
 
@@ -27,6 +28,10 @@ vi.mock('@/features/Integration/hooks/useSessionStatusIntegration', () => ({
 
 vi.mock('@/features/Integration/hooks/useSessionDecisionIntegration', () => ({
   useSessionDecisionIntegration: mocks.decisionHook
+}));
+
+vi.mock('@/features/Integration/hooks/useSessionSecureInputIntegration', () => ({
+  useSessionSecureInputIntegration: mocks.secureInputHook
 }));
 
 vi.mock('@/features/F2_StreamViewer/ui/F2_StreamViewer', () => ({
@@ -122,6 +127,9 @@ function statusHook(overrides = {}) {
     selectedTermIds: new Set<string>(),
     decisionSubmitPhase: 'IDLE',
     safeDecisionError: '',
+    activeSecureInput: null,
+    secureInputSubmitPhase: 'IDLE',
+    safeSecureInputError: '',
     connectionPhase: 'CONNECTED',
     safeError: '',
     observeFrame: vi.fn(),
@@ -131,6 +139,10 @@ function statusHook(overrides = {}) {
     markDecisionSubmitAcknowledged: vi.fn(),
     markDecisionSubmitFailed: vi.fn(),
     markDecisionSubmitAborted: vi.fn(),
+    markSecureInputSubmitStarted: vi.fn(),
+    markSecureInputSubmitAcknowledged: vi.fn(),
+    markSecureInputSubmitFailed: vi.fn(),
+    markSecureInputSubmitAborted: vi.fn(),
     ...overrides
   };
 }
@@ -149,10 +161,23 @@ function decisionHook(overrides = {}) {
   };
 }
 
+function secureInputHook(overrides = {}) {
+  return {
+    canSubmit: false,
+    controlsDisabled: true,
+    isBusy: false,
+    completionRequested: false,
+    requestCompletion: vi.fn(),
+    abort: vi.fn(),
+    ...overrides
+  };
+}
+
 beforeEach(() => {
   mocks.frameHook.mockReturnValue(frameHook());
   mocks.statusHook.mockReturnValue(statusHook());
   mocks.decisionHook.mockReturnValue(decisionHook());
+  mocks.secureInputHook.mockReturnValue(secureInputHook());
   mocks.overlayProps.mockClear();
 });
 
@@ -262,6 +287,70 @@ describe('SessionIntegrationView', () => {
     expect(submitViewerAction).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByText(/인증 성공|가입 성공/)).not.toBeInTheDocument();
+  });
+
+  it('live secure metadata가 준비되면 Panel 완료 버튼을 안전한 hook 경계에 연결한다', async () => {
+    const user = userEvent.setup();
+    const requestCompletion = vi.fn();
+    mocks.secureInputHook.mockReturnValue(
+      secureInputHook({ controlsDisabled: false, canSubmit: true, requestCompletion })
+    );
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'SECURE_INPUT_REQUIRED',
+        target: null,
+        activeSecureInput: {
+          secureRequestId: 'secure-request-private',
+          secureInputType: 'ACCOUNT_PASSWORD',
+          frameId: 'frm-001',
+          frameSequence: 3,
+          message: '원격 금융 화면에서 보안 정보를 직접 입력해 주세요.'
+        },
+        secureInputSubmitPhase: 'WAITING_FOR_USER'
+      })
+    );
+
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+    const button = screen.getByTestId(
+      SECURE_INPUT_PANEL_SELECTORS.completeButton
+    );
+    expect(button).toBeEnabled();
+    await user.click(button);
+    expect(requestCompletion).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('secure-request-private')).not.toBeInTheDocument();
+  });
+
+  it('secure 요청 중·ACK 후 버튼을 disabled로 유지하고 안전 오류 하나만 알린다', () => {
+    mocks.secureInputHook.mockReturnValue(
+      secureInputHook({
+        controlsDisabled: true,
+        isBusy: false,
+        completionRequested: true
+      })
+    );
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'SECURE_INPUT_REQUIRED',
+        activeSecureInput: {
+          secureRequestId: 'secure-request-private',
+          secureInputType: 'OTP',
+          frameId: 'frm-001',
+          frameSequence: 3,
+          message: '원격 금융 화면에서 보안 정보를 직접 입력해 주세요.'
+        },
+        secureInputSubmitPhase: 'WAITING_FOR_RESUME',
+        safeSecureInputError: '최신 화면을 확인한 뒤 다시 요청해 주세요.'
+      })
+    );
+
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+    expect(
+      screen.getByTestId(SECURE_INPUT_PANEL_SELECTORS.completeButton)
+    ).toBeDisabled();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '최신 화면을 확인한 뒤 다시 요청해 주세요.'
+    );
   });
 
   it('종료 버튼은 session reset 후 Dashboard 복귀 경계만 호출한다', async () => {

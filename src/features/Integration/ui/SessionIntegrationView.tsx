@@ -4,6 +4,7 @@ import F2_StreamViewer from '@/features/F2_StreamViewer/ui/F2_StreamViewer';
 import F3_SmartOverlay from '@/features/F3_SmartOverlay/ui/F3_SmartOverlay';
 import { useSessionFrameIntegration } from '@/features/Integration/hooks/useSessionFrameIntegration';
 import { useSessionDecisionIntegration } from '@/features/Integration/hooks/useSessionDecisionIntegration';
+import { useSessionSecureInputIntegration } from '@/features/Integration/hooks/useSessionSecureInputIntegration';
 import { useSessionStatusIntegration } from '@/features/Integration/hooks/useSessionStatusIntegration';
 import type { BackendSession } from '@/features/Integration/api/session-rest-client';
 import {
@@ -26,6 +27,7 @@ export const SESSION_INTEGRATION_SELECTORS = {
   uiConnection: 'status-production-ui-connection',
   actionState: 'status-production-viewer-action',
   decisionSubmitState: 'status-session-decision-submit',
+  secureInputSubmitState: 'status-session-secure-input-submit',
   exitButton: 'btn-session-integration-exit'
 } as const;
 
@@ -101,6 +103,17 @@ export default function SessionIntegrationView({
     onSubmitFailed: statusIntegration.markDecisionSubmitFailed,
     onSubmitAborted: statusIntegration.markDecisionSubmitAborted
   });
+  const secureInputIntegration = useSessionSecureInputIntegration({
+    state: statusIntegration,
+    frame: frameIdentity,
+    frameReady: frameIntegration.phase === 'FRAME_READY',
+    frameReconnecting,
+    viewerActionPending: frameIntegration.actionPending,
+    onSubmitStarted: statusIntegration.markSecureInputSubmitStarted,
+    onSubmitAcknowledged: statusIntegration.markSecureInputSubmitAcknowledged,
+    onSubmitFailed: statusIntegration.markSecureInputSubmitFailed,
+    onSubmitAborted: statusIntegration.markSecureInputSubmitAborted
+  });
 
   useEffect(() => {
     statusIntegration.observeFrame(frameIdentity);
@@ -127,12 +140,14 @@ export default function SessionIntegrationView({
     frameIntegration.canSubmitViewerAction &&
     statusTransportReady &&
     statusIntegration.activeDecision === null &&
+    statusIntegration.activeSecureInput === null &&
     isViewerActionAllowed(statusIntegration.workflowStatus) &&
     targetMatchesFrame;
   const busy =
     frameIntegration.recoveryPending ||
     frameIntegration.actionPending ||
     decisionIntegration.isBusy ||
+    secureInputIntegration.isBusy ||
     statusIntegration.connectionPhase === 'CONNECTING' ||
     statusIntegration.connectionPhase === 'RESYNCING';
   const secureInputRequired =
@@ -144,6 +159,7 @@ export default function SessionIntegrationView({
 
   const handleExit = async () => {
     decisionIntegration.abort();
+    secureInputIntegration.abort();
     await frameIntegration.reset();
     onExit();
   };
@@ -205,11 +221,13 @@ export default function SessionIntegrationView({
 
       {secureInputRequired ? (
         <SecureInputPanel
-          message={SECURE_INPUT_MESSAGE}
-          completionRequested={false}
-          disabled
-          isBusy={false}
-          onComplete={() => undefined}
+          message={
+            statusIntegration.activeSecureInput?.message ?? SECURE_INPUT_MESSAGE
+          }
+          completionRequested={secureInputIntegration.completionRequested}
+          disabled={secureInputIntegration.controlsDisabled}
+          isBusy={secureInputIntegration.isBusy}
+          onComplete={secureInputIntegration.requestCompletion}
         />
       ) : (
         <WorkflowStatusPanel
@@ -250,6 +268,22 @@ export default function SessionIntegrationView({
           onSelect={decisionIntegration.selectOption}
           onConfirm={decisionIntegration.confirmOption}
         />
+      ) : null}
+
+      {secureInputRequired ? (
+        <div
+          {...elementIdentity(
+            SESSION_INTEGRATION_SELECTORS.secureInputSubmitState
+          )}
+        >
+          {statusIntegration.safeSecureInputError ? (
+            <div role="alert">
+              <Text variant="body" className="text-danger">
+                {statusIntegration.safeSecureInputError}
+              </Text>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {statusIntegration.activeDecision ? (

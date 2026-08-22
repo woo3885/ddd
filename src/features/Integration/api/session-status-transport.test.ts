@@ -26,6 +26,7 @@ function stateEvent(sequence = 1): SessionUiEvent {
     actionRequired: false,
     target: null,
     decision: null,
+    secureInput: null,
     occurredAt: '2026-08-19T12:00:00Z'
   };
 }
@@ -51,6 +52,7 @@ function targetEvent(sequence = 2): SessionUiEvent {
       snapshotId: 'snap-001'
     },
     decision: null,
+    secureInput: null,
     occurredAt: '2026-08-19T12:00:01Z'
   };
 }
@@ -85,7 +87,30 @@ function decisionEvent(
       frameSequence: 3,
       sourceSnapshotId: 'snap-001'
     },
+    secureInput: null,
     occurredAt: '2026-08-19T12:00:02Z'
+  };
+}
+
+function secureInputEvent(sequence = 4): SessionUiEvent {
+  return {
+    eventId: `evt-${sequence}`,
+    eventSequence: sequence,
+    eventType: 'SECURE_INPUT_REQUIRED',
+    sessionId: SESSION_ID,
+    status: 'SECURE_INPUT_REQUIRED',
+    message: '보안 정보를 원격 화면에서 직접 입력해 주세요.',
+    actionRequired: true,
+    target: null,
+    decision: null,
+    secureInput: {
+      secureRequestId: 'secure-request-001',
+      secureInputType: 'ACCOUNT_PASSWORD',
+      frameId: 'frm-001',
+      frameSequence: 3,
+      message: '보안 정보를 원격 화면에서 직접 입력해 주세요.'
+    },
+    occurredAt: '2026-08-19T12:00:03Z'
   };
 }
 
@@ -153,7 +178,8 @@ describe('session-status-transport', () => {
         state: stateEvent(1),
         guide: null,
         target: null,
-        decision: null
+        decision: null,
+        secureInput: null
       })
     );
     await vi.waitFor(() => {
@@ -206,7 +232,8 @@ describe('session-status-transport', () => {
         state: stateEvent(1),
         guide: null,
         target: null,
-        decision: null
+        decision: null,
+        secureInput: null
       })
     );
 
@@ -273,11 +300,53 @@ describe('session-status-transport', () => {
         state: stateEvent(1),
         guide: null,
         target: null,
-        decision
+        decision,
+        secureInput: null
       },
       SESSION_ID
     );
     expect(snapshot.decision?.decision).toEqual(decision.decision);
+  });
+
+  it('secure input required와 reconnect snapshot의 공개 metadata만 검증한다', () => {
+    const secureInput = secureInputEvent();
+    const validated = validateSessionUiEvent(secureInput, SESSION_ID);
+    expect(validated.secureInput).toEqual(secureInput.secureInput);
+
+    const snapshot = validateSessionUiSnapshot(
+      {
+        sessionId: SESSION_ID,
+        latestEventSequence: 4,
+        state: stateEvent(1),
+        guide: null,
+        target: null,
+        decision: null,
+        secureInput
+      },
+      SESSION_ID
+    );
+    expect(snapshot.secureInput?.eventType).toBe('SECURE_INPUT_REQUIRED');
+  });
+
+  it('secure input의 알 수 없는 type과 민감 message를 fail-closed 처리한다', () => {
+    const base = secureInputEvent();
+    expect(() =>
+      validateSessionUiEvent(
+        {
+          ...base,
+          secureInput: { ...base.secureInput, secureInputType: 'UNKNOWN' }
+        },
+        SESSION_ID
+      )
+    ).toThrow();
+    const sanitized = validateSessionUiEvent(
+      {
+        ...base,
+        secureInput: { ...base.secureInput, message: '안내 <b>변경</b>' }
+      },
+      SESSION_ID
+    );
+    expect(sanitized.secureInput?.message).not.toContain('<b>');
   });
 
   it('unknown type·빈 option·중복 ID·민감 label을 fail-closed 처리한다', () => {
@@ -393,7 +462,8 @@ describe('session-status-transport', () => {
           state: null,
           guide: null,
           target: null,
-          decision: null
+          decision: null,
+          secureInput: null
         })
       );
     const events: SessionStatusTransportEvent[] = [];
