@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -141,6 +142,17 @@ public class GlobalExceptionHandler {
                 );
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableRequest(
+            HttpMessageNotReadableException exception
+    ) {
+        ErrorCode errorCode = ErrorCode.INVALID_REQUEST;
+        log.warn("Request body rejected. errorCode={}, exceptionType={}",
+                errorCode.getCode(), exception.getClass().getSimpleName());
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(ApiResponse.failure(errorCode));
+    }
+
     @ExceptionHandler(
             IllegalArgumentException.class
     )
@@ -201,6 +213,17 @@ public class GlobalExceptionHandler {
                                 exception.getMessage()
                         )
                 );
+    }
+
+    @ExceptionHandler(com.ddd.backend.security.secureinput.SecureInputException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSecureInput(
+            com.ddd.backend.security.secureinput.SecureInputException exception
+    ) {
+        ErrorCode errorCode = exception.getErrorCode();
+        log.warn("Secure input request rejected. errorCode={}, exceptionType={}",
+                errorCode.getCode(), exception.getClass().getSimpleName());
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(ApiResponse.failure(errorCode));
     }
 
     @ExceptionHandler(

@@ -1,7 +1,7 @@
 package com.ddd.backend.security.secureinput;
 
 import com.ddd.backend.ai.AgentLoopService;
-import com.ddd.backend.api.dto.session.SubmitSecureInputRequest;
+import com.ddd.backend.api.dto.session.CompleteSecureInputRequest;
 import com.ddd.backend.automation.session.BrowserSessionManager;
 import com.ddd.backend.automation.worker.PlaywrightWorker;
 import com.ddd.backend.domain.session.AutomationSession;
@@ -72,17 +72,19 @@ class SecureInputServiceTest {
     }
 
     @Test
-    void 사용자제출은_내부_secure_locator와_완료버튼만_사용하고_안전Frame후_한번_재개한다() {
+    void 사용자직접완료_marker를_검증하고_안전Frame후_한번_재개한다() {
         navigate(true);
         SecureInputRequest active = service.activate(session.getSessionId());
+        completeAsUser();
         when(captureService.capture(session.getSessionId()))
                 .thenReturn(FrameCaptureAttempt.captured(frame((byte) 2)));
 
         var response = service.submit(session.getSessionId(), active.secureRequestId(),
-                new SubmitSecureInputRequest("req-001", "demo-only-secret",
+                new CompleteSecureInputRequest("req-001",
                         active.frameId(), active.frameSequence()));
 
-        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.sessionId()).isEqualTo(session.getSessionId());
+        assertThat(response.status()).isEqualTo("COMPLETION_ACCEPTED");
         assertThat(registry.active(session.getSessionId())).isEmpty();
         assertThat(session.getStatus()).isEqualTo(WorkflowStatus.PAGE_LOADING);
         assertThat(frameStore.latest(session.getSessionId()).orElseThrow()
@@ -95,7 +97,7 @@ class SecureInputServiceTest {
 
         assertThatThrownBy(() -> service.submit(
                 session.getSessionId(), active.secureRequestId(),
-                new SubmitSecureInputRequest("req-001", "demo-only-secret",
+                new CompleteSecureInputRequest("req-001",
                         active.frameId(), active.frameSequence())))
                 .isInstanceOf(IllegalStateException.class);
         verify(agentLoop, times(1)).start(session.getSessionId());
@@ -108,9 +110,11 @@ class SecureInputServiceTest {
 
         assertThatThrownBy(() -> service.submit(
                 session.getSessionId(), active.secureRequestId(),
-                new SubmitSecureInputRequest("req-001", "demo-only-secret",
+                new CompleteSecureInputRequest("req-001",
                         active.frameId(), active.frameSequence())))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(SecureInputException.class)
+                .extracting("errorCode")
+                .isEqualTo(com.ddd.backend.common.exception.ErrorCode.SECURE_INPUT_STILL_ACTIVE);
 
         assertThat(registry.active(session.getSessionId())).contains(active);
         verify(captureService, never()).capture(anyString());
@@ -121,15 +125,16 @@ class SecureInputServiceTest {
     void 안전Frame_생성에_실패하면_latch를_해제하거나_AI를_재개하지_않는다() {
         navigate(true);
         SecureInputRequest active = service.activate(session.getSessionId());
+        completeAsUser();
         when(captureService.capture(session.getSessionId()))
                 .thenReturn(FrameCaptureAttempt.blocked(
                         com.ddd.backend.security.capture.FrameCaptureDecision.INSPECTION_FAILED_BLOCKED));
 
         assertThatThrownBy(() -> service.submit(
                 session.getSessionId(), active.secureRequestId(),
-                new SubmitSecureInputRequest("req-001", "demo-only-secret",
+                new CompleteSecureInputRequest("req-001",
                         active.frameId(), active.frameSequence())))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(SecureInputException.class);
 
         assertThat(registry.active(session.getSessionId())).contains(active);
         assertThat(frameStore.latest(session.getSessionId()).orElseThrow()
@@ -138,22 +143,55 @@ class SecureInputServiceTest {
     }
 
     @Test
-    void OTP는_숫자형식만_허용하고_오류에_raw_value를_포함하지_않는다() {
+    void marker없이_secure_input만_사라지면_완료로_처리하지_않는다() {
         navigateOtp();
         SecureInputRequest active = service.activate(session.getSessionId());
+        manager.execute(session.getSessionId(), Duration.ofSeconds(5), page -> {
+            page.locator("[data-ddd-policy=secure-input]").evaluate("element => element.remove()");
+            return null;
+        });
 
         assertThatThrownBy(() -> service.submit(
                 session.getSessionId(), active.secureRequestId(),
-                new SubmitSecureInputRequest("req-001", "raw-otp-secret",
+                new CompleteSecureInputRequest("req-001",
                         active.frameId(), active.frameSequence())))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageNotContaining("raw-otp-secret");
+                .isInstanceOf(SecureInputException.class)
+                .extracting("errorCode")
+                .isEqualTo(com.ddd.backend.common.exception.ErrorCode.SECURE_MARKER_MISSING);
         verify(captureService, never()).capture(anyString());
+    }
+
+    @Test
+    void 다른_Page의_이전_completed_marker를_재사용할수_없다() {
+        navigate(false);
+        SecureInputRequest active = service.activate(session.getSessionId());
+        navigateHtmlAt("http://127.0.0.1:5190/deposit/secure/password/deposit-preferred", """
+                <p data-ddd-secure-state="completed">이전 완료 marker</p>
+                """);
+
+        assertThatThrownBy(() -> service.submit(
+                session.getSessionId(), active.secureRequestId(),
+                new CompleteSecureInputRequest("req-001",
+                        active.frameId(), active.frameSequence())))
+                .isInstanceOf(SecureInputException.class)
+                .extracting("errorCode")
+                .isEqualTo(com.ddd.backend.common.exception.ErrorCode.SECURE_REQUEST_MISMATCH);
+        verify(captureService, never()).capture(anyString());
+    }
+
+    @Test
+    void production_완료_DTO에는_raw_value_필드가_없다() {
+        assertThat(java.util.Arrays.stream(CompleteSecureInputRequest.class
+                        .getRecordComponents()).map(java.lang.reflect.RecordComponent::getName))
+                .containsExactly("requestId", "expectedFrameId", "expectedSequence");
     }
 
     private void navigate(boolean removeSecureInput) {
         String script = removeSecureInput
-                ? "document.querySelector('[data-ddd-policy=secure-input]').remove()"
+                ? "document.querySelector('[data-ddd-policy=secure-input]').remove();"
+                + "const marker=document.createElement('p');"
+                + "marker.setAttribute('data-ddd-secure-state','completed');"
+                + "marker.textContent='완료 요청됨';document.body.appendChild(marker)"
                 : "void 0";
         navigateHtml("""
                 <input id="input-account-password" type="password"
@@ -171,13 +209,26 @@ class SecureInputServiceTest {
                 """);
     }
 
+    private void completeAsUser() {
+        manager.execute(session.getSessionId(), Duration.ofSeconds(5), page -> {
+            page.locator("[data-ddd-policy=secure-input]").fill("test-fixture-only");
+            page.locator("#btn-secure-input-complete").click();
+            return null;
+        });
+    }
+
     private void navigateHtml(String html) {
+        navigateHtmlAt(
+                "http://127.0.0.1:5190/deposit/secure/password/deposit-12m", html);
+    }
+
+    private void navigateHtmlAt(String url, String html) {
         manager.execute(session.getSessionId(), Duration.ofSeconds(5), page -> {
             page.route("**/*", route -> route.fulfill(
                     new Route.FulfillOptions().setStatus(200)
                             .setContentType("text/html; charset=utf-8")
                             .setBody(html)));
-            page.navigate("http://127.0.0.1:5190/deposit/secure/password/deposit-12m");
+            page.navigate(url);
             return null;
         });
     }

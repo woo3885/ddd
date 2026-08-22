@@ -189,7 +189,8 @@ public final class AutomationStatusEventPublisher {
             String sessionId, SecureInputRequest secureInput
     ) {
         return publishUiEvent(sessionId, AutomationUiEventType.SECURE_INPUT_RESOLVED,
-                null, "보안 입력 완료 요청의 안전 검증이 끝났습니다.", false,
+                WorkflowStatus.PAGE_LOADING,
+                "보안 입력 완료 요청의 안전 검증이 끝났습니다.", false,
                 null, null, secureInput);
     }
 

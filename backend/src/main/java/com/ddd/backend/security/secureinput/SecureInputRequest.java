@@ -1,6 +1,7 @@
 package com.ddd.backend.security.secureinput;
 
 import java.util.Objects;
+import com.ddd.backend.security.SensitiveDataMasker;
 
 /** UI event/reconnect에 노출 가능한 값만 포함한다. */
 public record SecureInputRequest(
@@ -19,6 +20,7 @@ public record SecureInputRequest(
             throw new IllegalArgumentException("보안 입력 source frame이 올바르지 않습니다.");
         }
         message = message == null || message.isBlank()
-                ? "보안 값을 직접 입력해 주세요." : message.trim();
+                ? "보안 값을 직접 입력해 주세요."
+                : SensitiveDataMasker.maskFreeText(message.trim());
     }
 }

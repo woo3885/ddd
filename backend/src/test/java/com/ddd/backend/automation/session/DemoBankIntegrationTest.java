@@ -14,6 +14,7 @@ import java.time.Duration;
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import com.ddd.backend.security.capture.FrameCaptureDecision;
 import com.ddd.backend.security.capture.FrameCaptureGuard;
+import com.ddd.backend.security.capture.BrowserFrameCaptureService;
 import com.ddd.backend.automation.BrowserActionPolicyContextResolver;
 import com.ddd.backend.automation.dom.DomSanitizer;
 import com.ddd.backend.automation.dom.InteractiveElementExtractor;
@@ -248,6 +249,70 @@ class DemoBankIntegrationTest {
             org.assertj.core.api.Assertions.assertThat(
                     new FrameCaptureGuard(manager).evaluate(sessionId))
                     .isEqualTo(FrameCaptureDecision.ALLOW);
+        }
+    }
+
+    @Test
+    void D26_실제_Demo_사용자직접완료후_raw없는_API계약으로_안전재개한다() {
+        try (PlaywrightWorker worker = new PlaywrightWorker();
+             BrowserSessionManager manager = new BrowserSessionManager(worker)) {
+            var session = com.ddd.backend.domain.session.AutomationSession.create(
+                    "데모 보안 입력 직접 완료");
+            session.transitionTo(com.ddd.backend.domain.session.WorkflowStatus.SECURE_INPUT_REQUIRED);
+            String sessionId = session.getSessionId();
+            manager.createSession(sessionId);
+            manager.navigate(sessionId, java.net.URI.create(
+                    BASE_URL + "/deposit/secure/password/deposit-12m"));
+
+            var repository = org.mockito.Mockito.mock(
+                    com.ddd.backend.domain.session.AutomationSessionRepository.class);
+            org.mockito.Mockito.when(repository.findById(sessionId))
+                    .thenReturn(java.util.Optional.of(session));
+            org.mockito.Mockito.when(repository.save(session)).thenReturn(session);
+            var frames = new com.ddd.backend.frame.BrowserFrameStore();
+            frames.publish(sessionId, new com.ddd.backend.security.capture.CapturedBrowserFrame(
+                    new byte[]{1}, 1280, 720, "image/png"));
+            var publisher = org.mockito.Mockito.mock(
+                    com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher.class);
+            var frameHandler = org.mockito.Mockito.mock(
+                    com.ddd.backend.websocket.frame.BrowserFrameWebSocketHandler.class);
+            var agentLoop = org.mockito.Mockito.mock(com.ddd.backend.ai.AgentLoopService.class);
+            @SuppressWarnings("unchecked")
+            org.springframework.beans.factory.ObjectProvider<com.ddd.backend.ai.AgentLoopService>
+                    provider = org.mockito.Mockito.mock(
+                    org.springframework.beans.factory.ObjectProvider.class);
+            org.mockito.Mockito.when(provider.getObject()).thenReturn(agentLoop);
+            org.mockito.Mockito.when(agentLoop.start(sessionId)).thenReturn(true);
+            var registry = new com.ddd.backend.security.secureinput.SecureInputRegistry();
+            var capture = new BrowserFrameCaptureService(
+                    manager, new FrameCaptureGuard(manager));
+            var service = new com.ddd.backend.security.secureinput.SecureInputService(
+                    registry, manager, repository, frames, capture, frameHandler,
+                    publisher, provider);
+
+            var active = service.activate(sessionId);
+            org.assertj.core.api.Assertions.assertThat(
+                    new FrameCaptureGuard(manager).evaluate(sessionId))
+                    .isEqualTo(FrameCaptureDecision.SECURE_INPUT_BLOCKED);
+
+            // Test fixture가 headed 사용자의 직접 조작 경계를 대신한다.
+            manager.execute(sessionId, COMMAND_TIMEOUT, page -> {
+                page.locator("#input-account-password").fill("fixture-only");
+                page.locator("#btn-secure-input-complete").click();
+                return null;
+            });
+
+            var response = service.submit(sessionId, active.secureRequestId(),
+                    new com.ddd.backend.api.dto.session.CompleteSecureInputRequest(
+                            "req-demo-001", active.frameId(), active.frameSequence()));
+
+            org.assertj.core.api.Assertions.assertThat(response.sessionId()).isEqualTo(sessionId);
+            org.assertj.core.api.Assertions.assertThat(response.status())
+                    .isEqualTo("COMPLETION_ACCEPTED");
+            org.assertj.core.api.Assertions.assertThat(registry.active(sessionId)).isEmpty();
+            org.assertj.core.api.Assertions.assertThat(frames.latest(sessionId).orElseThrow()
+                    .metadata().sequence()).isEqualTo(2L);
+            org.mockito.Mockito.verify(agentLoop, org.mockito.Mockito.times(1)).start(sessionId);
         }
     }
 

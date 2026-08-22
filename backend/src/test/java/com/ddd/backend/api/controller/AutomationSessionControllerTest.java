@@ -52,35 +52,82 @@ class AutomationSessionControllerTest {
     private SecureInputTransportPolicy secureInputTransportPolicy;
 
     @Test
-    void 보안입력은_전용_endpoint로만_접수하고_raw_value를_응답하지_않는다()
+    void 보안입력완료는_raw_value없는_전용_endpoint로_접수한다()
             throws Exception {
         when(secureInputService.submit(
                 org.mockito.ArgumentMatchers.eq("session-001"),
                 org.mockito.ArgumentMatchers.eq("sec-001"),
                 org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new com.ddd.backend.api.dto.session.SecureInputSubmissionResponse(
-                        "req-001", "sec-001", "COMPLETED",
-                        "안전 검증이 끝났습니다."));
+                        "session-001", "req-001", "sec-001",
+                        "COMPLETION_ACCEPTED", "확인하고 있습니다."));
 
         mockMvc.perform(post(
-                        "/api/v1/sessions/{sessionId}/secure-inputs/{secureRequestId}/submit",
+                        "/api/v1/sessions/{sessionId}/secure-inputs/{secureRequestId}/complete",
                         "session-001", "sec-001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "requestId":"req-001",
-                                  "value":"raw-secret-1234",
                                   "expectedFrameId":"frm-001",
                                   "expectedSequence":1
                                 }
                                 """))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sessionId").value("session-001"))
                 .andExpect(jsonPath("$.data.requestId").value("req-001"))
                 .andExpect(jsonPath("$.data.secureRequestId").value("sec-001"))
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$..value").doesNotExist())
+                .andExpect(jsonPath("$.data.status").value("COMPLETION_ACCEPTED"))
+                .andExpect(jsonPath("$..value").doesNotExist());
+    }
+
+    @Test
+    void 보안입력완료_DTO는_raw_value와_unknown_field를_거부한다() throws Exception {
+        mockMvc.perform(post(
+                        "/api/v1/sessions/{sessionId}/secure-inputs/{secureRequestId}/complete",
+                        "session-001", "sec-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestId":"req-001",
+                                  "value":"must-not-be-accepted",
+                                  "expectedFrameId":"frm-001",
+                                  "expectedSequence":1
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(secureInputService, never()).submit(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void stale_secure_frame은_전용_HTTP와_application_error_code를_반환한다()
+            throws Exception {
+        when(secureInputService.submit(
+                org.mockito.ArgumentMatchers.eq("session-001"),
+                org.mockito.ArgumentMatchers.eq("sec-001"),
+                org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new com.ddd.backend.security.secureinput.SecureInputException(
+                        com.ddd.backend.common.exception.ErrorCode.SECURE_STALE_FRAME));
+
+        mockMvc.perform(post(
+                        "/api/v1/sessions/{sessionId}/secure-inputs/{secureRequestId}/complete",
+                        "session-001", "sec-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestId":"req-001",
+                                  "expectedFrameId":"frm-old",
+                                  "expectedSequence":1
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("SECURE_409_STALE_FRAME"))
                 .andExpect(content().string(org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("raw-secret-1234"))));
+                        org.hamcrest.Matchers.containsString("frm-old"))));
     }
 
     @Test
