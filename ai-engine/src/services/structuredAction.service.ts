@@ -33,6 +33,11 @@ import {
 } from "../policy/userDecision.policy.js";
 
 import {
+  createSecureInputPauseForRequest,
+  enforceSecureInputPolicy,
+} from "../secureInput/secureInput.policy.js";
+
+import {
   classifyDepositScenarioStage,
   enforceDepositScenarioPolicy,
   finalizeDepositScenarioGuidance,
@@ -56,6 +61,18 @@ export async function generateStructuredAction(
   generateText: StructuredActionTextGenerator =
     generateProductionText,
 ): Promise<StructuredAIResponse> {
+  /*
+   * D26 fail-closed boundary: resolve a sanitized SECURE_INPUT element before
+   * prompt construction or a model call. Backend owns the secure channel;
+   * neither its raw value nor channel identifiers enter C's model context.
+   */
+  const securePause =
+    createSecureInputPauseForRequest(request);
+
+  if (securePause) {
+    return securePause;
+  }
+
   const dom = adaptBackendDomToModelInput(
     request.domSnapshot,
   );
@@ -99,12 +116,18 @@ export async function generateStructuredAction(
         request.requestId,
       );
 
+    const secureChecked =
+      enforceSecureInputPolicy(
+        structured,
+        request,
+      );
+
     const depositStage =
       classifyDepositScenarioStage(request);
 
     const depositChecked =
       enforceDepositScenarioPolicy(
-        structured,
+        secureChecked,
         request,
       );
 

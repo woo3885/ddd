@@ -1204,6 +1204,125 @@ git diff --check                  PASS
 
 ---
 
+# 25. D26 보안 입력 보호 평가
+
+## Backend authoritative secure channel
+
+D26 Backend 구현은 AI Engine과 분리된 secure channel을 소유한다. Agent Loop는
+`FrameCaptureGuard`가 `SECURE_INPUT_BLOCKED`를 반환하면 DOM snapshot 생성, C 호출,
+일반 Browser Action 실행 전에 중단하고 `SECURE_INPUT_REQUIRED`로 전환한다.
+`SanitizedDomSnapshotService`, `BrowserFrameCaptureService`,
+`BrowserActionExecutionService`도 active latch 동안 각각 snapshot, frame capture,
+일반 Action을 차단한다.
+
+UI event envelope는 다음 필드로 구성된다.
+
+```text
+eventId, eventSequence, eventType, sessionId, status, message,
+actionRequired, target, decision, secureInput, occurredAt
+```
+
+`SECURE_INPUT_REQUIRED`의 `secureInput`은 다음 public metadata만 포함한다.
+
+```text
+secureRequestId, secureInputType, frameId, frameSequence, message
+```
+
+`secureInputType`은 `ACCOUNT_PASSWORD`, `OTP`, `CERTIFICATE_PASSWORD`다. event는
+`/topic/sessions/{sessionId}/events`에 발행된다. reconnect용
+`GET /api/v1/sessions/{sessionId}/events/latest` 응답은
+`sessionId`, `latestEventSequence`, `state`, `guide`, `target`, `decision`,
+`secureInput`을 포함하며 required event를 보존하고 resolved/clear event에서 제거한다.
+
+secure submit 계약은 Backend/Frontend 전용이다.
+
+```text
+POST /api/v1/sessions/{sessionId}/secure-inputs/{secureRequestId}/submit
+
+request:  requestId, value, expectedFrameId, expectedSequence
+response: requestId, secureRequestId, status, message
+```
+
+C는 이 endpoint를 호출하지 않고 위 DTO를 구현하지 않는다. Production에서는 HTTPS가
+필수다. Backend registry는 session별 active request를 하나만 유지하고, secure request,
+source frame, request ID, in-flight 및 processed request ID를 원자적으로 검증한다.
+중복 claim과 stale frame을 거부한다.
+
+제출 성공 시 Backend만 secure DOM에 값을 채우고 완료 버튼을 실행한다. secure 요소가
+제거된 것을 확인한 뒤 한 번의 safe frame capture만 허용하고, 새 frame을 publish한 다음
+latch를 resolve하며 `SECURE_INPUT_RESOLVED`를 발행한다. 이후 session을 `PAGE_LOADING`으로
+전환하고 Agent Loop를 비동기로 예약한다. submit ACK는 secure channel 처리가
+`COMPLETED`됐다는 뜻일 뿐, 재개된 Agent Loop나 금융 거래 완료를 뜻하지 않는다.
+
+## C 책임 경계와 fail-closed 정책
+
+Backend의 `AiDecisionRequest`는 `userRequest`, `snapshot`, optional `userDecision`만
+포함한다. `secureRequestId`, frame ID/sequence, submit value는 C에 전달되지 않는다.
+재개 시 C는 latch 해제 후 Backend가 새로 만든 sanitized snapshot만 독립 request로
+평가한다. exactly-once와 duplicate submit은 Backend 소유이며 C는 process-global secure
+store, latch 또는 duplicate registry를 만들지 않는다.
+
+C는 defense-in-depth로 visible `SECURITY_POLICY:SECURE_INPUT` 요소를 모델 호출과 prompt
+생성보다 먼저 검사한다. 해당 화면에서는 모델 후보와 Gemini 장애 여부에 관계없이
+다음 내부 응답을 canonical하게 만든 후 기존 14필드 adapter로 전달한다.
+
+```text
+status=SECURE_INPUT_REQUIRED
+action=PAUSE_FOR_SECURE_INPUT
+targetElementId=null
+inputValue=null
+requiresUserAction=true
+decision/options/final/risk metadata=null
+```
+
+Backend wire에서는 `actionType=PAUSE_FOR_SECURE_INPUT`,
+`elementId/value/scrollX/scrollY/waitMillis=null`, `requiresUserAction=true`, `executionBlocked=true`,
+`decisionType/sourceSnapshotId=null`, `options/terms=[]`가 된다. secure type은 C 내부
+안전 안내 선택에만 사용되며 현재 14필드 C→B response에 추가하지 않는다.
+
+- `ACCOUNT_PASSWORD`: `비밀번호는 금융 화면에 직접 입력해 주세요.`
+- `OTP`: `인증번호는 금융 화면에 직접 입력해 주세요.`
+- `CERTIFICATE_PASSWORD`: `인증서 비밀번호는 금융 화면에 직접 입력해 주세요.`
+
+모델이 secure 화면에서 TYPE/CLICK, 값, final confirmation, confirmation ID/summary 또는
+risk payload를 만들어도 canonical pause가 우선한다. 반대로 current snapshot에 secure
+요소가 없는데 모델만 secure transition을 만들면 이를 신뢰하지 않고 금융 Action 없는
+fallback으로 종료한다. 따라서 secure에서 D27 final approval로 자동 이동하거나 risk를
+이용해 raw 입력/Browser Action으로 우회할 수 없다.
+
+내부 Agent Loop resume는 clean pause payload, 이전과 다른 snapshot ID, secure 요소가
+제거된 새 snapshot을 요구한다. 같은 snapshot 또는 새 ID이지만 secure 요소가 남아 있는
+snapshot은 거부한다. 제거된 secure element ID를 모델이 target으로 재사용하면 current
+snapshot membership 검사에서 fallback된다. C request에는 frame metadata가 없으므로
+frame freshness 및 단 한 번의 safe capture는 Backend가 authoritative하게 검증한다.
+
+AI request validator는 Backend snapshot/page/element/bounding-box field allowlist를
+검증한다. `value`, `secureRequestId`, `frameId`, `frameSequence` 같은 secure channel 필드를
+AI request에 넣으면 unknown field로 거부한다. Production 오류 로그는 고정 문장만
+사용하며 request body, model raw output, reasoning 또는 prompt를 출력하지 않는다.
+
+## D26 오프라인 평가
+
+`d26SecureInputEvaluation.test.ts`에는 37개 deterministic 평가가 있다.
+
+- ACCOUNT_PASSWORD 5개: pause, TYPE/value 차단, 안전 message, 14필드 wire
+- OTP 5개: pause, TYPE/숫자 생성 차단, model 미호출, 안전 message
+- CERTIFICATE_PASSWORD 5개: pause, TYPE/default 차단, prompt, 안전 message
+- completion 전 5개: resume/CLICK/final/risk/Gemini 우회 차단
+- resume 5개: 새 snapshot, raw context 부재, 제거 target, duplicate, stateless
+- stale/error 6개: 동일/잔존 secure snapshot, frame field, invented transition,
+  malformed pause, raw value field 차단
+- Production HTTP 6개: 세 secure type, stale secure snapshot, valid safe resume,
+  raw logging 정적 검사
+
+`POST /api/ai/action` 평가에는 request validation, structured policy, 14필드 adapter와 실제
+HTTP JSON이 모두 포함된다. fixture에는 synthetic placeholder만 사용하며 secure 화면은
+model generator 호출 전 반환되므로 해당 placeholder가 prompt/model/log/wire에 전달되지
+않는다. D23 Action allowlist, D24 rich/stateless decision, D25 Demo/기간/반복 차단과
+secure/final/risk 우선순위는 그대로 유지한다. D27은 구현하지 않는다.
+
+---
+
 ## 관련 문서
 
 ```text

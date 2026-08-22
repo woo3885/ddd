@@ -29,7 +29,45 @@ const PAGE_FIELDS = new Set([
   "productPeriod",
 ]);
 
+const SNAPSHOT_FIELDS = new Set([
+  "schemaVersion",
+  "snapshotId",
+  "page",
+  "elements",
+]);
+
+const ELEMENT_FIELDS = new Set([
+  "elementId",
+  "tag",
+  "role",
+  "text",
+  "ariaLabel",
+  "placeholder",
+  "inputType",
+  "visible",
+  "enabled",
+  "checked",
+  "boundingBox",
+  "securityPolicy",
+]);
+
+const BOUNDING_BOX_FIELDS = new Set([
+  "x",
+  "y",
+  "width",
+  "height",
+]);
+
+const SECURITY_POLICIES = new Set([
+  "NORMAL",
+  "USER_DECISION",
+  "SECURE_INPUT",
+  "FINAL_CONFIRMATION",
+  "BLOCKED",
+]);
+
 const MAX_SELECTED_OPTION_COUNT = 20;
+const MAX_ELEMENT_COUNT = 300;
 
 function isRecord(
   value: unknown,
@@ -109,6 +147,175 @@ function requireNullableExactString(
   }
 
   return exact;
+}
+
+function requireBoolean(
+  value: unknown,
+  fieldName: string,
+): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(
+      `[AI Engine] ${fieldName} must be a boolean.`,
+    );
+  }
+
+  return value;
+}
+
+function requireNullableBoolean(
+  value: unknown,
+  fieldName: string,
+): boolean | null {
+  if (value === null) {
+    return null;
+  }
+
+  return requireBoolean(value, fieldName);
+}
+
+function requireFiniteNumber(
+  value: unknown,
+  fieldName: string,
+): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value)
+  ) {
+    throw new Error(
+      `[AI Engine] ${fieldName} must be a finite number.`,
+    );
+  }
+
+  return value;
+}
+
+function validateBoundingBox(
+  value: unknown,
+  fieldName: string,
+): void {
+  if (value === null) {
+    return;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(
+      `[AI Engine] ${fieldName} must be an object or null.`,
+    );
+  }
+
+  rejectUnknownFields(
+    value,
+    BOUNDING_BOX_FIELDS,
+    fieldName,
+  );
+  requireFiniteNumber(value.x, `${fieldName}.x`);
+  requireFiniteNumber(value.y, `${fieldName}.y`);
+  const width = requireFiniteNumber(
+    value.width,
+    `${fieldName}.width`,
+  );
+  const height = requireFiniteNumber(
+    value.height,
+    `${fieldName}.height`,
+  );
+
+  if (width < 0 || height < 0) {
+    throw new Error(
+      `[AI Engine] ${fieldName} dimensions must not be negative.`,
+    );
+  }
+}
+
+function validateSnapshotElements(
+  value: unknown,
+): void {
+  if (!Array.isArray(value)) {
+    throw new Error(
+      "[AI Engine] snapshot.elements must be an array.",
+    );
+  }
+
+  if (value.length > MAX_ELEMENT_COUNT) {
+    throw new Error(
+      "[AI Engine] snapshot.elements exceeds the Backend maximum of 300.",
+    );
+  }
+
+  const elementIds = new Set<string>();
+
+  value.forEach((candidate, index) => {
+    const fieldName = `snapshot.elements[${index}]`;
+
+    if (!isRecord(candidate)) {
+      throw new Error(
+        `[AI Engine] ${fieldName} must be an object.`,
+      );
+    }
+
+    rejectUnknownFields(
+      candidate,
+      ELEMENT_FIELDS,
+      fieldName,
+    );
+    const elementId = requireExactId(
+      candidate.elementId,
+      `${fieldName}.elementId`,
+    );
+
+    if (elementIds.has(elementId)) {
+      throw new Error(
+        `[AI Engine] duplicate snapshot element ID: ${elementId}`,
+      );
+    }
+    elementIds.add(elementId);
+
+    requireExactId(candidate.tag, `${fieldName}.tag`);
+    requireNullableExactString(
+      candidate.role,
+      `${fieldName}.role`,
+    );
+    requireNullableExactString(
+      candidate.text,
+      `${fieldName}.text`,
+    );
+    requireNullableExactString(
+      candidate.ariaLabel,
+      `${fieldName}.ariaLabel`,
+    );
+    requireNullableExactString(
+      candidate.placeholder,
+      `${fieldName}.placeholder`,
+    );
+    requireNullableExactString(
+      candidate.inputType,
+      `${fieldName}.inputType`,
+    );
+    requireBoolean(
+      candidate.visible,
+      `${fieldName}.visible`,
+    );
+    requireBoolean(
+      candidate.enabled,
+      `${fieldName}.enabled`,
+    );
+    requireNullableBoolean(
+      candidate.checked,
+      `${fieldName}.checked`,
+    );
+    validateBoundingBox(
+      candidate.boundingBox,
+      `${fieldName}.boundingBox`,
+    );
+
+    if (
+      typeof candidate.securityPolicy !== "string" ||
+      !SECURITY_POLICIES.has(candidate.securityPolicy)
+    ) {
+      throw new Error(
+        `[AI Engine] ${fieldName}.securityPolicy is not supported.`,
+      );
+    }
+  });
 }
 
 function validateSelectedOptionIds(
@@ -224,10 +431,20 @@ export function validateBackendAiDecisionRequest(
     );
   }
 
+  rejectUnknownFields(
+    value.snapshot,
+    SNAPSHOT_FIELDS,
+    "snapshot",
+  );
+
   const snapshot =
     value.snapshot as unknown as BackendSanitizedDomSnapshot;
 
-  requireNonBlankString(
+  requireExactId(
+    snapshot.schemaVersion,
+    "snapshot.schemaVersion",
+  );
+  requireExactId(
     snapshot.snapshotId,
     "snapshot.snapshotId",
   );
@@ -264,6 +481,8 @@ export function validateBackendAiDecisionRequest(
     snapshot.page.productPeriod,
     "snapshot.page.productPeriod",
   );
+
+  validateSnapshotElements(snapshot.elements);
 
   if (!("userDecision" in value)) {
     return {
