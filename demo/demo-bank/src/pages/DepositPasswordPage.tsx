@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import DemoBankLayout from '../components/DemoBankLayout';
 import { ELEMENT_IDS, elementIdentity } from '../constants/element-ids';
 import {
+  createDepositConfirmationPath,
   createDepositPasswordPath,
   createDepositTermsPath,
   ROUTES
@@ -172,6 +173,22 @@ export default function DepositPasswordPage({
             onClick={handleInputComplete}
           >
             {passwordInputCompleted ? '입력 완료 요청됨' : '입력 완료'}
+          </button>
+          <button
+            {...elementIdentity(
+              ELEMENT_IDS.BUTTON_DEPOSIT_CONFIRMATION_START
+            )}
+            type="button"
+            className="primary-button"
+            disabled={!passwordInputCompleted}
+            aria-describedby={ELEMENT_IDS.STATUS_CONFIRMED_DEPOSIT_PASSWORD}
+            onClick={() =>
+              window.location.assign(
+                createDepositConfirmationPath(product.id)
+              )
+            }
+          >
+            예금 최종 확인으로 이동
           </button>
           <button
             {...elementIdentity(ELEMENT_IDS.BUTTON_DEPOSIT_PASSWORD_CANCEL)}

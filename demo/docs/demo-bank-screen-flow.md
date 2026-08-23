@@ -116,8 +116,8 @@ stateDiagram-v2
 | `DEPOSIT_CONDITIONS` | 예금 가입 조건 | 금액과 기간 설정 | 선택 상품, 가능 기간, 금액 범위 | 가입 금액, 기간 | 이전, 다음, 취소 | `DEPOSIT_PRODUCT_DETAIL`, `DEPOSIT_TERMS`, `HOME` | 일반 값만 상태에 저장 |
 | `DEPOSIT_TERMS` | 예금 약관 | 필수·선택 약관 개별 동의 | 필수 약관, 선택 약관, 동의 상태 | 약관별 체크 | 이전, 다음, 취소 | `DEPOSIT_CONDITIONS`, `DEPOSIT_PASSWORD`, `HOME` | 전체 동의 자동 처리 금지 |
 | `DEPOSIT_PASSWORD` | 예금 비밀번호 입력 | 사용자 본인 확인 입력 | 보호 모드, AI·캡처 중단 상태 | 계좌 비밀번호 직접 입력 | 이전, 입력 완료, 취소 | `DEPOSIT_TERMS`, `DEPOSIT_CONFIRMATION`, `HOME` | 실제 값의 상태·DOM 속성·로그 복사 금지 |
-| `DEPOSIT_CONFIRMATION` | 예금 최종 확인 | 가입 내용 검토와 최종 승인 | 상품, 기간, 금액, 약관 결과 | 최종 승인 체크 | 이전, 수정, 최종 승인, 취소 | `DEPOSIT_PASSWORD`, 수정 대상 화면, `DEPOSIT_COMPLETED`, `HOME` | 승인 전 가입 완료 금지 |
-| `DEPOSIT_COMPLETED` | 예금 가입 완료 | 시연 결과 확인 | 처리 결과 요약 | 없음 | 처음으로 | `HOME` | 비밀번호와 계좌번호 원문 표시 금지 |
+| `DEPOSIT_CONFIRMATION` | 예금 최종 확인 | Demo 가입 내용 검토와 최종 승인·거절 | 상품, 기간, 금액 | 최종 승인 체크 | 비밀번호 화면으로, 최종 승인, 최종 승인 거절 | `DEPOSIT_PASSWORD`, `DEPOSIT_COMPLETED`, `HOME` | 승인 전 완료 화면 이동 금지 |
+| `DEPOSIT_COMPLETED` | 예금 Demo 완료 | 시연 절차 종료 안내 | 공개 Mock 상품명, 실제 거래 미실행 안내 | 없음 | Demo 메인으로 | `HOME` | 실제 가입·잔액 변경으로 표현 금지 |
 | `TRANSFER_ACCOUNT_SELECTION` | 출금 계좌 선택 | 출금 계좌 후보 확인 | 계좌 별칭, 마스킹 번호, 잔액 예시 | 계좌 직접 선택 | 계좌 선택, 선택 후 다음, 이전, 취소 | `TRANSFER_RECIPIENT_SELECTION`, `HOME` | 계좌번호는 마스킹된 값만 표시 |
 | `TRANSFER_RECIPIENT_SELECTION` | 수취인 선택 | 송금 대상 확인 | Mock 수취인 이름, 관계, 은행, 마스킹 정보 | 수취인 직접 단일 선택 | 이전, 선택 확인, 금액 입력 시작, 취소 | `TRANSFER_ACCOUNT_SELECTION`, `TRANSFER_AMOUNT`, `HOME` | AI 자동 선택 및 실제 고객정보 사용 금지 |
 | `TRANSFER_AMOUNT` | 송금 금액 | 송금 금액 입력과 로컬 검토 | 출금 계좌 별칭, 수취인, Mock 잔액, 금액 안내 | 송금 금액 | 이전, 금액 확인, 취소 | `TRANSFER_RECIPIENT_SELECTION`, 후속 `TRANSFER_PASSWORD`, `HOME` | D10은 잔액 초과만 검증하며 실제 송금 금지 |
@@ -241,7 +241,27 @@ checkbox 선택과 승인을 증명하지 않는다. 메인 복귀만 제공하�
 탐지 후 자동화·AI·DOM·프레임·screenshot·trace·video 수집 중단과 안전한
 재개는 개발자 B의 후속 통합 책임이다.
 
-## 14. D1 완료 체크리스트
+## 14. D27 예금 최종 확인·완료 Mock 경계
+
+`DEPOSIT_PASSWORD`에서 사용자가 보안 입력 완료를 직접 요청한 뒤 별도
+`btn-deposit-confirmation-start` 버튼으로
+`/deposit/confirmation/:productId`에 진입한다. 보안 입력 완료와 화면 이동은
+서로 다른 사용자 행동이며 비밀번호 원문이나 완료 상태를 다음 화면에 전달하지
+않는다.
+
+`DEPOSIT_CONFIRMATION`은 상품 데이터의 상품명·기간과 D25 공동 시나리오의
+Demo 가입 금액 `1,000,000원`을 고정 순서로 표시한다. 최종 승인 checkbox는
+초기 미선택이고 `btn-final-approve`는 실제 disabled다. checkbox를 선택하는
+것만으로는 승인되지 않으며 사용자가 승인 버튼을 직접 눌러야
+`/deposit/completed/:productId`로 이동한다. 거절 버튼은 완료 화면에 진입하지
+않고 메인으로 돌아간다.
+
+`DEPOSIT_COMPLETED`는 사용자 확인 UI 절차가 끝났다는 Demo 안내만 제공한다.
+실제 예금 가입, 금융기관 처리, 인증 결과, 잔액 변경, 거래번호나 영수증을
+생성하지 않는다. 정상 직접 URL 접근은 DOM 계약 확인용이며 선행 단계의 완료를
+증명하지 않는다.
+
+## 15. D1 완료 체크리스트
 
 - [x] 예금 전체 화면 흐름 존재
 - [x] 계좌이체 전체 화면 흐름 존재

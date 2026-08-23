@@ -1,4 +1,6 @@
 import {
+  createDepositCompletedPath,
+  createDepositConfirmationPath,
   createDepositConditionsPath,
   createDepositPasswordPath,
   createDepositProductDetailPath,
@@ -15,6 +17,8 @@ import {
 import { demoAccounts, depositProducts } from './data/demo-data';
 import { transferRecipients } from './data/transfer-recipients';
 import DepositAmountPage from './pages/DepositAmountPage';
+import DepositCompletionPage from './pages/DepositCompletionPage';
+import DepositConfirmationPage from './pages/DepositConfirmationPage';
 import DepositPasswordPage from './pages/DepositPasswordPage';
 import DepositProductDetailPage from './pages/DepositProductDetailPage';
 import DepositProductsPage from './pages/DepositProductsPage';
@@ -44,6 +48,12 @@ export default function App() {
   );
   const passwordProduct = depositProducts.find(
     (product) => createDepositPasswordPath(product.id) === currentPath
+  );
+  const confirmationProduct = depositProducts.find(
+    (product) => createDepositConfirmationPath(product.id) === currentPath
+  );
+  const completedProduct = depositProducts.find(
+    (product) => createDepositCompletedPath(product.id) === currentPath
   );
   const transferAccount = demoAccounts.find(
     (account) =>
@@ -91,6 +101,14 @@ export default function App() {
         createTransferCompletedPath(account.id, recipient.id) ===
         currentPath
     );
+
+  if (completedProduct) {
+    return <DepositCompletionPage product={completedProduct} />;
+  }
+
+  if (confirmationProduct) {
+    return <DepositConfirmationPage product={confirmationProduct} />;
+  }
 
   if (transferCompletedContext) {
     return (
