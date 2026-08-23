@@ -185,6 +185,8 @@ public final class AiDecisionExecutionService {
                         sessionId
                 );
 
+        ensureSessionCanBeginAi(session);
+
         boolean resumingUserDecision = userDecisionState != null
                 && userDecisionState.latestResult(sessionId).isPresent();
 
@@ -269,7 +271,9 @@ public final class AiDecisionExecutionService {
 
         BrowserActionExecutionResult
                 executionResult =
-                isUnauthorizedDepositInput(session, snapshot, validatedResponse)
+                isAiErrorFallback(validatedResponse)
+                        ? handleAiErrorFallback(session)
+                        : isUnauthorizedDepositInput(session, snapshot, validatedResponse)
                         ? requireAdditionalInformation(session)
                         : isBlockedDepositInformationRequest(snapshot, validatedResponse)
                         ? requireAdditionalInformation(session)
@@ -284,6 +288,40 @@ public final class AiDecisionExecutionService {
                 response,
                 executionResult
         );
+    }
+
+    private boolean isAiErrorFallback(AiDecisionResponse response) {
+        return "ERROR".equals(response.status());
+    }
+
+    private BrowserActionExecutionResult handleAiErrorFallback(
+            AutomationSession session
+    ) {
+        markErrorSafely(session);
+        if (targetEventService != null) {
+            targetEventService.clearSafely(
+                    session.getSessionId(),
+                    "AI 행동 판단을 안전하게 중단했습니다."
+            );
+        }
+        return BrowserActionExecutionResult.blocked(BrowserActionType.NONE);
+    }
+
+    private void ensureSessionCanBeginAi(AutomationSession session) {
+        WorkflowStatus status = session.getStatus();
+        if (status == WorkflowStatus.USER_DECISION_REQUIRED
+                || status == WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED
+                || status == WorkflowStatus.SECURE_INPUT_REQUIRED
+                || status == WorkflowStatus.FINAL_CONFIRMATION_REQUIRED
+                || status == WorkflowStatus.RISK_WARNING
+                || status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.ERROR
+                || status == WorkflowStatus.TERMINATED
+                || status == WorkflowStatus.COMPLETED) {
+            throw new IllegalStateException(
+                    "현재 세션 상태에서는 AI 판단을 시작할 수 없습니다."
+            );
+        }
     }
 
     private BrowserActionExecutionResult reserveThenExecute(
@@ -396,6 +434,7 @@ public final class AiDecisionExecutionService {
                 || status == WorkflowStatus.ERROR
                 || status == WorkflowStatus.TERMINATED
                 || status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.ADDITIONAL_INFORMATION_REQUIRED
                 || status == WorkflowStatus.SECURE_INPUT_REQUIRED
                 || status == WorkflowStatus.FINAL_CONFIRMATION_REQUIRED
                 || status == WorkflowStatus.RISK_WARNING
