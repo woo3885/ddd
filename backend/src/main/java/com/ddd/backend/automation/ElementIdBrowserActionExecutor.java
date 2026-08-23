@@ -55,6 +55,30 @@ public final class ElementIdBrowserActionExecutor {
         );
     }
 
+    public BrowserActionExecutionResult executeConfirmedFinalClick(
+            String sessionId, String elementId
+    ) {
+        validateText(sessionId, "sessionId");
+        validateText(elementId, "elementId");
+        try {
+            return elementLocatorResolver.withLocator(sessionId, elementId, locator -> {
+                if (!isInteractable(locator)) {
+                    return BrowserActionExecutionResult.blocked(BrowserActionType.CLICK);
+                }
+                BrowserActionPolicyContext context = resolveCurrentPolicy(
+                        locator, BrowserActionType.CLICK);
+                if (!context.finalExecution() || context.blockedTarget()
+                        || context.sensitiveInput()) {
+                    return BrowserActionExecutionResult.blocked(BrowserActionType.CLICK);
+                }
+                locator.click();
+                return BrowserActionExecutionResult.executed(BrowserActionType.CLICK);
+            });
+        } catch (RuntimeException exception) {
+            return BrowserActionExecutionResult.blocked(BrowserActionType.CLICK);
+        }
+    }
+
     /*
      * 사용자가 Viewer에서 직접 선택한 CLICK.
      *

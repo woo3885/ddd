@@ -6,6 +6,7 @@ import com.ddd.backend.security.SensitiveDataMasker;
 import java.time.Instant;
 import java.util.Objects;
 import com.ddd.backend.security.secureinput.SecureInputRequest;
+import com.ddd.backend.service.confirmation.FinalConfirmationRequest;
 
 public record AutomationUiEvent(
         String eventId,
@@ -18,8 +19,19 @@ public record AutomationUiEvent(
         AutomationTarget target,
         AutomationDecisionPrompt decision,
         SecureInputRequest secureInput,
+        FinalConfirmationRequest confirmation,
         Instant occurredAt
 ) {
+    public AutomationUiEvent(
+            String eventId, long eventSequence, AutomationUiEventType eventType,
+            String sessionId, WorkflowStatus status, String message,
+            boolean actionRequired, AutomationTarget target,
+            AutomationDecisionPrompt decision, SecureInputRequest secureInput,
+            Instant occurredAt
+    ) {
+        this(eventId, eventSequence, eventType, sessionId, status, message,
+                actionRequired, target, decision, secureInput, null, occurredAt);
+    }
     public AutomationUiEvent(
             String eventId, long eventSequence, AutomationUiEventType eventType,
             String sessionId, WorkflowStatus status, String message,
@@ -27,7 +39,7 @@ public record AutomationUiEvent(
             AutomationDecisionPrompt decision, Instant occurredAt
     ) {
         this(eventId, eventSequence, eventType, sessionId, status, message,
-                actionRequired, target, decision, null, occurredAt);
+                actionRequired, target, decision, null, null, occurredAt);
     }
     public AutomationUiEvent {
         if (eventId == null || eventId.isBlank() || eventSequence < 1) {
@@ -54,6 +66,11 @@ public record AutomationUiEvent(
                 && secureInput == null) {
             throw new IllegalArgumentException(
                     "SECURE_INPUT_REQUIRED 이벤트에는 secureInput이 필요합니다.");
+        }
+        if (eventType == AutomationUiEventType.CONFIRMATION_REQUIRED
+                && confirmation == null) {
+            throw new IllegalArgumentException(
+                    "CONFIRMATION_REQUIRED 이벤트에는 confirmation이 필요합니다.");
         }
         if (message == null || message.isBlank()) {
             message = null;

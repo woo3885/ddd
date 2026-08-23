@@ -265,6 +265,14 @@ public final class BrowserActionExecutionService {
         );
     }
 
+    public BrowserActionExecutionResult executeConfirmedFinalClick(
+            String sessionId, String elementId
+    ) {
+        requireElementIdExecutor();
+        return executeInternal(sessionId, () -> elementIdActionExecutor
+                .executeConfirmedFinalClick(sessionId, elementId));
+    }
+
     public BrowserActionExecutionResult
     executeViewerCoordinateClick(
             String sessionId,

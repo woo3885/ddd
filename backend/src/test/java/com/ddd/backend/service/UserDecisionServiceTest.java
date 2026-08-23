@@ -395,6 +395,39 @@ class UserDecisionServiceTest {
     }
 
     @Test
+    void active_confirmation과_ID가_일치할_때만_pending_target을_한번_실행한다() {
+        AutomationSession session = createSession(
+                WorkflowStatus.FINAL_CONFIRMATION_REQUIRED);
+        BrowserActionExecutionService executionService =
+                mock(BrowserActionExecutionService.class);
+        var store = new com.ddd.backend.service.confirmation.FinalConfirmationStore();
+        var request = store.activate(session.getSessionId(),
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-final", "snap-001",
+                new com.ddd.backend.service.confirmation.FinalConfirmationSummary(
+                        "정기예금", "12개월", "1,000,000원"));
+        UserDecisionService securedService = new UserDecisionService(
+                sessionRepository, new UserDecisionValidator(),
+                browserSessionManager, statusEventPublisher,
+                null, null, executionService, null, null);
+        securedService.setFinalConfirmationStore(store);
+        when(executionService.executeConfirmedFinalClick(
+                session.getSessionId(), "el-final"))
+                .thenReturn(BrowserActionExecutionResult.executed(
+                        BrowserActionType.CLICK));
+
+        AutomationSession result = securedService.confirmFinalAction(
+                session.getSessionId(), request.confirmationId(), true);
+
+        assertThat(result.getStatus()).isEqualTo(WorkflowStatus.AI_EXECUTING);
+        verify(executionService).executeConfirmedFinalClick(
+                session.getSessionId(), "el-final");
+        assertThatThrownBy(() -> securedService.confirmFinalAction(
+                session.getSessionId(), request.confirmationId(), true))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void 최종_실행을_거절하면_세션과_브라우저를_종료한다() {
         AutomationSession session =
                 createSession(
