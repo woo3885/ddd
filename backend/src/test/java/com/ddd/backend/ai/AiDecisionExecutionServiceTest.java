@@ -767,6 +767,42 @@ class AiDecisionExecutionServiceTest {
     }
 
     @Test
+    void AI_ERROR_fallback은_NONE을_실행하지_않고_세션을_ERROR로_종료한다() {
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.NONE, null, null,
+                null, null, null,
+                "ERROR", "내부 상세 오류", true, true,
+                null, List.of(), List.of());
+        when(aiDecisionClient.decide(any(AiDecisionRequest.class))).thenReturn(response);
+        when(responseValidator.validate(response, snapshot)).thenReturn(response);
+
+        AiDecisionExecutionResult result = service.execute(session.getSessionId());
+
+        assertThat(session.getStatus()).isEqualTo(WorkflowStatus.ERROR);
+        assertThat(result.status()).isEqualTo(BrowserActionExecutionStatus.BLOCKED);
+        verify(actionExecutionService, never()).execute(any(), any());
+        verify(actionExecutionService, never()).executeAiElementAction(
+                any(), any(), any(), any());
+        verify(statusEventPublisher).publish(
+                session.getSessionId(), WorkflowStatus.ERROR,
+                "AI 행동 판단 중 오류가 발생했습니다.");
+    }
+
+    @Test
+    void ERROR_세션은_Snapshot과_AI호출_전에_재실행을_차단한다() {
+        session.transitionTo(WorkflowStatus.ERROR);
+
+        assertThatThrownBy(() -> service.execute(session.getSessionId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("AI 판단");
+
+        verify(snapshotService, never()).createSnapshot(any());
+        verify(aiDecisionClient, never()).decide(any());
+        verify(statusEventPublisher, never()).publish(
+                any(), any(), any());
+    }
+
+    @Test
     void 가입기간이_없어도_사용자가_요청한_금액은_Action으로_실행한다() {
         session = AutomationSession.create("100만 원 정기예금에 가입하고 싶다");
         snapshot = snapshotAt(
