@@ -4,6 +4,8 @@ export const ROUTES = {
   DEPOSIT_CONDITIONS: '/deposit/conditions',
   DEPOSIT_TERMS: '/deposit/terms',
   DEPOSIT_SECURE_PASSWORD: '/deposit/secure/password',
+  DEPOSIT_CONFIRMATION: '/deposit/confirmation',
+  DEPOSIT_COMPLETED: '/deposit/completed',
   TRANSFER_ACCOUNTS: '/transfer/accounts',
   TRANSFER_RECIPIENTS: '/transfer/recipients',
   TRANSFER_AMOUNT: '/transfer/amount',
@@ -29,6 +31,14 @@ export function createDepositTermsPath(productId: string): string {
 
 export function createDepositPasswordPath(productId: string): string {
   return `${ROUTES.DEPOSIT_SECURE_PASSWORD}/${encodeURIComponent(productId)}`;
+}
+
+export function createDepositConfirmationPath(productId: string): string {
+  return `${ROUTES.DEPOSIT_CONFIRMATION}/${encodeURIComponent(productId)}`;
+}
+
+export function createDepositCompletedPath(productId: string): string {
+  return `${ROUTES.DEPOSIT_COMPLETED}/${encodeURIComponent(productId)}`;
 }
 
 export function createTransferRecipientsPath(accountId: string): string {

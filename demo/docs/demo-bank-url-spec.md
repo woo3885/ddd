@@ -20,8 +20,8 @@
 | `/deposit/conditions` | `DEPOSIT_CONDITIONS` | 가입 금액과 기간 설정의 개념 경로 | D7 구현은 유효한 `productId` 필요 | 아니오 | D7 |
 | `/deposit/terms` | `DEPOSIT_TERMS` | 필수·선택 약관 개별 선택의 개념 경로 | D8 구현은 유효한 `productId` 필요 | 아니오 | D8 |
 | `/deposit/secure/password` | `DEPOSIT_PASSWORD` | 예금 가입용 계좌 비밀번호 직접 입력 | 불가: 약관 동의 필요 | 아니오 | D6 이후 |
-| `/deposit/confirmation` | `DEPOSIT_CONFIRMATION` | 예금 가입 내용 최종 확인 | 불가: 보안 입력 완료 필요 | 아니오 | D6 이후 |
-| `/deposit/completed` | `DEPOSIT_COMPLETED` | 예금 가입 시연 완료 | 불가: 최종 승인 결과 필요 | 아니오 | D6 이후 |
+| `/deposit/confirmation/:productId` | `DEPOSIT_CONFIRMATION` | 예금 가입 내용 최종 확인 | D27 화면·DOM 계약 확인용 직접 접근 허용 | 아니오 | D27 |
+| `/deposit/completed/:productId` | `DEPOSIT_COMPLETED` | 예금 가입 시연 완료 | D27 화면·DOM 계약 확인용 직접 접근 허용 | 아니오 | D27 |
 | `/transfer/accounts` | `TRANSFER_ACCOUNT_SELECTION` | 출금 계좌 후보 선택 | 허용 | 예 | D3 |
 | `/transfer/recipients` | `TRANSFER_RECIPIENT_SELECTION` | 수취인 후보 선택의 개념 경로 | D9 구현은 유효한 Mock `accountId` 필요 | 아니오 | D9 |
 | `/transfer/amount` | `TRANSFER_AMOUNT` | 송금 금액 입력의 개념 경로 | D10 구현은 유효한 Mock `accountId`와 `recipientId` 필요 | 아니오 | D10 |
@@ -242,3 +242,18 @@ URL은 이전 약관 확인이나 실제 인증·가입을 증명하지 않는�
 누락, 알려지지 않은 상품, 추가 segment와 canonical path에 맞지 않는 encoding은
 NotFound로 처리한다. 기존 pathname 정규화 정책에 따라 정상 trailing slash는
 허용한다.
+
+## 14. D27 예금 최종 확인·완료 경로 구체화
+
+D27은 공개 Mock 상품 ID를 pathname에 포함해 다음 경로를 제공한다.
+
+- `/deposit/confirmation/deposit-12m`
+- `/deposit/confirmation/deposit-preferred`
+- `/deposit/completed/deposit-12m`
+- `/deposit/completed/deposit-preferred`
+- 구현 형식: `/deposit/confirmation/:productId`, `/deposit/completed/:productId`
+
+정상 직접 접근은 화면과 DOM 계약 확인용이다. 이전 약관 동의, 보안 입력 완료,
+최종 승인 완료를 증명하지 않는다. 알려진 Mock 상품 ID만 허용하고 누락되거나
+알 수 없는 ID 및 추가 segment는 NotFound로 처리한다. pathname, query와
+storage에는 비밀번호, 인증정보, 계좌번호와 승인 상태를 저장하지 않는다.

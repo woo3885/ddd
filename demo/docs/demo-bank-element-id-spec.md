@@ -268,3 +268,47 @@ D14 selector는 실제 거래 성공이나 영수증을 뜻하지 않는다. 금
 가입·송금 성공을 의미하지 않는다. 자동화는 보안값 입력, 완료 버튼 클릭,
 screenshot, trace, video와 값 조회를 수행하지 않는다. 실제 전환은 캡처를 끈
 수동 검증으로 확인하며 Backend는 입력 요소 부재와 마커를 함께 검증한다.
+
+## 7. D27 예금 최종 확인·완료 DOM 계약
+
+### 고정 ID
+
+| ID | 대상 |
+| --- | --- |
+| `btn-deposit-confirmation-start` | 예금 비밀번호 완료 뒤 최종 확인 화면으로 이동하는 별도 Gate |
+| `page-deposit-confirmation` | 예금 최종 확인 페이지 루트 |
+| `summary-deposit-confirmation` | 예금 최종 확인 요약 `<dl>` |
+| `notice-deposit-confirmation` | Demo·민감정보 미포함 안내 |
+| `status-deposit-final-approval` | 최종 확인 선택 상태 live region |
+| `checkbox-final-confirmation` | 사용자가 직접 선택하는 최종 확인 checkbox |
+| `btn-deposit-confirmation-back` | 동일 상품의 비밀번호 화면 복귀 |
+| `btn-final-cancel` | 예금 최종 승인 거절·메인 복귀 |
+| `btn-final-approve` | 예금 최종 승인·Demo 완료 화면 이동 |
+| `page-deposit-completion` | 예금 Demo 완료 페이지 루트 |
+| `status-deposit-demo-completion` | Demo 절차 종료 상태 live region |
+| `notice-deposit-no-transaction` | 실제 금융거래 미실행 안내 |
+| `btn-deposit-home` | Demo 메인 화면 복귀 |
+
+고정 ID 요소의 `id`와 `data-testid`는 같은 값을 사용한다. 이체 최종 확인과
+같은 DOM에 동시에 렌더링되지 않으므로 공통 D1 ID인
+`checkbox-final-confirmation`, `btn-final-cancel`, `btn-final-approve`를
+재사용한다.
+
+### 요약 구조
+
+`summary-deposit-confirmation`은
+`data-ddd-confirmation-summary="true"`를 제공한다. 직계 자식은 다음 순서의
+`data-ddd-summary-id`를 가진 `<div>`이며 각 항목은 `<dt>`와 `<dd>`를 한 개씩
+포함한다.
+
+1. `product-name`
+2. `deposit-amount`
+3. `deposit-period`
+
+상품명과 기간은 실제 공개 Mock 상품 데이터에서 가져오고 가입 금액은 D25·D27
+공동 시나리오 상수 `1,000,000원`을 표시한다. 비밀번호, 인증정보, 계좌번호,
+동의·승인 상태는 요약이나 `data-*` 속성에 넣지 않는다.
+
+`btn-final-approve`는 `data-ddd-policy="final-confirmation"`을 제공하고 checkbox
+미선택 시 실제 `disabled` 상태다. checkbox 선택만으로 승인이나 navigation을
+실행하지 않는다.
