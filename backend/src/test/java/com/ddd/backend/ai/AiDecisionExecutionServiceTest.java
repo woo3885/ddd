@@ -789,6 +789,49 @@ class AiDecisionExecutionServiceTest {
     }
 
     @Test
+    void 최종확인_응답은_Backend_confirmation을_생성하고_Action을_보류한다() {
+        var finalElement = new SanitizedDomSnapshot.ElementSnapshot(
+                "el-final-001", "button", "button", "예금 가입", "예금 가입",
+                null, null, true, true, null,
+                new SanitizedDomSnapshot.BoundingBoxSnapshot(10, 10, 100, 40),
+                SanitizedDomSnapshot.SecurityPolicy.FINAL_CONFIRMATION);
+        snapshot = new SanitizedDomSnapshot("1.0", "snap-final",
+                new SanitizedDomSnapshot.PageSnapshot(
+                        "http://127.0.0.1/deposit/final", "최종 확인",
+                        "deposit-12m", "정기예금", "12개월"),
+                List.of(finalElement));
+        stubCurrentSessionAndSnapshot();
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.REQUEST_FINAL_CONFIRMATION,
+                null, null, null, null, null,
+                "FINAL_CONFIRMATION_REQUIRED", "확인", true, true,
+                null, "snap-final", List.of(), List.of(),
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-final-001");
+        when(aiDecisionClient.decide(any())).thenReturn(response);
+        when(responseValidator.validate(response, snapshot)).thenReturn(response);
+        when(actionExecutionService.execute(any(), any()))
+                .thenReturn(BrowserActionExecutionResult.finalConfirmationRequired(
+                        BrowserActionType.REQUEST_FINAL_CONFIRMATION));
+        var store = new com.ddd.backend.service.confirmation.FinalConfirmationStore();
+        service.setFinalConfirmationDependencies(store,
+                new com.ddd.backend.service.confirmation.FinalConfirmationSummaryExtractor());
+
+        AiDecisionExecutionResult result = service.execute(session.getSessionId());
+
+        assertThat(result.status()).isEqualTo(
+                BrowserActionExecutionStatus.FINAL_CONFIRMATION_REQUIRED);
+        var confirmation = store.active(session.getSessionId()).orElseThrow();
+        assertThat(confirmation.confirmationTargetElementId())
+                .isEqualTo("el-final-001");
+        assertThat(confirmation.summary().productName()).isEqualTo("정기예금");
+        verify(actionExecutionService, never()).executeAiElementAction(
+                any(), any(), any(), any());
+        verify(statusEventPublisher).publishConfirmationRequired(
+                session.getSessionId(), confirmation);
+    }
+
+    @Test
     void ERROR_세션은_Snapshot과_AI호출_전에_재실행을_차단한다() {
         session.transitionTo(WorkflowStatus.ERROR);
 

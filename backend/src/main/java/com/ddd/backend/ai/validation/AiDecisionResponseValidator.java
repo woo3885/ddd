@@ -61,6 +61,12 @@ public final class AiDecisionResponseValidator {
                         "actionType은 필수입니다."
                 );
 
+        if (actionType != BrowserActionType.REQUEST_FINAL_CONFIRMATION
+                && (response.confirmationType() != null
+                || response.confirmationTargetElementId() != null)) {
+            throw invalidPayload("일반 Action에는 최종 확인 payload를 사용할 수 없습니다.");
+        }
+
         validateDecisionPayload(response, snapshot);
 
         switch (actionType) {
@@ -92,12 +98,14 @@ public final class AiDecisionResponseValidator {
                             response
                     );
 
+            case REQUEST_FINAL_CONFIRMATION ->
+                    validateFinalConfirmation(response, snapshot);
+
             case NONE,
                  GO_BACK,
                  REFRESH,
                  WAIT_FOR_USER,
                  PAUSE_FOR_SECURE_INPUT,
-                 REQUEST_FINAL_CONFIRMATION,
                  STOP ->
                     requireNoPayload(
                             response
@@ -105,6 +113,32 @@ public final class AiDecisionResponseValidator {
         }
 
         return response;
+    }
+
+    private void validateFinalConfirmation(
+            AiDecisionResponse response, SanitizedDomSnapshot snapshot
+    ) {
+        requireNoPayload(response);
+        if (response.confirmationType()
+                != com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION
+                || response.confirmationTargetElementId() == null
+                || response.sourceSnapshotId() == null
+                || !response.sourceSnapshotId().equals(snapshot.snapshotId())
+                || !"FINAL_CONFIRMATION_REQUIRED".equals(response.status())
+                || !Boolean.TRUE.equals(response.requiresUserAction())
+                || !Boolean.TRUE.equals(response.executionBlocked())) {
+            throw invalidPayload("최종 확인 응답 계약이 올바르지 않습니다.");
+        }
+        SanitizedDomSnapshot.ElementSnapshot target = snapshot.elements().stream()
+                .filter(element -> response.confirmationTargetElementId()
+                        .equals(element.elementId()))
+                .findFirst()
+                .orElseThrow(() -> invalidPayload("최종 확인 대상이 Snapshot에 없습니다."));
+        if (!target.visible() || !target.enabled()
+                || target.securityPolicy()
+                != SanitizedDomSnapshot.SecurityPolicy.FINAL_CONFIRMATION) {
+            throw invalidPayload("최종 확인 대상을 안전하게 실행할 수 없습니다.");
+        }
     }
 
     private void validateDecisionPayload(

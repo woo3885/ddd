@@ -126,6 +126,37 @@ class AiDecisionResponseValidatorTest {
     }
 
     @Test
+    void 최종확인_응답은_type_target_sourceSnapshot을_검증한다() {
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.REQUEST_FINAL_CONFIRMATION,
+                null, null, null, null, null,
+                "FINAL_CONFIRMATION_REQUIRED", "확인하세요", true, true,
+                null, "snap-test0001", List.of(), List.of(),
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-test0001-001");
+
+        assertThat(validator.validate(response, snapshot(policyElement(
+                SanitizedDomSnapshot.SecurityPolicy.FINAL_CONFIRMATION,
+                true, true)))).isSameAs(response);
+    }
+
+    @Test
+    void 최종확인_sourceSnapshot이_다르면_거부한다() {
+        AiDecisionResponse response = new AiDecisionResponse(
+                BrowserActionType.REQUEST_FINAL_CONFIRMATION,
+                null, null, null, null, null,
+                "FINAL_CONFIRMATION_REQUIRED", "확인하세요", true, true,
+                null, "snap-stale", List.of(), List.of(),
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-test0001-001");
+
+        assertThatThrownBy(() -> validator.validate(response, snapshot(policyElement(
+                SanitizedDomSnapshot.SecurityPolicy.FINAL_CONFIRMATION,
+                true, true))))
+                .isInstanceOf(AiDecisionValidationException.class);
+    }
+
+    @Test
     void BLOCKED_Element는_AI_Click을_거부한다() {
 
         assertPolicyRejected(

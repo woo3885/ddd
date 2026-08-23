@@ -21,6 +21,7 @@ import com.ddd.backend.automation.BrowserActionExecutionStatus;
 import com.ddd.backend.automation.dom.ElementLocatorResolver;
 import com.ddd.backend.websocket.dto.AutomationDecisionPrompt;
 import org.springframework.stereotype.Service;
+import com.ddd.backend.service.confirmation.FinalConfirmationStore;
 
 import java.util.List;
 
@@ -40,6 +41,12 @@ public class UserDecisionService {
     private final ElementLocatorResolver locatorResolver;
     private final AgentLoopService agentLoopService;
     private final SelectedDepositProductStore selectedProductStore;
+    private FinalConfirmationStore finalConfirmationStore;
+
+    @Autowired
+    void setFinalConfirmationStore(FinalConfirmationStore store) {
+        this.finalConfirmationStore = store;
+    }
 
     @Autowired
     public UserDecisionService(
@@ -341,6 +348,23 @@ public class UserDecisionService {
         AutomationSession session =
                 getSession(sessionId);
 
+        if (finalConfirmationStore != null) {
+            var confirmation = finalConfirmationStore.consume(sessionId, confirmationId);
+            if (actionExecutionService == null) {
+                throw new IllegalStateException("최종 실행기가 준비되지 않았습니다.");
+            }
+            session.approveFinalConfirmation();
+            sessionRepository.save(session);
+            var result = actionExecutionService.executeConfirmedFinalClick(
+                    sessionId, confirmation.confirmationTargetElementId());
+            if (result.status() != BrowserActionExecutionStatus.EXECUTED) {
+                throw new IllegalStateException("최종 실행 대상을 안전하게 실행할 수 없습니다.");
+            }
+            finalConfirmationStore.clear(sessionId);
+            statusEventPublisher.publishConfirmationResolved(sessionId);
+            return getSession(sessionId);
+        }
+
         session.approveFinalConfirmation();
 
         AutomationSession savedSession =
@@ -376,6 +400,11 @@ public class UserDecisionService {
         AutomationSession session =
                 getSession(sessionId);
 
+        if (finalConfirmationStore != null) {
+            finalConfirmationStore.consume(sessionId, confirmationId);
+            finalConfirmationStore.clear(sessionId);
+        }
+
         session.rejectFinalConfirmation();
 
         AutomationSession savedSession =
@@ -396,6 +425,7 @@ public class UserDecisionService {
                 savedSession.getStatus(),
                 "최종 실행이 거절되어 세션이 취소되었습니다."
         );
+        statusEventPublisher.publishConfirmationRejected(sessionId);
 
         return savedSession;
     }

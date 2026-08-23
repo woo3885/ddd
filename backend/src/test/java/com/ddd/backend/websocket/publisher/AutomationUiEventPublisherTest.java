@@ -208,6 +208,29 @@ class AutomationUiEventPublisherTest {
     }
 
     @Test
+    void final_confirmation은_reconnect_snapshot에_복원되고_resolve로_정리된다() {
+        var confirmation = new com.ddd.backend.service.confirmation.FinalConfirmationRequest(
+                "confirm-001",
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-final", "snap-001",
+                new com.ddd.backend.service.confirmation.FinalConfirmationSummary(
+                        "정기예금", "12개월", "1,000,000원"));
+
+        AutomationUiEvent event = publisher.publishConfirmationRequired(
+                "session-001", confirmation);
+
+        assertThat(event.eventType())
+                .isEqualTo(AutomationUiEventType.CONFIRMATION_REQUIRED);
+        assertThat(event.confirmation()).isEqualTo(confirmation);
+        assertThat(publisher.latestSnapshot("session-001").orElseThrow()
+                .confirmation().confirmation()).isEqualTo(confirmation);
+
+        publisher.publishConfirmationResolved("session-001");
+        assertThat(publisher.latestSnapshot("session-001").orElseThrow()
+                .confirmation()).isNull();
+    }
+
+    @Test
     void final_risk_terminal_전환은_이전_secure_request를_snapshot에서_정리한다() {
         for (WorkflowStatus status : new WorkflowStatus[]{
                 WorkflowStatus.FINAL_CONFIRMATION_REQUIRED,

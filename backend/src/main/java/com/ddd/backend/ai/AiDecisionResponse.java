@@ -2,6 +2,7 @@ package com.ddd.backend.ai;
 
 import com.ddd.backend.automation.BrowserActionType;
 import com.ddd.backend.domain.session.DecisionType;
+import com.ddd.backend.domain.session.ConfirmationType;
 
 import java.util.List;
 import java.util.Objects;
@@ -20,7 +21,9 @@ public record AiDecisionResponse(
         DecisionType decisionType,
         String sourceSnapshotId,
         List<AiDecisionOption> options,
-        List<AiDecisionOption> terms
+        List<AiDecisionOption> terms,
+        ConfirmationType confirmationType,
+        String confirmationTargetElementId
 ) {
 
     public AiDecisionResponse {
@@ -41,6 +44,7 @@ public record AiDecisionResponse(
                 );
         options = options == null ? List.of() : List.copyOf(options);
         terms = terms == null ? List.of() : List.copyOf(terms);
+        confirmationTargetElementId = normalizeNullable(confirmationTargetElementId);
     }
 
     public AiDecisionResponse(
@@ -48,7 +52,8 @@ public record AiDecisionResponse(
             Integer scrollX, Integer scrollY, Integer waitMillis
     ) {
         this(actionType, elementId, value, scrollX, scrollY, waitMillis,
-                null, null, null, null, null, null, List.of(), List.of());
+                null, null, null, null, null, null, List.of(), List.of(),
+                null, null);
     }
 
     public AiDecisionResponse(
@@ -60,7 +65,20 @@ public record AiDecisionResponse(
     ) {
         this(actionType, elementId, value, scrollX, scrollY, waitMillis,
                 status, message, requiresUserAction, executionBlocked,
-                decisionType, null, options, terms);
+                decisionType, null, options, terms, null, null);
+    }
+
+    public AiDecisionResponse(
+            BrowserActionType actionType, String elementId, String value,
+            Integer scrollX, Integer scrollY, Integer waitMillis,
+            String status, String message, Boolean requiresUserAction,
+            Boolean executionBlocked, DecisionType decisionType,
+            String sourceSnapshotId, List<AiDecisionOption> options,
+            List<AiDecisionOption> terms
+    ) {
+        this(actionType, elementId, value, scrollX, scrollY, waitMillis,
+                status, message, requiresUserAction, executionBlocked,
+                decisionType, sourceSnapshotId, options, terms, null, null);
     }
 
     /*

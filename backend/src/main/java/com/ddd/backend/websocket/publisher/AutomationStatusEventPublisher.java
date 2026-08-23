@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
 import com.ddd.backend.security.secureinput.SecureInputRequest;
+import com.ddd.backend.service.confirmation.FinalConfirmationRequest;
+import com.ddd.backend.service.confirmation.FinalConfirmationStore;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -38,6 +40,12 @@ public final class AutomationStatusEventPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final UserDecisionSessionState decisionState;
+    private FinalConfirmationStore finalConfirmationStore;
+
+    @Autowired
+    void setFinalConfirmationStore(FinalConfirmationStore store) {
+        this.finalConfirmationStore = store;
+    }
 
     private final ConcurrentMap<String, SessionUiState> uiStates =
             new ConcurrentHashMap<>();
@@ -118,6 +126,12 @@ public final class AutomationStatusEventPublisher {
         }
         if (clearsSecureInput(event.status())) {
             publishSecureInputClear(event.sessionId());
+        }
+        if (clearsConfirmation(event.status())) {
+            if (finalConfirmationStore != null) {
+                finalConfirmationStore.clear(event.sessionId());
+            }
+            publishConfirmationClear(event.sessionId());
         }
     }
 
@@ -200,6 +214,34 @@ public final class AutomationStatusEventPublisher {
                 null, null, null);
     }
 
+    public AutomationUiEvent publishConfirmationRequired(
+            String sessionId, FinalConfirmationRequest confirmation
+    ) {
+        Objects.requireNonNull(confirmation, "Final confirmation은 필수입니다.");
+        return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_REQUIRED,
+                WorkflowStatus.FINAL_CONFIRMATION_REQUIRED,
+                "예금 가입 전 최종 확인이 필요합니다.", true,
+                null, null, null, confirmation);
+    }
+
+    public AutomationUiEvent publishConfirmationResolved(String sessionId) {
+        return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_RESOLVED,
+                WorkflowStatus.PAGE_LOADING, "최종 실행이 승인되었습니다.", false,
+                null, null, null, null);
+    }
+
+    public AutomationUiEvent publishConfirmationRejected(String sessionId) {
+        return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_REJECTED,
+                WorkflowStatus.CANCELLED, "최종 실행이 거절되었습니다.", false,
+                null, null, null, null);
+    }
+
+    public AutomationUiEvent publishConfirmationClear(String sessionId) {
+        return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_CLEAR,
+                null, "최종 확인 요청이 정리되었습니다.", false,
+                null, null, null, null);
+    }
+
     public Optional<AutomationUiEventSnapshot> latestSnapshot(String sessionId) {
         destination(sessionId);
         SessionUiState state = uiStates.get(sessionId);
@@ -209,6 +251,9 @@ public final class AutomationStatusEventPublisher {
     public void removeSession(String sessionId) {
         if (sessionId != null) {
             uiStates.remove(sessionId);
+            if (finalConfirmationStore != null) {
+                finalConfirmationStore.clear(sessionId);
+            }
         }
     }
 
@@ -222,12 +267,23 @@ public final class AutomationStatusEventPublisher {
             AutomationDecisionPrompt decision,
             SecureInputRequest secureInput
     ) {
+        return publishUiEvent(sessionId, type, status, message, actionRequired,
+                target, decision, secureInput, null);
+    }
+
+    private AutomationUiEvent publishUiEvent(
+            String sessionId, AutomationUiEventType type,
+            WorkflowStatus status, String message, boolean actionRequired,
+            AutomationTarget target, AutomationDecisionPrompt decision,
+            SecureInputRequest secureInput,
+            FinalConfirmationRequest confirmation
+    ) {
         String uiDestination = uiDestination(sessionId);
         SessionUiState state = uiStates.computeIfAbsent(
                 sessionId, ignored -> new SessionUiState());
         AutomationUiEvent event = state.next(
                 sessionId, type, status, message, actionRequired, target, decision,
-                secureInput);
+                secureInput, confirmation);
         messagingTemplate.convertAndSend(uiDestination, event);
         return event;
     }
@@ -292,6 +348,13 @@ public final class AutomationStatusEventPublisher {
                 || status == WorkflowStatus.TERMINATED;
     }
 
+    private boolean clearsConfirmation(WorkflowStatus status) {
+        return status == WorkflowStatus.COMPLETED
+                || status == WorkflowStatus.CANCELLED
+                || status == WorkflowStatus.ERROR
+                || status == WorkflowStatus.TERMINATED;
+    }
+
     private static final class SessionUiState {
         private final AtomicLong sequence = new AtomicLong();
         private AutomationUiEvent state;
@@ -299,19 +362,21 @@ public final class AutomationStatusEventPublisher {
         private AutomationUiEvent target;
         private AutomationUiEvent decision;
         private AutomationUiEvent secureInput;
+        private AutomationUiEvent confirmation;
 
         private synchronized AutomationUiEvent next(
                 String sessionId, AutomationUiEventType type,
                 WorkflowStatus status, String message,
                 boolean actionRequired, AutomationTarget targetValue,
                 AutomationDecisionPrompt decisionValue,
-                SecureInputRequest secureInputValue
+                SecureInputRequest secureInputValue,
+                FinalConfirmationRequest confirmationValue
         ) {
             long next = sequence.incrementAndGet();
             AutomationUiEvent event = new AutomationUiEvent(
                     "evt-" + UUID.randomUUID(), next, type, sessionId,
                     status, message, actionRequired, targetValue, decisionValue,
-                    secureInputValue,
+                    secureInputValue, confirmationValue,
                     java.time.Instant.now());
             switch (type) {
                 case STATE -> state = event;
@@ -323,6 +388,9 @@ public final class AutomationStatusEventPublisher {
                 case DECISION_CLEAR -> decision = null;
                 case SECURE_INPUT_REQUIRED -> secureInput = event;
                 case SECURE_INPUT_RESOLVED, SECURE_INPUT_CLEAR -> secureInput = null;
+                case CONFIRMATION_REQUIRED -> confirmation = event;
+                case CONFIRMATION_RESOLVED, CONFIRMATION_REJECTED,
+                     CONFIRMATION_CLEAR -> confirmation = null;
             }
             return event;
         }
@@ -330,7 +398,7 @@ public final class AutomationStatusEventPublisher {
         private synchronized AutomationUiEventSnapshot snapshot(String sessionId) {
             return new AutomationUiEventSnapshot(
                     sessionId, sequence.get(), state, guide, target, decision,
-                    secureInput);
+                    secureInput, confirmation);
         }
     }
 }

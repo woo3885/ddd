@@ -16,6 +16,8 @@ import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.websocket.publisher.AutomationTargetEventService;
 import com.ddd.backend.service.decision.UserDecisionPromptService;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
+import com.ddd.backend.service.confirmation.FinalConfirmationStore;
+import com.ddd.backend.service.confirmation.FinalConfirmationSummaryExtractor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,6 +62,17 @@ public final class AiDecisionExecutionService {
     private final UserDecisionPromptService userDecisionPromptService;
     private final UserDecisionSessionState userDecisionState;
     private final ActionReplayGuard replayGuard;
+    private FinalConfirmationStore finalConfirmationStore;
+    private FinalConfirmationSummaryExtractor finalConfirmationSummaryExtractor;
+
+    @Autowired
+    void setFinalConfirmationDependencies(
+            FinalConfirmationStore store,
+            FinalConfirmationSummaryExtractor summaryExtractor
+    ) {
+        this.finalConfirmationStore = store;
+        this.finalConfirmationSummaryExtractor = summaryExtractor;
+    }
 
     @Autowired
     public AiDecisionExecutionService(
@@ -273,6 +286,9 @@ public final class AiDecisionExecutionService {
                 executionResult =
                 isAiErrorFallback(validatedResponse)
                         ? handleAiErrorFallback(session)
+                        : isFinalConfirmation(validatedResponse)
+                        ? requireFinalConfirmation(
+                                sessionId, snapshot, validatedResponse)
                         : isUnauthorizedDepositInput(session, snapshot, validatedResponse)
                         ? requireAdditionalInformation(session)
                         : isBlockedDepositInformationRequest(snapshot, validatedResponse)
@@ -288,6 +304,32 @@ public final class AiDecisionExecutionService {
                 response,
                 executionResult
         );
+    }
+
+    private boolean isFinalConfirmation(AiDecisionResponse response) {
+        return response.actionType() == BrowserActionType.REQUEST_FINAL_CONFIRMATION;
+    }
+
+    private BrowserActionExecutionResult requireFinalConfirmation(
+            String sessionId, SanitizedDomSnapshot snapshot,
+            AiDecisionResponse response
+    ) {
+        if (finalConfirmationStore == null || finalConfirmationSummaryExtractor == null) {
+            throw new IllegalStateException("최종 확인 저장소가 준비되지 않았습니다.");
+        }
+        var confirmation = finalConfirmationStore.activate(
+                sessionId, response.confirmationType(),
+                response.confirmationTargetElementId(), response.sourceSnapshotId(),
+                finalConfirmationSummaryExtractor.extract(snapshot));
+        try {
+            BrowserActionExecutionResult result = actionExecutionService.execute(
+                    sessionId, controlAction(BrowserActionType.REQUEST_FINAL_CONFIRMATION));
+            statusEventPublisher.publishConfirmationRequired(sessionId, confirmation);
+            return result;
+        } catch (RuntimeException exception) {
+            finalConfirmationStore.clear(sessionId);
+            throw exception;
+        }
     }
 
     private boolean isAiErrorFallback(AiDecisionResponse response) {
