@@ -17,6 +17,8 @@ public final class DepositPageClassifier {
             Pattern.compile("^/deposit/terms/[a-zA-Z0-9-]+$");
     private static final Pattern SECURE_PASSWORD =
             Pattern.compile("^/deposit/secure/password/[a-zA-Z0-9-]+$");
+    private static final Pattern FINAL_CONFIRMATION =
+            Pattern.compile("^/deposit/confirmation/[a-zA-Z0-9-]+$");
 
     public DepositPage classify(String canonicalUrl) {
         if (canonicalUrl == null || canonicalUrl.isBlank()) {
@@ -38,6 +40,9 @@ public final class DepositPageClassifier {
             if (CONDITIONS.matcher(path).matches()) return DepositPage.CONDITIONS;
             if (TERMS.matcher(path).matches()) return DepositPage.TERMS;
             if (SECURE_PASSWORD.matcher(path).matches()) return DepositPage.SECURE_PASSWORD;
+            if (FINAL_CONFIRMATION.matcher(path).matches()) {
+                return DepositPage.FINAL_CONFIRMATION;
+            }
             return DepositPage.OTHER;
         } catch (IllegalArgumentException exception) {
             return DepositPage.UNKNOWN;
@@ -45,6 +50,7 @@ public final class DepositPageClassifier {
     }
 
     public enum DepositPage {
-        PRODUCT_LIST, PRODUCT_DETAIL, CONDITIONS, TERMS, SECURE_PASSWORD, OTHER, UNKNOWN
+        PRODUCT_LIST, PRODUCT_DETAIL, CONDITIONS, TERMS, SECURE_PASSWORD,
+        FINAL_CONFIRMATION, OTHER, UNKNOWN
     }
 }

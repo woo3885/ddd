@@ -50,6 +50,9 @@ public final class DepositScreenInspector {
                     && safeTermsNext(page);
             case SECURE_PASSWORD -> visible(page, "#page-deposit-password")
                     && (securePassword(page) || completedSecureInput(page));
+            case FINAL_CONFIRMATION -> visible(page, "#page-deposit-confirmation")
+                    && visible(page, "#summary-deposit-confirmation")
+                    && finalConfirmationTarget(page);
             case OTHER -> true;
             case UNKNOWN -> false;
         };
@@ -62,7 +65,15 @@ public final class DepositScreenInspector {
                 && page.locator("#summary-deposit-product-name").count() == 1
                 ? page.locator("#summary-deposit-product-name").first().textContent().trim()
                 : null;
-        return new Inspection(screen, valid, productId, productName, periodLabel);
+        String amountLabel = screen == DepositPageClassifier.DepositPage.CONDITIONS
+                && page.locator("#summary-deposit-amount-formatted").count() == 1
+                && page.locator("#summary-deposit-amount-formatted").first()
+                        .textContent().matches(".*[0-9][0-9,]*\\s*원.*")
+                ? page.locator("#summary-deposit-amount-formatted").first()
+                        .textContent().trim()
+                : null;
+        return new Inspection(
+                screen, valid, productId, productName, periodLabel, amountLabel);
     }
 
     private boolean safeTermsNext(Page page) {
@@ -89,6 +100,11 @@ public final class DepositScreenInspector {
                 && completed.first().isVisible();
     }
 
+    private boolean finalConfirmationTarget(Page page) {
+        Locator target = page.locator("[data-ddd-policy=\"final-confirmation\"]");
+        return target.count() == 1;
+    }
+
     private boolean checkbox(Page page, String selector, boolean required) {
         Locator input = page.locator(selector);
         return input.count() == 1
@@ -113,10 +129,21 @@ public final class DepositScreenInspector {
             boolean valid,
             String productId,
             String productName,
-            String periodLabel
+            String periodLabel,
+            String amountLabel
     ) {
         public Inspection(DepositPageClassifier.DepositPage screen, boolean valid) {
-            this(screen, valid, null, null, null);
+            this(screen, valid, null, null, null, null);
+        }
+
+        public Inspection(
+                DepositPageClassifier.DepositPage screen,
+                boolean valid,
+                String productId,
+                String productName,
+                String periodLabel
+        ) {
+            this(screen, valid, productId, productName, periodLabel, null);
         }
     }
 
@@ -124,7 +151,8 @@ public final class DepositScreenInspector {
         if (screen != DepositPageClassifier.DepositPage.PRODUCT_DETAIL
                 && screen != DepositPageClassifier.DepositPage.CONDITIONS
                 && screen != DepositPageClassifier.DepositPage.TERMS
-                && screen != DepositPageClassifier.DepositPage.SECURE_PASSWORD) return null;
+                && screen != DepositPageClassifier.DepositPage.SECURE_PASSWORD
+                && screen != DepositPageClassifier.DepositPage.FINAL_CONFIRMATION) return null;
         String path = java.net.URI.create(url).getPath();
         return path.substring(path.lastIndexOf('/') + 1);
     }

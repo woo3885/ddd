@@ -12,6 +12,12 @@ HTML/script, 모든 ISO 제어문자, password/비밀번호, OTP/인증번호/PI
 구분자 없는 10~12자리 계좌번호를 허용하지 않는다. 세 필드 중 하나라도 위반하면 일부 필드만
 제외해 이벤트를 만들지 않고 confirmation 전체 생성을 중단한다.
 
+상품 선택 시 검증한 `productId`와 상세 화면에서 확인한 `productName/productPeriod`, 금액
+화면에서 확인한 `amount`는 세션별 authoritative context로 보존한다. final confirmation
+snapshot은 `/deposit/confirmation/:productId`의 semantic DOM 네 필드와 이 context가 모두
+일치할 때만 `PageSnapshot`에 값을 싣는다. 직접 URL 접근, 이전 상품/금액과 다른 DOM,
+누락된 이전 context는 summary 생성 전에 fail-closed한다.
+
 승인/거절 요청은 아래 필드를 모두 보낸다.
 
 - `requestId`: 1~100자, 승인/거절 처리의 exactly-once key

@@ -17,6 +17,8 @@ public final class SelectedDepositProductStore {
             Pattern.compile("^btn-select-(deposit-[a-zA-Z0-9-]+)$");
     private static final Pattern REQUEST_PERIOD =
             Pattern.compile("(?<![0-9])([0-9]{1,3})\\s*개월");
+    private static final Pattern WON_AMOUNT =
+            Pattern.compile("(?<![0-9])([0-9][0-9,]*)\\s*원(?![0-9])");
     private static final Set<String> SUPPORTED_PRODUCTS =
             Set.of("deposit-12m", "deposit-preferred");
     private static final Map<String, String> PRODUCT_NAMES = Map.of(
@@ -30,7 +32,8 @@ public final class SelectedDepositProductStore {
                 || sourceSnapshotId == null || sourceSnapshotId.isBlank()) {
             throw new IllegalStateException("선택 상품의 Snapshot context를 확인할 수 없습니다.");
         }
-        contexts.put(sessionId, new Context(matcher.group(1), sourceSnapshotId, null));
+        contexts.put(sessionId, new Context(
+                matcher.group(1), sourceSnapshotId, null, null, null));
     }
 
     public Verification observeDetail(
@@ -53,8 +56,39 @@ public final class SelectedDepositProductStore {
             return Verification.PERIOD_CONFLICT;
         }
         contexts.put(sessionId, new Context(selected.productId(),
-                selected.sourceSnapshotId(), periodLabel.trim()));
+                selected.sourceSnapshotId(), productName.trim(),
+                periodLabel.trim(), selected.amount()));
         return Verification.VALID;
+    }
+
+    public boolean observeAmount(String sessionId, String productId, String amountText) {
+        Context context = contexts.get(sessionId);
+        if (context == null || context.productName() == null
+                || !context.productId().equals(productId)
+                || amountText == null) {
+            return false;
+        }
+        Matcher amount = WON_AMOUNT.matcher(amountText.trim());
+        if (!amount.find()) {
+            return false;
+        }
+        String canonicalAmount = amount.group(1) + "원";
+        contexts.put(sessionId, new Context(
+                context.productId(), context.sourceSnapshotId(),
+                context.productName(), context.periodLabel(), canonicalAmount));
+        return true;
+    }
+
+    public boolean validatesFinalContext(
+            String sessionId, String productId, String productName,
+            String periodLabel, String amount
+    ) {
+        Context context = contexts.get(sessionId);
+        return context != null
+                && context.productId().equals(productId)
+                && java.util.Objects.equals(context.productName(), productName)
+                && java.util.Objects.equals(context.periodLabel(), periodLabel)
+                && java.util.Objects.equals(context.amount(), amount);
     }
 
     public boolean validatesAmountPage(String sessionId, String productId) {
@@ -73,5 +107,11 @@ public final class SelectedDepositProductStore {
 
     public enum Verification { VALID, PERIOD_CONFLICT, INVALID }
 
-    public record Context(String productId, String sourceSnapshotId, String periodLabel) {}
+    public record Context(
+            String productId,
+            String sourceSnapshotId,
+            String productName,
+            String periodLabel,
+            String amount
+    ) {}
 }

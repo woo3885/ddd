@@ -22,7 +22,9 @@ public final class FinalConfirmationSummaryExtractor {
 
     public FinalConfirmationSummary extract(SanitizedDomSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "최종 확인 Snapshot은 필수입니다.");
-        String amount = extractAmount(snapshot);
+        String amount = snapshot.page().depositAmount() == null
+                ? extractAmount(snapshot)
+                : safeAmount(snapshot.page().depositAmount());
         String productName = safeRequired(snapshot.page().productName(), "상품명", 100);
         String productPeriod = safeRequired(snapshot.page().productPeriod(), "가입 기간", 20);
         if (!PERIOD.matcher(productPeriod).matches()) {
@@ -71,6 +73,18 @@ public final class FinalConfirmationSummaryExtractor {
             }
         }
         return null;
+    }
+
+    private String safeAmount(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("최종 확인 가입 금액을 확인할 수 없습니다.");
+        }
+        validateSafeText(value, false);
+        String normalized = value.trim();
+        if (normalized.length() > 30 || !AMOUNT.matcher(normalized).matches()) {
+            throw new IllegalStateException("최종 확인 가입 금액 형식이 올바르지 않습니다.");
+        }
+        return normalized.replaceAll("\\s+", "");
     }
 
     private void validateWholeSummary(FinalConfirmationSummary summary) {
