@@ -293,6 +293,14 @@ public final class AgentLoopService {
             failSafely(session, "선택 상품과 가입 금액 화면이 일치하지 않습니다.");
             return false;
         }
+        if (inspection.screen() == DepositPageClassifier.DepositPage.CONDITIONS
+                && inspection.amountLabel() != null
+                && !selectedProductStore.observeAmount(
+                session.getSessionId(), inspection.productId(),
+                inspection.amountLabel())) {
+            failSafely(session, "가입 금액 context를 안전하게 저장할 수 없습니다.");
+            return false;
+        }
         return true;
     }
 

@@ -532,4 +532,57 @@ class SanitizedDomSnapshotServiceTest {
         assertThat(snapshot.page().productPeriod()).isEqualTo("12개월");
         assertThat(snapshot.snapshotId()).startsWith("snap-");
     }
+
+    @Test
+    void final_Snapshot은_이전_검증_context와_DOM이_일치할_때만_summary를_보존한다() {
+        var selected = new com.ddd.backend.service.decision
+                .SelectedDepositProductStore();
+        selected.select(SESSION_ID, "btn-select-deposit-12m", "snap-products");
+        assertThat(selected.observeDetail(
+                SESSION_ID, "deposit-12m", "12개월 정기예금", "12개월",
+                "100만 원을 12개월 동안 가입"))
+                .isEqualTo(com.ddd.backend.service.decision
+                        .SelectedDepositProductStore.Verification.VALID);
+        assertThat(selected.observeAmount(
+                SESSION_ID, "deposit-12m", "입력 금액: 1,000,000원")).isTrue();
+        service.setSelectedProductStore(selected);
+
+        manager.execute(SESSION_ID, Duration.ofSeconds(5), page -> {
+            page.route("**/*", route -> route.fulfill(
+                    new com.microsoft.playwright.Route.FulfillOptions()
+                            .setStatus(200)
+                            .setContentType("text/html; charset=utf-8")
+                            .setBody("""
+                                    <main id="page-deposit-confirmation">
+                                      <dl id="summary-deposit-confirmation">
+                                        <div data-ddd-summary-id="product-name">
+                                          <dt>상품명</dt><dd>12개월 정기예금</dd>
+                                        </div>
+                                        <div data-ddd-summary-id="deposit-amount">
+                                          <dt>가입 금액</dt><dd>1,000,000원</dd>
+                                        </div>
+                                        <div data-ddd-summary-id="deposit-period">
+                                          <dt>가입 기간</dt><dd>12개월</dd>
+                                        </div>
+                                      </dl>
+                                      <button data-ddd-policy="final-confirmation">
+                                        Demo 예금 최종 승인
+                                      </button>
+                                    </main>
+                                    """)));
+            page.navigate("http://127.0.0.1:5190/deposit/confirmation/deposit-12m");
+            return null;
+        });
+
+        SanitizedDomSnapshot snapshot = service.createSnapshot(SESSION_ID);
+        var summary = new com.ddd.backend.service.confirmation
+                .FinalConfirmationSummaryExtractor().extract(snapshot);
+
+        assertThat(snapshot.page().productId()).isEqualTo("deposit-12m");
+        assertThat(snapshot.page().productName()).isEqualTo("12개월 정기예금");
+        assertThat(snapshot.page().productPeriod()).isEqualTo("12개월");
+        assertThat(snapshot.page().depositAmount()).isEqualTo("1,000,000원");
+        assertThat(summary).isEqualTo(new com.ddd.backend.service.confirmation
+                .FinalConfirmationSummary("12개월 정기예금", "12개월", "1,000,000원"));
+    }
 }
