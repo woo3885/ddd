@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 import java.util.List;
+import com.ddd.backend.api.dto.session.ConfirmationActionResponse;
+import com.ddd.backend.domain.session.ConfirmationType;
+import com.ddd.backend.service.confirmation.FinalConfirmationRequest;
+import com.ddd.backend.service.confirmation.FinalConfirmationSummary;
+import com.ddd.backend.websocket.dto.ConfirmationEventPayload;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,20 +43,51 @@ class FinalConfirmationCanonicalFixtureTest {
         JsonNode snapshot = read("d27-final-confirmation-snapshot.json");
         assertThat(required.path("eventType").asText())
                 .isEqualTo("CONFIRMATION_REQUIRED");
-        assertThat(required.at("/confirmation/sourceFrameId").asText())
+        assertThat(required.at("/confirmation/frameId").asText())
                 .isEqualTo("frm-001");
-        assertThat(required.at("/confirmation/sourceFrameSequence").asLong())
+        assertThat(required.at("/confirmation/frameSequence").asLong())
                 .isEqualTo(7L);
-        assertThat(snapshot.at("/confirmation/confirmation/sourceFrameId").asText())
+        assertThat(snapshot.at("/confirmation/confirmation/frameId").asText())
                 .isEqualTo("frm-001");
+        assertThat(required.at("/confirmation/summary/items/0/id").asText())
+                .isEqualTo("product-name");
+        assertThat(required.at("/confirmation/confirmationTargetElementId").isMissingNode())
+                .isTrue();
 
         for (String fixture : List.of(
                 "d27-final-confirmation-resolved-event.json",
                 "d27-final-confirmation-rejected-event.json",
                 "d27-final-confirmation-clear-event.json")) {
-            assertThat(read(fixture).path("eventType").asText())
+            JsonNode event = read(fixture);
+            assertThat(event.path("eventType").asText())
                     .startsWith("CONFIRMATION_");
+            assertThat(event.at("/confirmation/confirmationId").asText())
+                    .isEqualTo("confirm-001");
         }
+    }
+
+    @Test
+    void 실제_Jackson_wire는_ordered_summary와_명시적_ACK만_노출한다() {
+        var request = new FinalConfirmationRequest(
+                "confirm-001", ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-internal-final", "snap-001", "frm-001", 7L,
+                new FinalConfirmationSummary("정기예금", "12개월", "1,000,000원"));
+        JsonNode eventPayload = objectMapper.valueToTree(
+                ConfirmationEventPayload.from(request));
+        JsonNode response = objectMapper.valueToTree(new ConfirmationActionResponse(
+                "session-001", "req-001", "confirm-001", "frm-001", 7L,
+                ConfirmationActionResponse.Status.APPROVAL_ACCEPTED,
+                "최종 승인 요청을 처리하고 있습니다."));
+
+        assertThat(eventPayload.at("/summary/items/0/id").asText())
+                .isEqualTo("product-name");
+        assertThat(eventPayload.path("confirmationTargetElementId").isMissingNode())
+                .isTrue();
+        assertThat(eventPayload.toString()).doesNotContain("el-internal-final");
+        assertThat(response.path("sessionId").asText()).isEqualTo("session-001");
+        assertThat(response.path("requestId").asText()).isEqualTo("req-001");
+        assertThat(response.path("status").asText()).isEqualTo("APPROVAL_ACCEPTED");
+        assertThat(response.size()).isEqualTo(7);
     }
 
     private JsonNode read(String name) throws Exception {

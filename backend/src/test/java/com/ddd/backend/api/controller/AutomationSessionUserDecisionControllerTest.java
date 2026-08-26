@@ -5,6 +5,7 @@ import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.DecisionType;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
 import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
+import com.ddd.backend.api.dto.session.ConfirmationActionResponse;
 import com.ddd.backend.service.AutomationSessionService;
 import com.ddd.backend.service.UserDecisionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +22,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 class AutomationSessionUserDecisionControllerTest {
 
@@ -110,17 +112,15 @@ class AutomationSessionUserDecisionControllerTest {
 
     @Test
     void 최종_승인_API를_호출한다() throws Exception {
-        AutomationSession session =
-                AutomationSession.create(
-                        "예금 가입을 승인해 줘"
-                );
-
         when(
-                userDecisionService.confirmFinalAction(
+                userDecisionService.confirmFinalActionAck(
                         org.mockito.ArgumentMatchers.eq("session-002"),
                         org.mockito.ArgumentMatchers.any(SubmitConfirmationRequest.class))
         ).thenReturn(
-                session
+                new ConfirmationActionResponse("session-002", "req-confirm-001",
+                        "confirm-001", "frm-001", 1L,
+                        ConfirmationActionResponse.Status.APPROVAL_ACCEPTED,
+                        "최종 승인 요청을 처리하고 있습니다.")
         );
 
         mockMvc.perform(
@@ -145,10 +145,13 @@ class AutomationSessionUserDecisionControllerTest {
                 )
                 .andExpect(
                         status().isOk()
-                );
+                )
+                .andExpect(jsonPath("$.data.sessionId").value("session-002"))
+                .andExpect(jsonPath("$.data.requestId").value("req-confirm-001"))
+                .andExpect(jsonPath("$.data.status").value("APPROVAL_ACCEPTED"));
 
         verify(userDecisionService)
-                .confirmFinalAction(
+                .confirmFinalActionAck(
                         org.mockito.ArgumentMatchers.eq("session-002"),
                         org.mockito.ArgumentMatchers.argThat(request ->
                                 request.requestId().equals("req-confirm-001")
@@ -159,17 +162,15 @@ class AutomationSessionUserDecisionControllerTest {
 
     @Test
     void 최종_거절_API를_호출한다() throws Exception {
-        AutomationSession session =
-                AutomationSession.create(
-                        "예금 가입을 취소해 줘"
-                );
-
         when(
-                userDecisionService.rejectFinalAction(
+                userDecisionService.rejectFinalActionAck(
                         org.mockito.ArgumentMatchers.eq("session-003"),
                         org.mockito.ArgumentMatchers.any(SubmitConfirmationRequest.class))
         ).thenReturn(
-                session
+                new ConfirmationActionResponse("session-003", "req-reject-001",
+                        "confirm-002", "frm-002", 2L,
+                        ConfirmationActionResponse.Status.REJECTION_ACCEPTED,
+                        "최종 거절 요청을 처리했습니다.")
         );
 
         mockMvc.perform(
@@ -194,10 +195,13 @@ class AutomationSessionUserDecisionControllerTest {
                 )
                 .andExpect(
                         status().isOk()
-                );
+                )
+                .andExpect(jsonPath("$.data.sessionId").value("session-003"))
+                .andExpect(jsonPath("$.data.requestId").value("req-reject-001"))
+                .andExpect(jsonPath("$.data.status").value("REJECTION_ACCEPTED"));
 
         verify(userDecisionService)
-                .rejectFinalAction(
+                .rejectFinalActionAck(
                         org.mockito.ArgumentMatchers.eq("session-003"),
                         org.mockito.ArgumentMatchers.argThat(request ->
                                 request.requestId().equals("req-reject-001")

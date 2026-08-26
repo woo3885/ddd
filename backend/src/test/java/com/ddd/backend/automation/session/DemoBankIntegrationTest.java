@@ -313,6 +313,106 @@ class DemoBankIntegrationTest {
     }
 
     @Test
+    void D27_실제_Demo_승인은_final_CLICK을_정확히_한번만_실행한다() {
+        try (PlaywrightWorker worker = new PlaywrightWorker();
+             BrowserSessionManager manager = new BrowserSessionManager(worker)) {
+            String sessionId = "demo-final-confirmation-approve";
+            PreparedConfirmation prepared = prepareFinalConfirmation(manager, sessionId);
+
+            prepared.store().consume(sessionId,
+                    prepared.request().confirmationId(), "req-approve-demo",
+                    "frm-final", 1L);
+            var result = prepared.executor().executeConfirmedFinalClick(
+                    sessionId, prepared.request().confirmationTargetElementId());
+
+            org.assertj.core.api.Assertions.assertThat(result.status())
+                    .isEqualTo(com.ddd.backend.automation.BrowserActionExecutionStatus.EXECUTED);
+            manager.execute(sessionId, COMMAND_TIMEOUT, page -> {
+                page.waitForURL("**/deposit/completed/deposit-12m");
+                assertThat(page.locator("#page-deposit-completed")).isVisible();
+                return null;
+            });
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                    prepared.store().consume(sessionId,
+                            prepared.request().confirmationId(), "req-approve-demo-2",
+                            "frm-final", 1L))
+                    .isInstanceOf(com.ddd.backend.service.confirmation
+                            .ConfirmationException.class);
+        }
+    }
+
+    @Test
+    void D27_실제_Demo_거절은_final_CLICK없이_브라우저를_정리한다() {
+        try (PlaywrightWorker worker = new PlaywrightWorker();
+             BrowserSessionManager manager = new BrowserSessionManager(worker)) {
+            String sessionId = "demo-final-confirmation-reject";
+            PreparedConfirmation prepared = prepareFinalConfirmation(manager, sessionId);
+
+            prepared.store().consume(sessionId,
+                    prepared.request().confirmationId(), "req-reject-demo",
+                    "frm-final", 1L);
+            prepared.store().clear(sessionId);
+            manager.execute(sessionId, COMMAND_TIMEOUT, page -> {
+                org.assertj.core.api.Assertions.assertThat(page.url())
+                        .contains("/deposit/confirmation/deposit-12m");
+                return null;
+            });
+            manager.closeSession(sessionId);
+
+            org.assertj.core.api.Assertions.assertThat(manager.exists(sessionId)).isFalse();
+        }
+    }
+
+    private PreparedConfirmation prepareFinalConfirmation(
+            BrowserSessionManager manager, String sessionId
+    ) {
+        manager.createSession(sessionId);
+        var selected = new com.ddd.backend.service.decision.SelectedDepositProductStore();
+        selected.select(sessionId, "btn-select-deposit-12m", "snap-products");
+        selected.observeDetail(sessionId, "deposit-12m", "12개월 정기예금",
+                "12개월", "100만 원을 12개월 동안 가입");
+        selected.observeAmount(sessionId, "deposit-12m", "입력 금액: 1,000,000원");
+        manager.navigate(sessionId, java.net.URI.create(
+                BASE_URL + "/deposit/secure/password/deposit-12m"));
+        manager.execute(sessionId, COMMAND_TIMEOUT, page -> {
+            page.locator("#input-account-password").fill("demo-only-secret");
+            page.locator("#btn-secure-input-complete").click();
+            page.locator("#btn-deposit-confirmation-start").click();
+            page.waitForURL("**/deposit/confirmation/deposit-12m");
+            return null;
+        });
+
+        var sanitizer = new DomSanitizer();
+        var registry = new com.ddd.backend.automation.dom.ElementRegistry(sanitizer);
+        var policy = new BrowserActionPolicyContextResolver(manager);
+        var snapshots = new SanitizedDomSnapshotService(manager,
+                new InteractiveElementExtractor(manager), policy, sanitizer, registry);
+        snapshots.setSelectedProductStore(selected);
+        SanitizedDomSnapshot snapshot = snapshots.createSnapshot(sessionId);
+        var summary = new com.ddd.backend.service.confirmation
+                .FinalConfirmationSummaryExtractor().extract(snapshot);
+        String targetId = snapshot.elements().stream()
+                .filter(element -> element.securityPolicy()
+                        == SanitizedDomSnapshot.SecurityPolicy.FINAL_CONFIRMATION)
+                .map(SanitizedDomSnapshot.ElementSnapshot::elementId)
+                .findFirst().orElseThrow();
+        var store = new com.ddd.backend.service.confirmation.FinalConfirmationStore();
+        var request = store.activate(sessionId,
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                targetId, snapshot.snapshotId(), "frm-final", 1L, summary);
+        var executor = new com.ddd.backend.automation.ElementIdBrowserActionExecutor(
+                new com.ddd.backend.automation.dom.ElementLocatorResolver(manager, registry),
+                policy);
+        return new PreparedConfirmation(store, request, executor);
+    }
+
+    private record PreparedConfirmation(
+            com.ddd.backend.service.confirmation.FinalConfirmationStore store,
+            com.ddd.backend.service.confirmation.FinalConfirmationRequest request,
+            com.ddd.backend.automation.ElementIdBrowserActionExecutor executor
+    ) { }
+
+    @Test
     void D26_실제_Demo_사용자직접완료후_raw없는_API계약으로_안전재개한다() {
         try (PlaywrightWorker worker = new PlaywrightWorker();
              BrowserSessionManager manager = new BrowserSessionManager(worker)) {

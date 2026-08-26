@@ -221,11 +221,14 @@ class AutomationUiEventPublisherTest {
 
         assertThat(event.eventType())
                 .isEqualTo(AutomationUiEventType.CONFIRMATION_REQUIRED);
-        assertThat(event.confirmation()).isEqualTo(confirmation);
+        assertThat(event.confirmation().confirmationId())
+                .isEqualTo(confirmation.confirmationId());
+        assertThat(event.confirmation().summary()).isEqualTo(confirmation.summary());
         assertThat(publisher.latestSnapshot("session-001").orElseThrow()
-                .confirmation().confirmation()).isEqualTo(confirmation);
+                .confirmation().confirmation().confirmationId())
+                .isEqualTo(confirmation.confirmationId());
 
-        publisher.publishConfirmationResolved("session-001");
+        publisher.publishConfirmationResolved("session-001", confirmation);
         assertThat(publisher.latestSnapshot("session-001").orElseThrow()
                 .confirmation()).isNull();
     }
@@ -249,6 +252,30 @@ class AutomationUiEventPublisherTest {
 
             assertThat(publisher.latestSnapshot(sessionId).orElseThrow().secureInput())
                     .as(status.name()).isNull();
+        }
+    }
+
+    @Test
+    void secure와_risk_전환은_active_confirmation과_snapshot을_identity_clear한다() {
+        var store = new com.ddd.backend.service.confirmation.FinalConfirmationStore();
+        publisher.setFinalConfirmationStore(store);
+
+        for (WorkflowStatus status : new WorkflowStatus[]{
+                WorkflowStatus.SECURE_INPUT_REQUIRED, WorkflowStatus.RISK_WARNING}) {
+            String sessionId = "session-confirmation-"
+                    + status.name().toLowerCase().replace('_', '-');
+            var confirmation = store.activate(sessionId,
+                    com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                    "el-final", "snap-001", "frm-001", 7L,
+                    new com.ddd.backend.service.confirmation.FinalConfirmationSummary(
+                            "정기예금", "12개월", "1,000,000원"));
+            publisher.publishConfirmationRequired(sessionId, confirmation);
+
+            publisher.publish(sessionId, status, "상태 전환");
+
+            assertThat(store.active(sessionId)).isEmpty();
+            assertThat(publisher.latestSnapshot(sessionId).orElseThrow().confirmation())
+                    .isNull();
         }
     }
 }

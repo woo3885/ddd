@@ -6,7 +6,6 @@ import com.ddd.backend.security.SensitiveDataMasker;
 import java.time.Instant;
 import java.util.Objects;
 import com.ddd.backend.security.secureinput.SecureInputRequest;
-import com.ddd.backend.service.confirmation.FinalConfirmationRequest;
 
 public record AutomationUiEvent(
         String eventId,
@@ -19,7 +18,7 @@ public record AutomationUiEvent(
         AutomationTarget target,
         AutomationDecisionPrompt decision,
         SecureInputRequest secureInput,
-        FinalConfirmationRequest confirmation,
+        ConfirmationEventPayload confirmation,
         Instant occurredAt
 ) {
     public AutomationUiEvent(
@@ -67,10 +66,13 @@ public record AutomationUiEvent(
             throw new IllegalArgumentException(
                     "SECURE_INPUT_REQUIRED 이벤트에는 secureInput이 필요합니다.");
         }
-        if (eventType == AutomationUiEventType.CONFIRMATION_REQUIRED
+        if ((eventType == AutomationUiEventType.CONFIRMATION_REQUIRED
+                || eventType == AutomationUiEventType.CONFIRMATION_RESOLVED
+                || eventType == AutomationUiEventType.CONFIRMATION_REJECTED
+                || eventType == AutomationUiEventType.CONFIRMATION_CLEAR)
                 && confirmation == null) {
             throw new IllegalArgumentException(
-                    "CONFIRMATION_REQUIRED 이벤트에는 confirmation이 필요합니다.");
+                    "Confirmation 이벤트에는 confirmation identity가 필요합니다.");
         }
         if (message == null || message.isBlank()) {
             message = null;

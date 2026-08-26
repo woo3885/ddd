@@ -5,5 +5,13 @@
   "sessionId": "session-001",
   "message": "최종 확인 요청이 정리되었습니다.",
   "actionRequired": false,
+  "confirmation": {
+    "confirmationId": "confirm-001",
+    "confirmationType": "DEPOSIT_SUBSCRIPTION",
+    "sourceSnapshotId": "snap-001",
+    "frameId": "frm-001",
+    "frameSequence": 7,
+    "summary": null
+  },
   "occurredAt": "2026-08-27T00:00:02Z"
 }

@@ -82,6 +82,25 @@ class FinalConfirmationSummaryExtractorTest {
                 .hasMessageContaining("민감정보");
     }
 
+    @Test
+    void ordered_item의_중복_ID와_내부_ID는_전체를_fail_closed한다() {
+        FinalConfirmationSummary duplicate = new FinalConfirmationSummary(
+                "정기예금 가입", List.of(
+                new ConfirmationSummaryItem("product-name", "상품명", "정기예금"),
+                new ConfirmationSummaryItem("product-name", "가입 금액", "1,000,000원"),
+                new ConfirmationSummaryItem("deposit-period", "가입 기간", "12개월")));
+        FinalConfirmationSummary internal = new FinalConfirmationSummary(
+                "정기예금 가입", List.of(
+                new ConfirmationSummaryItem("product-name", "상품명", "정기예금"),
+                new ConfirmationSummaryItem("deposit-amount", "elementId", "1,000,000원"),
+                new ConfirmationSummaryItem("deposit-period", "가입 기간", "12개월")));
+
+        assertThatThrownBy(() -> extractor.validate(duplicate))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> extractor.validate(internal))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private SanitizedDomSnapshot snapshot(
             String productName, String productPeriod, String amount
     ) {

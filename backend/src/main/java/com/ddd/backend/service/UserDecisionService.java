@@ -11,6 +11,10 @@ import com.ddd.backend.service.validation.UserDecisionValidator;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
 import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
+import com.ddd.backend.api.dto.session.ConfirmationActionResponse;
+import com.ddd.backend.common.exception.ErrorCode;
+import com.ddd.backend.service.confirmation.ConfirmationException;
+import com.ddd.backend.service.confirmation.FinalConfirmationRequest;
 import com.ddd.backend.frame.BrowserFrameMetadata;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
@@ -338,10 +342,32 @@ public class UserDecisionService {
             return confirmFinalAction(
                     sessionId, request.confirmationId(), request.approved());
         }
+        ensureConfirmationWorkflow(getSession(sessionId));
         validateCurrentConfirmationFrame(sessionId, request);
-        return confirmFinalAction(sessionId, request.confirmationId(),
+        return confirmFinalActionResult(sessionId, request.confirmationId(),
                 request.approved(), request.requestId(), request.expectedFrameId(),
-                request.expectedSequence());
+                request.expectedSequence()).session();
+    }
+
+    public ConfirmationActionResponse confirmFinalActionAck(
+            String sessionId, SubmitConfirmationRequest request
+    ) {
+        if (frameStore == null && finalConfirmationStore == null) {
+            confirmFinalAction(sessionId, request.confirmationId(), request.approved());
+            return new ConfirmationActionResponse(sessionId, request.requestId(),
+                    request.confirmationId(), request.expectedFrameId(),
+                    request.expectedSequence(),
+                    ConfirmationActionResponse.Status.APPROVAL_ACCEPTED,
+                    "최종 승인 요청을 처리하고 있습니다.");
+        }
+        ensureConfirmationWorkflow(getSession(sessionId));
+        validateCurrentConfirmationFrame(sessionId, request);
+        ConfirmationDecisionResult result = confirmFinalActionResult(
+                sessionId, request.confirmationId(), request.approved(),
+                request.requestId(), request.expectedFrameId(), request.expectedSequence());
+        return acknowledgement(sessionId, request.requestId(), result.confirmation(),
+                ConfirmationActionResponse.Status.APPROVAL_ACCEPTED,
+                "최종 승인 요청을 처리하고 있습니다.");
     }
 
     public AutomationSession confirmFinalAction(
@@ -349,11 +375,11 @@ public class UserDecisionService {
             String confirmationId,
             Boolean approved
     ) {
-        return confirmFinalAction(sessionId, confirmationId, approved,
-                "legacy-request", "legacy-frame", 1L);
+        return confirmFinalActionResult(sessionId, confirmationId, approved,
+                "legacy-request", "legacy-frame", 1L).session();
     }
 
-    private AutomationSession confirmFinalAction(
+    private ConfirmationDecisionResult confirmFinalActionResult(
             String sessionId, String confirmationId, Boolean approved,
             String requestId, String expectedFrameId, long expectedSequence
     ) {
@@ -371,10 +397,10 @@ public class UserDecisionService {
         AutomationSession session =
                 getSession(sessionId);
 
+        ensureConfirmationWorkflow(session);
+
         if (finalConfirmationStore != null) {
-            var active = finalConfirmationStore.active(sessionId).orElseThrow(
-                    () -> new IllegalStateException(
-                            "현재 최종 확인 요청과 일치하지 않습니다."));
+            var active = finalConfirmationStore.requireActive(sessionId, confirmationId);
             var confirmation = finalConfirmationStore.consume(
                     sessionId, confirmationId, requestId,
                     expectedFrameId.equals("legacy-frame")
@@ -384,18 +410,30 @@ public class UserDecisionService {
                             ? active.sourceFrameSequence()
                             : expectedSequence);
             if (actionExecutionService == null) {
-                throw new IllegalStateException("최종 실행기가 준비되지 않았습니다.");
+                failConsumedConfirmation(sessionId, confirmation);
+                throw new ConfirmationException(ErrorCode.CONFIRMATION_ACTION_FAILED);
             }
             session.approveFinalConfirmation();
             sessionRepository.save(session);
-            var result = actionExecutionService.executeConfirmedFinalClick(
-                    sessionId, confirmation.confirmationTargetElementId());
+            com.ddd.backend.automation.BrowserActionExecutionResult result;
+            try {
+                result = actionExecutionService.executeConfirmedFinalClick(
+                        sessionId, confirmation.confirmationTargetElementId());
+            } catch (ConfirmationException exception) {
+                failConsumedConfirmation(sessionId, confirmation);
+                throw exception;
+            } catch (RuntimeException exception) {
+                failConsumedConfirmation(sessionId, confirmation);
+                throw new ConfirmationException(ErrorCode.CONFIRMATION_ACTION_FAILED);
+            }
             if (result.status() != BrowserActionExecutionStatus.EXECUTED) {
-                throw new IllegalStateException("최종 실행 대상을 안전하게 실행할 수 없습니다.");
+                failConsumedConfirmation(sessionId, confirmation);
+                throw new ConfirmationException(errorFor(result.status()));
             }
             finalConfirmationStore.clear(sessionId);
-            statusEventPublisher.publishConfirmationResolved(sessionId);
-            return getSession(sessionId);
+            statusEventPublisher.publishConfirmationResolved(sessionId, confirmation);
+            statusEventPublisher.publishConfirmationClear(sessionId, confirmation);
+            return new ConfirmationDecisionResult(getSession(sessionId), confirmation);
         }
 
         session.approveFinalConfirmation();
@@ -411,7 +449,7 @@ public class UserDecisionService {
                 "사용자가 최종 실행을 승인했습니다."
         );
 
-        return savedSession;
+        return new ConfirmationDecisionResult(savedSession, null);
     }
 
     public AutomationSession rejectFinalAction(
@@ -422,10 +460,32 @@ public class UserDecisionService {
             return rejectFinalAction(
                     sessionId, request.confirmationId(), request.approved());
         }
+        ensureConfirmationWorkflow(getSession(sessionId));
         validateCurrentConfirmationFrame(sessionId, request);
-        return rejectFinalAction(sessionId, request.confirmationId(),
+        return rejectFinalActionResult(sessionId, request.confirmationId(),
                 request.approved(), request.requestId(), request.expectedFrameId(),
-                request.expectedSequence());
+                request.expectedSequence()).session();
+    }
+
+    public ConfirmationActionResponse rejectFinalActionAck(
+            String sessionId, SubmitConfirmationRequest request
+    ) {
+        if (frameStore == null && finalConfirmationStore == null) {
+            rejectFinalAction(sessionId, request.confirmationId(), request.approved());
+            return new ConfirmationActionResponse(sessionId, request.requestId(),
+                    request.confirmationId(), request.expectedFrameId(),
+                    request.expectedSequence(),
+                    ConfirmationActionResponse.Status.REJECTION_ACCEPTED,
+                    "최종 거절 요청을 처리했습니다.");
+        }
+        ensureConfirmationWorkflow(getSession(sessionId));
+        validateCurrentConfirmationFrame(sessionId, request);
+        ConfirmationDecisionResult result = rejectFinalActionResult(
+                sessionId, request.confirmationId(), request.approved(),
+                request.requestId(), request.expectedFrameId(), request.expectedSequence());
+        return acknowledgement(sessionId, request.requestId(), result.confirmation(),
+                ConfirmationActionResponse.Status.REJECTION_ACCEPTED,
+                "최종 거절 요청을 처리했습니다.");
     }
 
     public AutomationSession rejectFinalAction(
@@ -433,11 +493,11 @@ public class UserDecisionService {
             String confirmationId,
             Boolean approved
     ) {
-        return rejectFinalAction(sessionId, confirmationId, approved,
-                "legacy-request", "legacy-frame", 1L);
+        return rejectFinalActionResult(sessionId, confirmationId, approved,
+                "legacy-request", "legacy-frame", 1L).session();
     }
 
-    private AutomationSession rejectFinalAction(
+    private ConfirmationDecisionResult rejectFinalActionResult(
             String sessionId, String confirmationId, Boolean approved,
             String requestId, String expectedFrameId, long expectedSequence
     ) {
@@ -455,10 +515,12 @@ public class UserDecisionService {
         AutomationSession session =
                 getSession(sessionId);
 
+        ensureConfirmationWorkflow(session);
+
+        FinalConfirmationRequest confirmation = null;
         if (finalConfirmationStore != null) {
-            var active = finalConfirmationStore.active(sessionId).orElseThrow(
-                    () -> new IllegalStateException("현재 최종 확인 요청과 일치하지 않습니다."));
-            finalConfirmationStore.consume(sessionId, confirmationId, requestId,
+            var active = finalConfirmationStore.requireActive(sessionId, confirmationId);
+            confirmation = finalConfirmationStore.consume(sessionId, confirmationId, requestId,
                     expectedFrameId.equals("legacy-frame")
                             ? active.sourceFrameId() : expectedFrameId,
                     expectedFrameId.equals("legacy-frame")
@@ -481,14 +543,17 @@ public class UserDecisionService {
             );
         }
 
+        if (confirmation != null) {
+            statusEventPublisher.publishConfirmationRejected(sessionId, confirmation);
+            statusEventPublisher.publishConfirmationClear(sessionId, confirmation);
+        }
         statusEventPublisher.publish(
                 savedSession.getSessionId(),
                 savedSession.getStatus(),
                 "최종 실행이 거절되어 세션이 취소되었습니다."
         );
-        statusEventPublisher.publishConfirmationRejected(sessionId);
 
-        return savedSession;
+        return new ConfirmationDecisionResult(savedSession, confirmation);
     }
 
     private void validateCurrentConfirmationFrame(
@@ -496,24 +561,68 @@ public class UserDecisionService {
             SubmitConfirmationRequest request
     ) {
         if (frameStore == null || finalConfirmationStore == null) {
-            throw new IllegalStateException("최종 확인 frame 검증기가 준비되지 않았습니다.");
+            throw new ConfirmationException(ErrorCode.CONFIRMATION_FRAME_CAPTURE_FAILED);
         }
         BrowserFrameMetadata latest = frameStore.latest(sessionId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "현재 Viewer Frame이 준비되지 않았습니다."))
+                .orElseThrow(() -> new ConfirmationException(
+                        ErrorCode.CONFIRMATION_FRAME_CAPTURE_FAILED))
                 .metadata();
-        var active = finalConfirmationStore.active(sessionId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "대기 중인 최종 확인 요청이 없습니다."));
+        var active = finalConfirmationStore.requireActive(
+                sessionId, request.confirmationId());
         boolean requestMatchesCurrent = latest.frameId().equals(request.expectedFrameId())
                 && latest.sequence() == request.expectedSequence();
         boolean requestMatchesSource = active.sourceFrameId()
                 .equals(request.expectedFrameId())
                 && active.sourceFrameSequence() == request.expectedSequence();
         if (!requestMatchesCurrent || !requestMatchesSource) {
-            throw new IllegalStateException("오래된 Viewer Frame의 최종 확인 요청입니다.");
+            throw new ConfirmationException(ErrorCode.CONFIRMATION_STALE_FRAME);
         }
     }
+
+    private ConfirmationActionResponse acknowledgement(
+            String sessionId, String requestId,
+            FinalConfirmationRequest confirmation,
+            ConfirmationActionResponse.Status status, String message
+    ) {
+        if (confirmation == null) {
+            throw new ConfirmationException(ErrorCode.CONFIRMATION_NOT_FOUND);
+        }
+        return new ConfirmationActionResponse(sessionId, requestId,
+                confirmation.confirmationId(), confirmation.sourceFrameId(),
+                confirmation.sourceFrameSequence(), status, message);
+    }
+
+    private void ensureConfirmationWorkflow(AutomationSession session) {
+        if (session.getStatus() != WorkflowStatus.FINAL_CONFIRMATION_REQUIRED) {
+            throw new ConfirmationException(ErrorCode.CONFIRMATION_WORKFLOW_CONFLICT);
+        }
+    }
+
+    private ErrorCode errorFor(BrowserActionExecutionStatus status) {
+        return switch (status) {
+            case NO_ACTION -> ErrorCode.CONFIRMATION_TARGET_NOT_FOUND;
+            case USER_ACTION_REQUIRED -> ErrorCode.CONFIRMATION_TARGET_DISABLED;
+            case BLOCKED, SECURE_INPUT_REQUIRED, FINAL_CONFIRMATION_REQUIRED ->
+                    ErrorCode.CONFIRMATION_POLICY_MISMATCH;
+            default -> ErrorCode.CONFIRMATION_ACTION_FAILED;
+        };
+    }
+
+    private void failConsumedConfirmation(
+            String sessionId, FinalConfirmationRequest confirmation
+    ) {
+        finalConfirmationStore.clear(sessionId);
+        statusEventPublisher.publishConfirmationClear(sessionId, confirmation);
+        AutomationSession session = getSession(sessionId);
+        session.transitionTo(WorkflowStatus.ERROR);
+        sessionRepository.save(session);
+        statusEventPublisher.publish(sessionId, WorkflowStatus.ERROR,
+                "최종 실행을 안전하게 완료할 수 없어 중단했습니다.");
+    }
+
+    private record ConfirmationDecisionResult(
+            AutomationSession session, FinalConfirmationRequest confirmation
+    ) { }
 
     private AutomationSession getSession(
             String sessionId

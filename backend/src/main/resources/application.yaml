@@ -32,6 +32,8 @@ management:
       enabled: false
 
 ddd:
+  final-confirmation:
+    timeout: ${DDD_FINAL_CONFIRMATION_TIMEOUT:5m}
   session-store:
     type: ${DDD_SESSION_STORE_TYPE:memory}
 

@@ -17,6 +17,17 @@ public class GlobalExceptionHandler {
                     GlobalExceptionHandler.class
             );
 
+    @ExceptionHandler(com.ddd.backend.service.confirmation.ConfirmationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConfirmation(
+            com.ddd.backend.service.confirmation.ConfirmationException exception
+    ) {
+        ErrorCode errorCode = exception.getErrorCode();
+        log.warn("Confirmation request rejected. errorCode={}, exceptionType={}",
+                errorCode.getCode(), exception.getClass().getSimpleName());
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(ApiResponse.failure(errorCode));
+    }
+
     @ExceptionHandler(UserDecisionResumeException.class)
     public ResponseEntity<ApiResponse<Void>> handleUserDecisionResume(
             UserDecisionResumeException exception

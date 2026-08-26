@@ -429,6 +429,44 @@ class UserDecisionServiceTest {
     }
 
     @Test
+    void consume_이후_Action_실패는_재활성화없이_identity_clear후_ERROR로_전환한다() {
+        AutomationSession session = createSession(
+                WorkflowStatus.FINAL_CONFIRMATION_REQUIRED);
+        BrowserActionExecutionService executionService =
+                mock(BrowserActionExecutionService.class);
+        var store = new com.ddd.backend.service.confirmation.FinalConfirmationStore();
+        var confirmation = store.activate(session.getSessionId(),
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-final", "snap-001",
+                new com.ddd.backend.service.confirmation.FinalConfirmationSummary(
+                        "정기예금", "12개월", "1,000,000원"));
+        UserDecisionService secured = new UserDecisionService(
+                sessionRepository, new UserDecisionValidator(),
+                browserSessionManager, statusEventPublisher,
+                null, null, executionService, null, null);
+        secured.setFinalConfirmationStore(store);
+        when(executionService.executeConfirmedFinalClick(
+                session.getSessionId(), "el-final"))
+                .thenReturn(BrowserActionExecutionResult.blocked(BrowserActionType.CLICK));
+
+        assertThatThrownBy(() -> secured.confirmFinalAction(
+                session.getSessionId(), confirmation.confirmationId(), true))
+                .isInstanceOfSatisfying(
+                        com.ddd.backend.service.confirmation.ConfirmationException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(
+                                com.ddd.backend.common.exception.ErrorCode
+                                        .CONFIRMATION_POLICY_MISMATCH));
+
+        assertThat(store.active(session.getSessionId())).isEmpty();
+        assertThat(sessionRepository.findById(session.getSessionId()).orElseThrow()
+                .getStatus()).isEqualTo(WorkflowStatus.ERROR);
+        verify(statusEventPublisher).publishConfirmationClear(
+                session.getSessionId(), confirmation);
+        verify(statusEventPublisher).publish(session.getSessionId(), WorkflowStatus.ERROR,
+                "최종 실행을 안전하게 완료할 수 없어 중단했습니다.");
+    }
+
+    @Test
     void final_confirmation_이후_frame이_바뀌면_승인과_거절을_모두_차단한다() {
         AutomationSession session = createSession(
                 WorkflowStatus.FINAL_CONFIRMATION_REQUIRED);
