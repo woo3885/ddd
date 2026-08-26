@@ -4,6 +4,7 @@ import com.ddd.backend.common.exception.GlobalExceptionHandler;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.DecisionType;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
+import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
 import com.ddd.backend.service.AutomationSessionService;
 import com.ddd.backend.service.UserDecisionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -116,10 +117,8 @@ class AutomationSessionUserDecisionControllerTest {
 
         when(
                 userDecisionService.confirmFinalAction(
-                        "session-002",
-                        "confirm-001",
-                        true
-                )
+                        org.mockito.ArgumentMatchers.eq("session-002"),
+                        org.mockito.ArgumentMatchers.any(SubmitConfirmationRequest.class))
         ).thenReturn(
                 session
         );
@@ -135,8 +134,11 @@ class AutomationSessionUserDecisionControllerTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-confirm-001",
                                           "confirmationId": "confirm-001",
-                                          "approved": true
+                                          "approved": true,
+                                          "expectedFrameId": "frm-001",
+                                          "expectedSequence": 1
                                         }
                                         """
                                 )
@@ -147,10 +149,12 @@ class AutomationSessionUserDecisionControllerTest {
 
         verify(userDecisionService)
                 .confirmFinalAction(
-                        "session-002",
-                        "confirm-001",
-                        true
-                );
+                        org.mockito.ArgumentMatchers.eq("session-002"),
+                        org.mockito.ArgumentMatchers.argThat(request ->
+                                request.requestId().equals("req-confirm-001")
+                                        && request.confirmationId().equals("confirm-001")
+                                        && request.expectedFrameId().equals("frm-001")
+                                        && request.expectedSequence() == 1L));
     }
 
     @Test
@@ -162,10 +166,8 @@ class AutomationSessionUserDecisionControllerTest {
 
         when(
                 userDecisionService.rejectFinalAction(
-                        "session-003",
-                        "confirm-002",
-                        false
-                )
+                        org.mockito.ArgumentMatchers.eq("session-003"),
+                        org.mockito.ArgumentMatchers.any(SubmitConfirmationRequest.class))
         ).thenReturn(
                 session
         );
@@ -181,8 +183,11 @@ class AutomationSessionUserDecisionControllerTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-reject-001",
                                           "confirmationId": "confirm-002",
-                                          "approved": false
+                                          "approved": false,
+                                          "expectedFrameId": "frm-002",
+                                          "expectedSequence": 2
                                         }
                                         """
                                 )
@@ -193,10 +198,11 @@ class AutomationSessionUserDecisionControllerTest {
 
         verify(userDecisionService)
                 .rejectFinalAction(
-                        "session-003",
-                        "confirm-002",
-                        false
-                );
+                        org.mockito.ArgumentMatchers.eq("session-003"),
+                        org.mockito.ArgumentMatchers.argThat(request ->
+                                request.requestId().equals("req-reject-001")
+                                        && request.confirmationId().equals("confirm-002")
+                                        && request.expectedSequence() == 2L));
     }
 
     @Test

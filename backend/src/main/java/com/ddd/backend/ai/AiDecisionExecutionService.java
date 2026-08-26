@@ -18,6 +18,7 @@ import com.ddd.backend.service.decision.UserDecisionPromptService;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
 import com.ddd.backend.service.confirmation.FinalConfirmationStore;
 import com.ddd.backend.service.confirmation.FinalConfirmationSummaryExtractor;
+import com.ddd.backend.frame.BrowserFrameStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +65,7 @@ public final class AiDecisionExecutionService {
     private final ActionReplayGuard replayGuard;
     private FinalConfirmationStore finalConfirmationStore;
     private FinalConfirmationSummaryExtractor finalConfirmationSummaryExtractor;
+    private BrowserFrameStore finalConfirmationFrameStore;
 
     @Autowired
     void setFinalConfirmationDependencies(
@@ -72,6 +74,11 @@ public final class AiDecisionExecutionService {
     ) {
         this.finalConfirmationStore = store;
         this.finalConfirmationSummaryExtractor = summaryExtractor;
+    }
+
+    @Autowired
+    void setFinalConfirmationFrameStore(BrowserFrameStore frameStore) {
+        this.finalConfirmationFrameStore = frameStore;
     }
 
     @Autowired
@@ -314,12 +321,18 @@ public final class AiDecisionExecutionService {
             String sessionId, SanitizedDomSnapshot snapshot,
             AiDecisionResponse response
     ) {
-        if (finalConfirmationStore == null || finalConfirmationSummaryExtractor == null) {
+        if (finalConfirmationStore == null || finalConfirmationSummaryExtractor == null
+                || finalConfirmationFrameStore == null) {
             throw new IllegalStateException("최종 확인 저장소가 준비되지 않았습니다.");
         }
+        var sourceFrame = finalConfirmationFrameStore.latest(sessionId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "최종 확인 source frame이 준비되지 않았습니다."))
+                .metadata();
         var confirmation = finalConfirmationStore.activate(
                 sessionId, response.confirmationType(),
                 response.confirmationTargetElementId(), response.sourceSnapshotId(),
+                sourceFrame.frameId(), sourceFrame.sequence(),
                 finalConfirmationSummaryExtractor.extract(snapshot));
         try {
             BrowserActionExecutionResult result = actionExecutionService.execute(

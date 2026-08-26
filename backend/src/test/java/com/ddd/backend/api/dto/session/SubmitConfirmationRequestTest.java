@@ -136,6 +136,29 @@ class SubmitConfirmationRequestTest {
         );
     }
 
+    @Test
+    void frame_identity와_requestId가_없으면_검증에_실패한다() {
+        SubmitConfirmationRequest request = new SubmitConfirmationRequest(
+                null, "confirm-001", true, null, null);
+
+        Set<ConstraintViolation<SubmitConfirmationRequest>> violations =
+                validator.validate(request);
+
+        assertTrue(containsMessage(violations, "requestId는 필수입니다."));
+        assertTrue(containsMessage(violations, "expectedFrameId는 필수입니다."));
+        assertTrue(containsMessage(violations, "expectedSequence는 필수입니다."));
+    }
+
+    @Test
+    void expectedSequence는_양수여야_한다() {
+        SubmitConfirmationRequest request = new SubmitConfirmationRequest(
+                "req-001", "confirm-001", true, "frm-001", 0L);
+
+        assertTrue(containsMessage(
+                validator.validate(request),
+                "expectedSequence는 1 이상이어야 합니다."));
+    }
+
     private boolean containsMessage(
             Set<ConstraintViolation<SubmitConfirmationRequest>>
                     violations,

@@ -799,7 +799,13 @@ class AiDecisionExecutionServiceTest {
                 new SanitizedDomSnapshot.PageSnapshot(
                         "http://127.0.0.1/deposit/final", "최종 확인",
                         "deposit-12m", "정기예금", "12개월"),
-                List.of(finalElement));
+                List.of(finalElement,
+                        new SanitizedDomSnapshot.ElementSnapshot(
+                                "el-amount", "span", null, "1,000,000원", null,
+                                null, null, true, true, null,
+                                new SanitizedDomSnapshot.BoundingBoxSnapshot(
+                                        10, 60, 100, 20),
+                                SanitizedDomSnapshot.SecurityPolicy.NORMAL)));
         stubCurrentSessionAndSnapshot();
         AiDecisionResponse response = new AiDecisionResponse(
                 BrowserActionType.REQUEST_FINAL_CONFIRMATION,
@@ -816,6 +822,11 @@ class AiDecisionExecutionServiceTest {
         var store = new com.ddd.backend.service.confirmation.FinalConfirmationStore();
         service.setFinalConfirmationDependencies(store,
                 new com.ddd.backend.service.confirmation.FinalConfirmationSummaryExtractor());
+        var frameStore = new com.ddd.backend.frame.BrowserFrameStore();
+        var frame = frameStore.publish(session.getSessionId(),
+                new com.ddd.backend.security.capture.CapturedBrowserFrame(
+                        new byte[]{1}, 1, 1, "image/png"));
+        service.setFinalConfirmationFrameStore(frameStore);
 
         AiDecisionExecutionResult result = service.execute(session.getSessionId());
 
@@ -825,6 +836,8 @@ class AiDecisionExecutionServiceTest {
         assertThat(confirmation.confirmationTargetElementId())
                 .isEqualTo("el-final-001");
         assertThat(confirmation.summary().productName()).isEqualTo("정기예금");
+        assertThat(confirmation.sourceFrameId())
+                .isEqualTo(frame.metadata().frameId());
         verify(actionExecutionService, never()).executeAiElementAction(
                 any(), any(), any(), any());
         verify(statusEventPublisher).publishConfirmationRequired(

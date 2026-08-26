@@ -14,6 +14,7 @@ import com.ddd.backend.infrastructure.session.InMemoryAutomationSessionRepositor
 import com.ddd.backend.service.validation.UserDecisionValidator;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
+import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.security.capture.CapturedBrowserFrame;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
@@ -425,6 +426,47 @@ class UserDecisionServiceTest {
         assertThatThrownBy(() -> securedService.confirmFinalAction(
                 session.getSessionId(), request.confirmationId(), true))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void final_confirmation_이후_frame이_바뀌면_승인과_거절을_모두_차단한다() {
+        AutomationSession session = createSession(
+                WorkflowStatus.FINAL_CONFIRMATION_REQUIRED);
+        BrowserFrameStore frameStore = new BrowserFrameStore();
+        var sourceFrame = frameStore.publish(session.getSessionId(),
+                new CapturedBrowserFrame(new byte[]{1}, 1280, 720, "image/png"));
+        var store = new com.ddd.backend.service.confirmation.FinalConfirmationStore();
+        var confirmation = store.activate(
+                session.getSessionId(),
+                com.ddd.backend.domain.session.ConfirmationType.DEPOSIT_SUBSCRIPTION,
+                "el-final", "snap-001",
+                sourceFrame.metadata().frameId(), sourceFrame.metadata().sequence(),
+                new com.ddd.backend.service.confirmation.FinalConfirmationSummary(
+                        "정기예금", "12개월", "1,000,000원"));
+        UserDecisionService secured = new UserDecisionService(
+                sessionRepository, new UserDecisionValidator(),
+                browserSessionManager, statusEventPublisher,
+                new UserDecisionSessionState(), frameStore);
+        secured.setFinalConfirmationStore(store);
+
+        frameStore.publishAfterAction(session.getSessionId(),
+                new CapturedBrowserFrame(new byte[]{2}, 1280, 720, "image/png"));
+        SubmitConfirmationRequest approve = new SubmitConfirmationRequest(
+                "req-approve", confirmation.confirmationId(), true,
+                sourceFrame.metadata().frameId(), sourceFrame.metadata().sequence());
+        SubmitConfirmationRequest reject = new SubmitConfirmationRequest(
+                "req-reject", confirmation.confirmationId(), false,
+                sourceFrame.metadata().frameId(), sourceFrame.metadata().sequence());
+
+        assertThatThrownBy(() -> secured.confirmFinalAction(
+                session.getSessionId(), approve))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("오래된 Viewer Frame");
+        assertThatThrownBy(() -> secured.rejectFinalAction(
+                session.getSessionId(), reject))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("오래된 Viewer Frame");
+        assertThat(store.active(session.getSessionId())).contains(confirmation);
     }
 
     @Test
