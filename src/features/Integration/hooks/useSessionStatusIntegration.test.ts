@@ -37,6 +37,7 @@ function stateEvent(sequence: number): SessionUiEvent {
     target: null,
     decision: null,
     secureInput: null,
+    confirmation: null,
     occurredAt: '2026-08-19T12:00:00Z'
   };
 }
@@ -69,7 +70,8 @@ describe('useSessionStatusIntegration', () => {
         guide: null,
         target: null,
         decision: null,
-        secureInput: null
+        secureInput: null,
+        confirmation: null
         }
       });
       transport.emit({ type: 'EVENT_RECEIVED', event: stateEvent(1) });

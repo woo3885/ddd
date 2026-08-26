@@ -5,6 +5,7 @@ import F3_SmartOverlay from '@/features/F3_SmartOverlay/ui/F3_SmartOverlay';
 import { useSessionFrameIntegration } from '@/features/Integration/hooks/useSessionFrameIntegration';
 import { useSessionDecisionIntegration } from '@/features/Integration/hooks/useSessionDecisionIntegration';
 import { useSessionSecureInputIntegration } from '@/features/Integration/hooks/useSessionSecureInputIntegration';
+import { useSessionFinalConfirmationIntegration } from '@/features/Integration/hooks/useSessionFinalConfirmationIntegration';
 import { useSessionStatusIntegration } from '@/features/Integration/hooks/useSessionStatusIntegration';
 import type { BackendSession } from '@/features/Integration/api/session-rest-client';
 import {
@@ -15,6 +16,7 @@ import {
 import { Button } from '@/shared/ui/Button';
 import { Panel } from '@/shared/ui/Panel';
 import { SecureInputPanel } from '@/shared/ui/SecureInputPanel';
+import { FinalConfirmationPanel } from '@/shared/ui/FinalConfirmationPanel';
 import { StatusBadge, type StatusBadgeVariant } from '@/shared/ui/StatusBadge';
 import { Text } from '@/shared/ui/Text';
 import { TermsAgreementPanel } from '@/shared/ui/TermsAgreementPanel';
@@ -28,6 +30,7 @@ export const SESSION_INTEGRATION_SELECTORS = {
   actionState: 'status-production-viewer-action',
   decisionSubmitState: 'status-session-decision-submit',
   secureInputSubmitState: 'status-session-secure-input-submit',
+  confirmationSubmitState: 'status-session-confirmation-submit',
   exitButton: 'btn-session-integration-exit'
 } as const;
 
@@ -114,6 +117,19 @@ export default function SessionIntegrationView({
     onSubmitFailed: statusIntegration.markSecureInputSubmitFailed,
     onSubmitAborted: statusIntegration.markSecureInputSubmitAborted
   });
+  const confirmationIntegration = useSessionFinalConfirmationIntegration({
+    state: statusIntegration,
+    frame: frameIdentity,
+    frameReady: frameIntegration.phase === 'FRAME_READY',
+    frameReconnecting,
+    viewerActionPending: frameIntegration.actionPending,
+    onConfirmedChange: statusIntegration.setConfirmationConfirmed,
+    onSubmitStarted: statusIntegration.markConfirmationSubmitStarted,
+    onSubmitAcknowledged:
+      statusIntegration.markConfirmationSubmitAcknowledged,
+    onSubmitFailed: statusIntegration.markConfirmationSubmitFailed,
+    onSubmitAborted: statusIntegration.markConfirmationSubmitAborted
+  });
 
   useEffect(() => {
     statusIntegration.observeFrame(frameIdentity);
@@ -141,6 +157,7 @@ export default function SessionIntegrationView({
     statusTransportReady &&
     statusIntegration.activeDecision === null &&
     statusIntegration.activeSecureInput === null &&
+    statusIntegration.activeConfirmation === null &&
     isViewerActionAllowed(statusIntegration.workflowStatus) &&
     targetMatchesFrame;
   const busy =
@@ -148,6 +165,7 @@ export default function SessionIntegrationView({
     frameIntegration.actionPending ||
     decisionIntegration.isBusy ||
     secureInputIntegration.isBusy ||
+    confirmationIntegration.isBusy ||
     statusIntegration.connectionPhase === 'CONNECTING' ||
     statusIntegration.connectionPhase === 'RESYNCING';
   const secureInputRequired =
@@ -160,6 +178,7 @@ export default function SessionIntegrationView({
   const handleExit = async () => {
     decisionIntegration.abort();
     secureInputIntegration.abort();
+    confirmationIntegration.abort();
     await frameIntegration.reset();
     onExit();
   };
@@ -229,12 +248,12 @@ export default function SessionIntegrationView({
           isBusy={secureInputIntegration.isBusy}
           onComplete={secureInputIntegration.requestCompletion}
         />
-      ) : (
+      ) : statusIntegration.activeConfirmation === null ? (
         <WorkflowStatusPanel
           status={statusIntegration.workflowStatus}
           message={statusIntegration.guideMessage}
         />
-      )}
+      ) : null}
 
       {showDecisionPanel && statusIntegration.activeDecision?.decisionType ===
       'TERMS_AGREEMENT' ? (
@@ -270,6 +289,24 @@ export default function SessionIntegrationView({
         />
       ) : null}
 
+      {statusIntegration.activeConfirmation?.summary ? (
+        <FinalConfirmationPanel
+          title="최종 거래 확인"
+          message={statusIntegration.guideMessage}
+          summary={statusIntegration.activeConfirmation.summary}
+          confirmed={statusIntegration.confirmationConfirmed}
+          approvalRequested={confirmationIntegration.approvalRequested}
+          disabled={confirmationIntegration.controlsDisabled}
+          isBusy={confirmationIntegration.isBusy}
+          canEdit={false}
+          canCancel={confirmationIntegration.canReject}
+          onConfirmedChange={confirmationIntegration.setConfirmed}
+          onApprove={confirmationIntegration.requestApproval}
+          onEdit={() => undefined}
+          onCancel={confirmationIntegration.requestRejection}
+        />
+      ) : null}
+
       {secureInputRequired ? (
         <div
           {...elementIdentity(
@@ -301,6 +338,22 @@ export default function SessionIntegrationView({
             <div role="alert">
               <Text variant="body" className="text-danger">
                 {statusIntegration.safeDecisionError}
+              </Text>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {statusIntegration.activeConfirmation ? (
+        <div
+          {...elementIdentity(
+            SESSION_INTEGRATION_SELECTORS.confirmationSubmitState
+          )}
+        >
+          {statusIntegration.safeConfirmationError ? (
+            <div role="alert">
+              <Text variant="body" className="text-danger">
+                {statusIntegration.safeConfirmationError}
               </Text>
             </div>
           ) : null}

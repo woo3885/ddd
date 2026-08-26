@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BackendSession } from '@/features/Integration/api/session-rest-client';
 import type { SessionTarget } from '@/features/Integration/api/session-status-transport';
 import { SECURE_INPUT_PANEL_SELECTORS } from '@/shared/ui/SecureInputPanel';
+import { FINAL_CONFIRMATION_PANEL_SELECTORS } from '@/shared/ui/FinalConfirmationPanel';
 import { WORKFLOW_STATUS_PANEL_SELECTORS } from '@/shared/ui/WorkflowStatusPanel';
 import SessionIntegrationView, {
   SESSION_INTEGRATION_SELECTORS
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   statusHook: vi.fn(),
   decisionHook: vi.fn(),
   secureInputHook: vi.fn(),
+  confirmationHook: vi.fn(),
   overlayProps: vi.fn()
 }));
 
@@ -32,6 +34,10 @@ vi.mock('@/features/Integration/hooks/useSessionDecisionIntegration', () => ({
 
 vi.mock('@/features/Integration/hooks/useSessionSecureInputIntegration', () => ({
   useSessionSecureInputIntegration: mocks.secureInputHook
+}));
+
+vi.mock('@/features/Integration/hooks/useSessionFinalConfirmationIntegration', () => ({
+  useSessionFinalConfirmationIntegration: mocks.confirmationHook
 }));
 
 vi.mock('@/features/F2_StreamViewer/ui/F2_StreamViewer', () => ({
@@ -130,6 +136,10 @@ function statusHook(overrides = {}) {
     activeSecureInput: null,
     secureInputSubmitPhase: 'IDLE',
     safeSecureInputError: '',
+    activeConfirmation: null,
+    confirmationConfirmed: false,
+    confirmationSubmitPhase: 'IDLE',
+    safeConfirmationError: '',
     connectionPhase: 'CONNECTED',
     safeError: '',
     observeFrame: vi.fn(),
@@ -143,6 +153,11 @@ function statusHook(overrides = {}) {
     markSecureInputSubmitAcknowledged: vi.fn(),
     markSecureInputSubmitFailed: vi.fn(),
     markSecureInputSubmitAborted: vi.fn(),
+    setConfirmationConfirmed: vi.fn(),
+    markConfirmationSubmitStarted: vi.fn(),
+    markConfirmationSubmitAcknowledged: vi.fn(),
+    markConfirmationSubmitFailed: vi.fn(),
+    markConfirmationSubmitAborted: vi.fn(),
     ...overrides
   };
 }
@@ -173,11 +188,27 @@ function secureInputHook(overrides = {}) {
   };
 }
 
+function confirmationHook(overrides = {}) {
+  return {
+    canApprove: false,
+    canReject: false,
+    controlsDisabled: true,
+    isBusy: false,
+    approvalRequested: false,
+    setConfirmed: vi.fn(),
+    requestApproval: vi.fn(),
+    requestRejection: vi.fn(),
+    abort: vi.fn(),
+    ...overrides
+  };
+}
+
 beforeEach(() => {
   mocks.frameHook.mockReturnValue(frameHook());
   mocks.statusHook.mockReturnValue(statusHook());
   mocks.decisionHook.mockReturnValue(decisionHook());
   mocks.secureInputHook.mockReturnValue(secureInputHook());
+  mocks.confirmationHook.mockReturnValue(confirmationHook());
   mocks.overlayProps.mockClear();
 });
 
@@ -619,6 +650,154 @@ describe('SessionIntegrationView', () => {
     );
     expect(screen.getByRole('alert')).toHaveTextContent(
       '최신 화면을 다시 확인해 주세요.'
+    );
+  });
+
+  it('production confirmation summary를 순서대로 표시하고 선택과 승인을 분리한다', async () => {
+    const user = userEvent.setup();
+    const setConfirmed = vi.fn();
+    const requestApproval = vi.fn();
+    mocks.confirmationHook.mockReturnValue(
+      confirmationHook({
+        canApprove: false,
+        canReject: true,
+        controlsDisabled: false,
+        setConfirmed,
+        requestApproval
+      })
+    );
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'FINAL_CONFIRMATION_REQUIRED',
+        guideMessage: '예금 가입 전 최종 확인이 필요합니다.',
+        activeConfirmation: {
+          confirmationId: 'confirm-private-001',
+          confirmationType: 'DEPOSIT_SUBSCRIPTION',
+          sourceSnapshotId: 'snap-private-001',
+          frameId: 'frm-001',
+          frameSequence: 3,
+          summary: {
+            transactionType: '정기예금 가입',
+            items: [
+              { id: 'product-name', label: '상품명', value: '12개월 정기예금' },
+              { id: 'deposit-amount', label: '가입 금액', value: '1,000,000원' },
+              { id: 'deposit-period', label: '가입 기간', value: '12개월' }
+            ]
+          }
+        }
+      })
+    );
+
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+    const summary = screen.getByTestId(FINAL_CONFIRMATION_PANEL_SELECTORS.summary);
+    expect(summary).toHaveTextContent(/상품명.*12개월 정기예금/);
+    expect(summary).toHaveTextContent(/가입 금액.*1,000,000원/);
+    expect(summary).toHaveTextContent(/가입 기간.*12개월/);
+    const checkbox = screen.getByRole('checkbox', {
+      name: /표시된 거래 내용을 확인/
+    });
+    const approve = screen.getByRole('button', { name: '최종 승인 요청' });
+    expect(checkbox).not.toBeChecked();
+    expect(approve).toBeDisabled();
+    expect(requestApproval).not.toHaveBeenCalled();
+
+    await user.click(checkbox);
+    expect(setConfirmed).toHaveBeenCalledWith(true);
+    expect(requestApproval).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('confirm-private-001');
+    expect(document.body).not.toHaveTextContent('snap-private-001');
+  });
+
+  it('승인과 거절 callback을 각각 한 번 호출하고 처리 중에는 모든 Action을 막는다', async () => {
+    const user = userEvent.setup();
+    const requestApproval = vi.fn();
+    const requestRejection = vi.fn();
+    mocks.confirmationHook.mockReturnValue(
+      confirmationHook({
+        canApprove: true,
+        canReject: true,
+        controlsDisabled: false,
+        requestApproval,
+        requestRejection
+      })
+    );
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'FINAL_CONFIRMATION_REQUIRED',
+        activeConfirmation: {
+          confirmationId: 'confirm-001',
+          confirmationType: 'DEPOSIT_SUBSCRIPTION',
+          sourceSnapshotId: 'snap-001',
+          frameId: 'frm-001',
+          frameSequence: 3,
+          summary: {
+            transactionType: '정기예금 가입',
+            items: [
+              { id: 'product-name', label: '상품명', value: '정기예금' },
+              { id: 'deposit-amount', label: '가입 금액', value: '1,000,000원' },
+              { id: 'deposit-period', label: '가입 기간', value: '12개월' }
+            ]
+          }
+        },
+        confirmationConfirmed: true
+      })
+    );
+    const { rerender } = render(
+      <SessionIntegrationView session={SESSION} onExit={vi.fn()} />
+    );
+
+    await user.click(screen.getByRole('button', { name: '최종 승인 요청' }));
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+    expect(requestRejection).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '최종 확인 취소' }));
+    expect(requestRejection).toHaveBeenCalledTimes(1);
+    expect(requestApproval).toHaveBeenCalledTimes(1);
+
+    mocks.confirmationHook.mockReturnValue(
+      confirmationHook({
+        canApprove: false,
+        canReject: false,
+        controlsDisabled: true,
+        isBusy: true
+      })
+    );
+    rerender(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+    expect(screen.getByRole('checkbox', { name: /표시된 거래 내용을 확인/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '최종 승인 요청' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '최종 확인 취소' })).toBeDisabled();
+  });
+
+  it('ACK 대기 중 성공을 과장하지 않고 안전한 confirmation 오류를 하나의 alert로 표시한다', () => {
+    mocks.confirmationHook.mockReturnValue(
+      confirmationHook({ approvalRequested: true, controlsDisabled: true })
+    );
+    mocks.statusHook.mockReturnValue(
+      statusHook({
+        workflowStatus: 'FINAL_CONFIRMATION_REQUIRED',
+        activeConfirmation: {
+          confirmationId: 'confirm-001',
+          confirmationType: 'DEPOSIT_SUBSCRIPTION',
+          sourceSnapshotId: 'snap-001',
+          frameId: 'frm-001',
+          frameSequence: 3,
+          summary: {
+            transactionType: '정기예금 가입',
+            items: [
+              { id: 'product-name', label: '상품명', value: '정기예금' }
+            ]
+          }
+        },
+        confirmationSubmitPhase: 'WAITING_FOR_RESULT',
+        safeConfirmationError: '최신 최종 확인 화면을 다시 확인해 주세요.'
+      })
+    );
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+
+    expect(screen.getByText(/처리 결과를 확인할 때까지/)).toBeInTheDocument();
+    expect(screen.queryByText(/가입이 완료|거래 성공/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '최신 최종 확인 화면을 다시 확인해 주세요.'
     );
   });
 });
