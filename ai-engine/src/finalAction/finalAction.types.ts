@@ -44,11 +44,11 @@ export interface FinalConfirmationResult {
    */
   executionBlocked: true;
 
-  confirmationId: string;
+  confirmationId: null;
 
   message: string;
 
-  summary: string;
+  summary: null;
 
   confidence: number;
 

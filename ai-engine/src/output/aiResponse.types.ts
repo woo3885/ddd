@@ -53,6 +53,9 @@ export const PRODUCTION_STRUCTURED_ACTIONS = [
 export type ProductionStructuredActionType =
   (typeof PRODUCTION_STRUCTURED_ACTIONS)[number];
 
+export type BackendConfirmationType =
+  | "DEPOSIT_SUBSCRIPTION";
+
 export function isProductionStructuredAction(
   action: BrowserActionType,
 ): action is ProductionStructuredActionType {
@@ -79,4 +82,11 @@ export interface StructuredAIResponse {
   options: readonly StructuredDecisionItem[] | null;
   confirmationId: string | null;
   summary: Record<string, unknown> | null;
+
+  /**
+   * D27 policy-owned metadata. These fields are not model authority and are
+   * populated only after current-snapshot final target validation.
+   */
+  confirmationType?: BackendConfirmationType | null;
+  confirmationTargetElementId?: string | null;
 }

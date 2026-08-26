@@ -1,4 +1,5 @@
 import type {
+  BackendConfirmationType,
   StructuredAIResponse,
 } from "../output/aiResponse.types.js";
 
@@ -57,6 +58,54 @@ export interface BackendAiDecisionResponse {
   options: readonly BackendAiDecisionOption[];
 
   terms: readonly BackendAiDecisionOption[];
+
+  confirmationType: BackendConfirmationType | null;
+
+  confirmationTargetElementId: string | null;
+}
+
+function assertFinalConfirmationContract(
+  response: StructuredAIResponse,
+  currentSnapshotId: string | null,
+): boolean {
+  const confirmationType =
+    response.confirmationType ?? null;
+  const confirmationTargetElementId =
+    response.confirmationTargetElementId ?? null;
+  const hasFinalSignal =
+    response.action === "REQUEST_FINAL_CONFIRMATION" ||
+    response.status === "FINAL_CONFIRMATION_REQUIRED" ||
+    confirmationType !== null ||
+    confirmationTargetElementId !== null;
+
+  if (!hasFinalSignal) {
+    return false;
+  }
+
+  if (
+    response.action !== "REQUEST_FINAL_CONFIRMATION" ||
+    response.status !== "FINAL_CONFIRMATION_REQUIRED" ||
+    response.targetElementId !== null ||
+    response.inputValue !== null ||
+    !response.requiresUserAction ||
+    response.decisionType !== null ||
+    response.options !== null ||
+    response.secureInputType !== null ||
+    response.riskType !== null ||
+    response.confirmationId !== null ||
+    response.summary !== null ||
+    confirmationType !== "DEPOSIT_SUBSCRIPTION" ||
+    confirmationTargetElementId === null ||
+    confirmationTargetElementId.trim().length === 0 ||
+    currentSnapshotId === null ||
+    currentSnapshotId.trim().length === 0
+  ) {
+    throw new Error(
+      "[AI Engine] final confirmation requires the exact blocked D27 contract.",
+    );
+  }
+
+  return true;
 }
 
 function mapDecisionOptions(
@@ -125,6 +174,11 @@ export function adaptStructuredResponseToBackend(
   const decisionItems = mapDecisionOptions(
     response,
   );
+  const isFinalConfirmation =
+    assertFinalConfirmationContract(
+      response,
+      currentSnapshotId,
+    );
   const hasDecision =
     decisionItems.length > 0;
   const isUserDecisionResponse =
@@ -189,7 +243,7 @@ export function adaptStructuredResponseToBackend(
         : null,
 
     sourceSnapshotId:
-      isUserDecisionResponse
+      isUserDecisionResponse || isFinalConfirmation
         ? currentSnapshotId
         : null,
 
@@ -202,5 +256,15 @@ export function adaptStructuredResponseToBackend(
       isTermsDecision
         ? decisionItems
         : [],
+
+    confirmationType:
+      isFinalConfirmation
+        ? response.confirmationType ?? null
+        : null,
+
+    confirmationTargetElementId:
+      isFinalConfirmation
+        ? response.confirmationTargetElementId ?? null
+        : null,
   };
 }

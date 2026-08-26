@@ -489,6 +489,23 @@ export const aiResponseSchema = {
           requiresUserAction: {
             const: true,
           },
+
+          decisionType: {
+            type: "null",
+          },
+
+          secureInputType: {
+            type: "null",
+          },
+
+          riskType: {
+            type: "null",
+          },
+
+          options: {
+            type: "null",
+          },
+
         },
       },
     },

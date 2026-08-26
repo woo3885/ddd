@@ -59,6 +59,8 @@ const RESPONSE_FIELDS = [
   "sourceSnapshotId",
   "options",
   "terms",
+  "confirmationType",
+  "confirmationTargetElementId",
 ];
 
 function element(
@@ -319,7 +321,7 @@ test("D26-04 ACCOUNT_PASSWORD guidance contains no execution target", () => {
   assert.doesNotMatch(pause.message, /elementId|selector|성공|완료/i);
 });
 
-test("D26-05 ACCOUNT_PASSWORD wire matches the Backend 14-field DTO", () => {
+test("D26-05 ACCOUNT_PASSWORD wire matches the Backend 16-field DTO", () => {
   const input = secureRequest("ACCOUNT_PASSWORD");
   const pause = requirePause(
     createSecureInputPauseForRequest(input),
@@ -345,6 +347,8 @@ test("D26-05 ACCOUNT_PASSWORD wire matches the Backend 14-field DTO", () => {
     sourceSnapshotId: null,
     options: [],
     terms: [],
+    confirmationType: null,
+    confirmationTargetElementId: null,
   });
 });
 

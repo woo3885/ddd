@@ -63,6 +63,8 @@ const RESPONSE_FIELDS = [
   "sourceSnapshotId",
   "options",
   "terms",
+  "confirmationType",
+  "confirmationTargetElementId",
 ] as const;
 
 function element(
@@ -465,6 +467,8 @@ test("period mismatch and invalid product context fail closed without financial 
     sourceSnapshotId: null,
     options: [],
     terms: [],
+    confirmationType: null,
+    confirmationTargetElementId: null,
   });
   assert.deepEqual(mismatchRequest.userGoal.duration, {
     value: 6,
@@ -806,7 +810,7 @@ test("amount enabled buttons advance confirm and terms phases without repeated T
   assert.equal(terms.message, DEPOSIT_GUIDANCE.termsNavigation);
 });
 
-test("missing amount emits the exact non-financial 14-field NONE wire response", () => {
+test("missing amount emits the exact non-financial 16-field NONE wire response", () => {
   const noAmountRequest = request(snapshot("snap-no-amount", [
     amountInput(),
   ]));
@@ -845,6 +849,8 @@ test("missing amount emits the exact non-financial 14-field NONE wire response",
     sourceSnapshotId: null,
     options: [],
     terms: [],
+    confirmationType: null,
+    confirmationTargetElementId: null,
   });
 });
 
@@ -1012,7 +1018,7 @@ test("verified terms resume never replays terms and uses only the new NORMAL nex
   );
 });
 
-test("secure input produces the exact 14-field blocked response and ends the Agent Loop", async () => {
+test("secure input produces the exact 16-field blocked response and ends the Agent Loop", async () => {
   const currentSnapshot = snapshot("snap-secure", [
     secureInput(),
   ]);
@@ -1047,6 +1053,8 @@ test("secure input produces the exact 14-field blocked response and ends the Age
     sourceSnapshotId: null,
     options: [],
     terms: [],
+    confirmationType: null,
+    confirmationTargetElementId: null,
   });
 
   let executeCount = 0;

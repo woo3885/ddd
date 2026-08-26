@@ -71,7 +71,21 @@ function isFinalConfirmationRequired(
     response.status ===
       "FINAL_CONFIRMATION_REQUIRED" &&
     response.action ===
-      "REQUEST_FINAL_CONFIRMATION"
+      "REQUEST_FINAL_CONFIRMATION" &&
+    response.targetElementId === null &&
+    response.inputValue === null &&
+    response.requiresUserAction &&
+    response.decisionType === null &&
+    response.options === null &&
+    response.secureInputType === null &&
+    response.riskType === null &&
+    response.confirmationId === null &&
+    response.summary === null &&
+    response.confirmationType ===
+      "DEPOSIT_SUBSCRIPTION" &&
+    typeof response.confirmationTargetElementId ===
+      "string" &&
+    response.confirmationTargetElementId.length > 0
   );
 }
 

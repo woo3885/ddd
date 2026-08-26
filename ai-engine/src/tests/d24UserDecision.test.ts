@@ -655,7 +655,7 @@ test("Agent Loop maxSteps prevents an unbounded repeated-action loop", async () 
   assert.equal(executeCount, 3);
 });
 
-test("D23 action fields remain unchanged inside the 14-field Backend contract", () => {
+test("D23 action fields remain unchanged inside the 16-field Backend contract", () => {
   const response = adaptStructuredResponseToBackend(
     createResponse(),
   );
@@ -677,6 +677,8 @@ test("D23 action fields remain unchanged inside the 14-field Backend contract", 
       "sourceSnapshotId",
       "options",
       "terms",
+      "confirmationType",
+      "confirmationTargetElementId",
     ],
   );
 
@@ -1118,7 +1120,7 @@ test("Production does not log raw model output and sanitizes financial secrets",
   );
 });
 
-test("C-to-B response matches the exact 14-field rich decision contract", () => {
+test("C-to-B response matches the exact 16-field rich decision contract", () => {
   const currentRequest = createRequest([
     {
       ...createElement("term-1", "필수 약관"),
@@ -1165,6 +1167,8 @@ test("C-to-B response matches the exact 14-field rich decision contract", () => 
       "sourceSnapshotId",
       "options",
       "terms",
+      "confirmationType",
+      "confirmationTargetElementId",
     ],
   );
 
