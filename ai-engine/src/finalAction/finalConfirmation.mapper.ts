@@ -3,11 +3,6 @@ import type {
   FinalActionType,
   FinalConfirmationResult,
 } from "./finalAction.types.js";
-import { randomUUID } from "node:crypto";
-
-function createConfirmationId(): string {
-  return `confirm-${randomUUID()}`;
-}
 
 function createMessage(
   type: FinalActionType,
@@ -30,30 +25,6 @@ function createMessage(
 
     default:
       return "이 금융 거래를 진행할까요?";
-  }
-}
-
-function createSummary(
-  type: FinalActionType,
-): string {
-  switch (type) {
-    case "TRANSFER":
-      return "송금이 실행되기 전 마지막 확인이 필요합니다.";
-
-    case "SUBSCRIPTION":
-      return "금융상품 가입이 완료되기 전 마지막 확인이 필요합니다.";
-
-    case "CANCELLATION":
-      return "금융상품 해지가 실행되기 전 마지막 확인이 필요합니다.";
-
-    case "LIMIT_CHANGE":
-      return "이체 한도 변경이 적용되기 전 마지막 확인이 필요합니다.";
-
-    case "PAYMENT":
-      return "결제가 실행되기 전 마지막 확인이 필요합니다.";
-
-    default:
-      return "금융 거래 실행 전 사용자 확인이 필요합니다.";
   }
 }
 
@@ -87,18 +58,16 @@ export function createFinalConfirmationResult(
 
     executionBlocked: true,
 
-    confirmationId:
-      createConfirmationId(),
+    /* Backend creates and owns the authoritative confirmation ID. */
+    confirmationId: null,
 
     message:
       createMessage(
         detection.finalActionType,
       ),
 
-    summary:
-      createSummary(
-        detection.finalActionType,
-      ),
+    /* Backend derives the authoritative summary from its current snapshot. */
+    summary: null,
 
     confidence:
       detection.confidence,

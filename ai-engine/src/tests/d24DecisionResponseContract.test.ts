@@ -44,6 +44,8 @@ const RESPONSE_FIELDS = [
   "sourceSnapshotId",
   "options",
   "terms",
+  "confirmationType",
+  "confirmationTargetElementId",
 ];
 
 function element(

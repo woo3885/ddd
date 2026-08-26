@@ -127,7 +127,7 @@ ${verifiedDecisionSection}
 - Backend-verified TERMS_AGREEMENT 이후에는 약관 ID를 다시 CLICK하지 말고 enabled NORMAL "약관 선택 확인"만 CLICK하십시오.
 - enabled NORMAL "비밀번호 입력으로 이동"이 보이면 TERMS_AGREEMENT를 반복하지 말고 해당 navigation만 CLICK하십시오.
 - 비밀번호, PIN, OTP, 인증번호 또는 SECURITY_POLICY:SECURE_INPUT 요소가 있으면 SECURE_INPUT_REQUIRED와 PAUSE_FOR_SECURE_INPUT을 반환하고 값을 생성하거나 입력하지 마십시오.
-- D25는 SECURE_INPUT_REQUIRED에서 종료합니다. 보안 입력 완료, 재개, 최종 승인, 거래 완료를 생성하지 마십시오.
+- 상품 목록·상세·금액·약관·보안 입력 단계에서는 최종 승인을 생성하지 마십시오. D27 최종 확인은 보안 입력이 Backend에서 완료된 뒤의 새 snapshot에서 C deterministic policy가 별도로 판단합니다.
 - 사용자 안내는 15~40자의 쉬운 한국어 한 문장으로 한 가지 행동만 설명하고 가입 완료, 인증 성공, 자동 추천을 단정하지 마십시오.
 
 ## D24 USER_DECISION hard rules
@@ -242,6 +242,13 @@ SECURITY_POLICY:USER_DECISION 요소가 있으며
 
 SECURITY_POLICY:FINAL_CONFIRMATION 요소가 있는 경우
 송금, 가입, 해지 등 최종 실행 버튼을 자동으로 누르지 마십시오.
+
+- 정기예금 D27 target은 C runtime이 현재 snapshot의 지원 Demo URL, visible/enabled 상태, FINAL_CONFIRMATION policy, 승인 의미와 유일성을 검증해 결정합니다.
+- 상품 목록, 상품 상세, 금액, 약관, secure, risk, 일반 화면에서는 FINAL_CONFIRMATION_REQUIRED를 생성하지 마십시오.
+- checkbox나 취소 버튼을 선택하지 말고 final target을 CLICK하지 마십시오.
+- confirmationId와 authoritative summary는 Backend만 생성합니다. 항상 null로 반환하십시오.
+- /deposit/completed/:productId 완료 화면에서는 새 Action이나 final을 만들지 말고 NONE을 반환하십시오.
+- 실제 금융기관 가입 또는 거래 성공을 단정하지 마십시오.
 
 필요한 경우:
 

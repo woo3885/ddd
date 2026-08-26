@@ -228,7 +228,7 @@ C AI 판단
 ### Backend Production 응답 계약
 
 현재 C → B `/api/ai/action` 응답은 D23 Action 6필드를 보존하면서 D24 decision
-metadata 8필드를 추가한 Backend의 14필드 계약을 사용한다.
+metadata 10필드를 추가한 Backend의 현재 16필드 계약을 사용한다.
 
 ```text
 actionType
@@ -358,7 +358,7 @@ npm run test:d23
 ### D23 C 파트 현재 상태
 
 ```text
-Backend 14필드 wire 계약 연동        완료
+Backend 16필드 wire 계약 연동        완료
 D23 Action 6필드 의미 보존           완료
 Production Action allowlist         완료
 SCROLL / WAIT Production 차단       완료
@@ -573,8 +573,9 @@ Policy / Confidence
 
 낮은 Confidence나 불확실한 상황에서는 자동 실행보다 안전한 Fallback을 우선한다.
 
-현재 Production C → B wire response는 14필드이지만 Backend DTO에 정의되지 않은 C
-내부 confidence, secure/final/risk 상세값, confirmation/summary metadata는 전달하지 않는다.
+현재 Production C → B wire response는 16필드이며 Backend DTO에 정의되지 않은 C
+내부 confidence와 secure/risk 상세값, confirmationId/authoritative summary는 전달하지 않는다.
+D27 final에서는 Backend DTO가 정의한 confirmationType과 confirmationTargetElementId만 전달한다.
 
 ---
 
@@ -955,7 +956,7 @@ Prompt에는 `userRequest`에 이어 붙이는 자연어가 아니라 별도의 
 
 ## C → B 응답과 A UI 데이터
 
-C의 Production wire response는 다음 14필드다.
+C의 Production wire response는 다음 16필드다.
 
 ```text
 actionType
@@ -972,6 +973,8 @@ decisionType
 sourceSnapshotId
 options
 terms
+confirmationType
+confirmationTargetElementId
 ```
 
 USER_DECISION rich response는 `WAIT_FOR_USER`, null Action payload,
@@ -980,9 +983,11 @@ USER_DECISION rich response는 `WAIT_FOR_USER`, null Action payload,
 `required`, `checked`를 정확히 포함한다. `sourceSnapshotId`에는 새 결정을 생성한 현재
 request의 `snapshot.snapshotId`를 사용한다. 일반 Action에서는 `sourceSnapshotId=null`이다.
 
-`decisionId`, option의 `description`/`disabled`, secure/final/risk 상세 metadata는
-C → B wire에 추가하지 않는다. Backend가 현재 snapshot과 ID를 검증하고 decisionId,
-disabled, frame 정보를 생성하여 `DECISION_REQUIRED` event를 authoritative하게 발행한다.
+`decisionId`, option의 `description`/`disabled`, secure/risk 상세 metadata는
+C → B wire에 추가하지 않는다. D27 final은 `confirmationType`과
+`confirmationTargetElementId`만 전달하며 confirmationId/summary는 전달하지 않는다.
+Backend가 현재 snapshot과 ID를 검증하고 decisionId, disabled, frame 정보를 생성하여
+`DECISION_REQUIRED` event를 authoritative하게 발행한다.
 
 C → B rich decision response에서 허용되는 유형은 다음 네 가지다.
 
@@ -1105,7 +1110,7 @@ URL만으로 어떤 단계도 확정하지 않는다. 보안 입력 요소는 �
   금액이 없으면 `ADDITIONAL_INFORMATION` wire를
   임의 생성하지 않고 안내 message를 가진 안전한 `NONE`을 반환한다. 이 응답은
   `AI_EXECUTING`, `requiresUserAction=true`, `executionBlocked=true`, null Action payload와
-  null decision metadata, 빈 `options`/`terms`를 가진 기존 14필드 계약이다.
+  null decision metadata, 빈 `options`/`terms`와 null confirmation metadata를 가진 현재 16필드 계약이다.
 - 약관: `TERMS_AGREEMENT`, `WAIT_FOR_USER`, `USER_DECISION_REQUIRED`로 자동 동의를
   차단한다. `terms` 순서와 snapshot의 실제 `checked`를 보존하며 `required`는 현재
   label의 필수 marker에서 D24 정책이 canonicalize한다.
@@ -1131,13 +1136,13 @@ context에 기록한다. 상품 상세에서 실제 product ID/name/period와 �
 `ADDITIONAL_INFORMATION_REQUIRED`로 전환한 뒤 C 호출 전에 Agent Loop를 중단한다.
 금액 화면도 같은 선택 상품 context와 canonical product ID가 일치해야 C를 호출한다.
 
-금액이 없어서 C가 조건 화면에서 반환한 14필드 blocked `NONE`은 Backend
+금액이 없어서 C가 조건 화면에서 반환한 16필드 blocked `NONE`은 Backend
 `AiDecisionExecutionService`가 `ADDITIONAL_INFORMATION_REQUIRED`로 전환한다. C는
 `ADDITIONAL_INFORMATION` decisionType이나 새 status/DTO를 생성하지 않는다. C의
 period mismatch `NONE`은 direct route의 fail-closed 경계이며, 실제 Production 상태
 전환의 authoritative owner는 Backend다.
 
-Production Action allowlist와 C → B 14필드 rich response는 D23/D24 계약을 그대로
+Production Action allowlist와 C → B 16필드 rich response는 D23/D24 action·decision 계약을 그대로
 유지한다. `SELECT`, `SCROLL`, `WAIT`를 활성화하지 않으며 Production 전역
 `UserDecisionContextStore`와 `resumeAgentLoopAfterUserDecision()` 직접 호출을 사용하지
 않는다.
@@ -1177,7 +1182,7 @@ Browser Action을 실행하지 않으며 secure/final/risk 보호와 STOP/COMPLE
 
 Demo Bank React DOM, Backend extractor 순서와 Sanitized DOM 직렬화에서 파생한 fixture로
 실제 `POST /api/ai/action`의 request validation, stage/context 정책, Structured Output,
-D24 option 검증, 14필드 adapter와 HTTP response를 검증한다. 순서는 상품 선택,
+D24 option 검증, 16필드 adapter와 HTTP response를 검증한다. 순서는 상품 선택,
 상품 선택 적용, 상세, 금액 TYPE, 금액 확인, 약관 이동, 약관 선택, 약관 확인,
 비밀번호 이동, 보안 중단이다. 실제 고객정보, 계좌번호, 비밀번호, API key 또는 raw
 Gemini output은 fixture와 로그에 포함하지 않는다.
@@ -1264,7 +1269,7 @@ store, latch 또는 duplicate registry를 만들지 않는다.
 
 C는 defense-in-depth로 visible `SECURITY_POLICY:SECURE_INPUT` 요소를 모델 호출과 prompt
 생성보다 먼저 검사한다. 해당 화면에서는 모델 후보와 Gemini 장애 여부에 관계없이
-다음 내부 응답을 canonical하게 만든 후 기존 14필드 adapter로 전달한다.
+다음 내부 응답을 canonical하게 만든 후 현재 16필드 adapter로 전달한다.
 
 ```text
 status=SECURE_INPUT_REQUIRED
@@ -1278,7 +1283,7 @@ decision/options/final/risk metadata=null
 Backend wire에서는 `actionType=PAUSE_FOR_SECURE_INPUT`,
 `elementId/value/scrollX/scrollY/waitMillis=null`, `requiresUserAction=true`, `executionBlocked=true`,
 `decisionType/sourceSnapshotId=null`, `options/terms=[]`가 된다. secure type은 C 내부
-안전 안내 선택에만 사용되며 현재 14필드 C→B response에 추가하지 않는다.
+안전 안내 선택에만 사용되며 현재 16필드 C→B response에 추가하지 않는다.
 
 - `ACCOUNT_PASSWORD`: `비밀번호는 금융 화면에 직접 입력해 주세요.`
 - `OTP`: `인증번호는 금융 화면에 직접 입력해 주세요.`
@@ -1305,7 +1310,7 @@ AI request에 넣으면 unknown field로 거부한다. Production 오류 로그�
 
 `d26SecureInputEvaluation.test.ts`에는 37개 deterministic 평가가 있다.
 
-- ACCOUNT_PASSWORD 5개: pause, TYPE/value 차단, 안전 message, 14필드 wire
+- ACCOUNT_PASSWORD 5개: pause, TYPE/value 차단, 안전 message, 16필드 wire
 - OTP 5개: pause, TYPE/숫자 생성 차단, model 미호출, 안전 message
 - CERTIFICATE_PASSWORD 5개: pause, TYPE/default 차단, prompt, 안전 message
 - completion 전 5개: resume/CLICK/final/risk/Gemini 우회 차단
@@ -1315,11 +1320,108 @@ AI request에 넣으면 unknown field로 거부한다. Production 오류 로그�
 - Production HTTP 6개: 세 secure type, stale secure snapshot, valid safe resume,
   raw logging 정적 검사
 
-`POST /api/ai/action` 평가에는 request validation, structured policy, 14필드 adapter와 실제
+`POST /api/ai/action` 평가에는 request validation, structured policy, 16필드 adapter와 실제
 HTTP JSON이 모두 포함된다. fixture에는 synthetic placeholder만 사용하며 secure 화면은
 model generator 호출 전 반환되므로 해당 placeholder가 prompt/model/log/wire에 전달되지
 않는다. D23 Action allowlist, D24 rich/stateless decision, D25 Demo/기간/반복 차단과
-secure/final/risk 우선순위는 그대로 유지한다. D27은 구현하지 않는다.
+secure/final/risk 우선순위는 그대로 유지한다. D27 final metadata는 아래 계약에서만 채운다.
+
+---
+
+# 26. D27 정기예금 최종 확인과 안전 중단
+
+## Deterministic final target
+
+C는 `/deposit/confirmation/deposit-12m`과
+`/deposit/confirmation/deposit-preferred`에서만 예금 최종 확인을 판단한다. URL은
+query/fragment/user-info가 없는 canonical HTTP(S) 경로여야 하며, 현재 sanitized snapshot의
+`FINAL_CONFIRMATION` 요소가 정확히 하나이고 visible/enabled button이며 label이
+`Demo 예금 최종 승인` 또는 동등한 예금 승인 의미일 때만 target으로 인정한다.
+
+missing/duplicate/hidden/disabled target, checkbox, cancel, unknown label·상품·URL은
+fail-closed한다. disabled 승인 버튼은 사용자가 Demo checkbox를 직접 선택해야 하는 상태로
+보고 `NONE`을 반환하며 C가 checkbox를 선택하거나 승인 target을 CLICK하지 않는다.
+`confirmationTargetElementId`는 모델 값이 아니라 현재 snapshot membership에서 파생한다.
+stale/non-member model target, unknown confirmation type, model confirmation ID/summary는
+금융 Action 없는 `NONE`으로 제거한다.
+
+Final 화면과 completion 화면은 prompt/model 호출보다 먼저 deterministic하게 처리된다.
+모델이 상품 목록·상세·금액·약관·일반 화면에서 만든 premature final 신호도 runtime
+policy에서 차단한다. 우선순위는 secure → risk/BLOCKED → final이며 secure 화면은 기존 D26
+model-before-prompt 차단을 그대로 사용한다.
+
+## C → B 16필드 final response
+
+```json
+{
+  "actionType": "REQUEST_FINAL_CONFIRMATION",
+  "elementId": null,
+  "value": null,
+  "scrollX": null,
+  "scrollY": null,
+  "waitMillis": null,
+  "status": "FINAL_CONFIRMATION_REQUIRED",
+  "message": "예금 가입 전 최종 확인이 필요합니다.",
+  "requiresUserAction": true,
+  "executionBlocked": true,
+  "decisionType": null,
+  "sourceSnapshotId": "<current snapshot id>",
+  "options": [],
+  "terms": [],
+  "confirmationType": "DEPOSIT_SUBSCRIPTION",
+  "confirmationTargetElementId": "<current enabled final target>"
+}
+```
+
+일반 `elementId`에는 final target을 넣지 않는다. adapter는 위 action/status/blocking/type/
+target/snapshot 조합만 허용하고 `CLICK + FINAL_CONFIRMATION_REQUIRED`, final metadata와
+`AI_EXECUTING`, 잘못된 enum casing을 거부한다. Backend canonical fixture
+`backend/src/test/resources/contracts/d27-final-confirmation-response.json`를 C 테스트에서 직접
+읽어 field name, 순서, null/empty 규칙과 enum casing을 교차 검증한다.
+
+## Backend 소유 경계
+
+Backend만 `confirmationId`와 authoritative summary를 생성하고 active confirmation latch,
+source frame identity, current live frame 비교, approve/reject request, requestId idempotency,
+pending target exactly-once CLICK과 confirmation event/reconnect lifecycle을 소유한다. C는
+summary나 confirmation ID를 생성·전송하지 않고 approve/reject endpoint를 호출하지 않는다.
+
+Backend summary는 productName/productPeriod/amount 중 하나라도 누락되거나 HTML/모든 ISO
+제어문자/password·비밀번호/OTP·인증번호/PIN/미마스킹 계좌번호가 발견되면 confirmation
+전체를 fail-closed한다. `FinalConfirmationSummary`는 고정 3필드 record라 duplicate summary
+ID 검사는 적용되지 않는다.
+
+승인/거절은 Backend가 요청의 expectedFrameId/expectedSequence를 active confirmation의
+sourceFrameId/sourceFrameSequence와 current live frame에 모두 비교한 뒤 수행한다. stale
+approve/reject에서는 pending CLICK이 실행되지 않는다.
+
+## Agent Loop과 completion
+
+정확한 final response를 받으면 C Agent Loop는 `WAITING_FOR_FINAL_CONFIRMATION`으로 한 step에
+멈추고 `execute`나 새 snapshot 조회를 호출하지 않는다. C에는 final resume API나
+process-global confirmation store가 없다. 승인/거절 이후 재개 여부는 Backend가 소유한다.
+
+`/deposit/completed/:productId`에서는 모델 호출 없이 `AI_EXECUTING + NONE`과
+`데모 가입 절차가 완료되었습니다.`만 반환한다. Backend가 WorkflowStatus의 authoritative
+owner이므로 C가 `COMPLETED`를 wire에 만들지 않는다. 화면의 Demo 메인 버튼도 CLICK하지 않고
+실제 금융기관 가입·거래 성공을 주장하지 않는다.
+
+## 현재 공동 E2E 제한
+
+2026-08-26 `origin/develop`의 `SanitizedDomSnapshotService`는 `page.productId`,
+`page.productName`, `page.productPeriod`를 상품 상세 화면에서만 채운다. 반면 Backend
+`FinalConfirmationSummaryExtractor`는 final snapshot의 `page.productName/productPeriod`를
+필수로 요구한다. 따라서 실제 Demo final 화면에서 이 metadata가 별도로 보존·주입되지 않으면
+C의 valid 16필드 response 이후 Backend confirmation activation이 summary 단계에서
+fail-closed할 수 있다. C가 summary를 보완 생성해서는 안 되며, 공동 E2E 전에 Backend가
+final snapshot에 선택 상품 semantic context를 제공하는 계약 확인이 필요하다.
+
+## D27 오프라인 평가
+
+`d27FinalConfirmation.test.ts`는 두 Demo 상품, target validation, premature final,
+secure/risk 우선순위, loop stop, completion, adapter invariant, Backend canonical fixture와
+실제 Express route를 포함한 44개 deterministic 테스트를 제공한다. package script는
+추가하지 않고 `npm.cmd exec -- tsx --test src/tests/d27FinalConfirmation.test.ts`로 실행한다.
 
 ---
 

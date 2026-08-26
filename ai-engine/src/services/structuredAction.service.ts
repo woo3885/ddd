@@ -43,6 +43,11 @@ import {
   finalizeDepositScenarioGuidance,
 } from "../deposit/depositScenario.policy.js";
 
+import {
+  createDepositFinalBoundaryResponse,
+  enforceDepositFinalConfirmationPolicy,
+} from "../deposit/depositFinalConfirmation.policy.js";
+
 export type StructuredActionTextGenerator = (
   input: GenerateTextInput,
 ) => Promise<GenerateTextResult>;
@@ -71,6 +76,19 @@ export async function generateStructuredAction(
 
   if (securePause) {
     return securePause;
+  }
+
+  /*
+   * D27 deterministic boundary: the current sanitized final target and Demo
+   * completion screen are resolved before prompt construction. This prevents
+   * the model from choosing a final target or manufacturing confirmation
+   * authority. Secure input remains the earlier, higher-priority boundary.
+   */
+  const finalBoundary =
+    createDepositFinalBoundaryResponse(request);
+
+  if (finalBoundary) {
+    return finalBoundary;
   }
 
   const dom = adaptBackendDomToModelInput(
@@ -131,9 +149,15 @@ export async function generateStructuredAction(
         request,
       );
 
+    const finalChecked =
+      enforceDepositFinalConfirmationPolicy(
+        depositChecked,
+        request,
+      );
+
     const policyChecked =
       enforceUserDecisionPolicy(
-        depositChecked,
+        finalChecked,
         request,
       );
 
