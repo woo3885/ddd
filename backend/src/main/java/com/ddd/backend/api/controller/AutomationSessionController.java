@@ -159,11 +159,7 @@ public class AutomationSessionController {
             @Valid @RequestBody SubmitConfirmationRequest request
     ) {
         AutomationSession session =
-                userDecisionService.confirmFinalAction(
-                        sessionId,
-                        request.confirmationId(),
-                        request.approved()
-                );
+                userDecisionService.confirmFinalAction(sessionId, request);
 
         return ApiResponse.success(
                 AutomationSessionResponse.from(
@@ -179,11 +175,7 @@ public class AutomationSessionController {
             @Valid @RequestBody SubmitConfirmationRequest request
     ) {
         AutomationSession session =
-                userDecisionService.rejectFinalAction(
-                        sessionId,
-                        request.confirmationId(),
-                        request.approved()
-                );
+                userDecisionService.rejectFinalAction(sessionId, request);
 
         return ApiResponse.success(
                 AutomationSessionResponse.from(

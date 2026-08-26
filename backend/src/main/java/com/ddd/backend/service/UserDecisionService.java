@@ -10,6 +10,7 @@ import com.ddd.backend.domain.session.WorkflowStatus;
 import com.ddd.backend.service.validation.UserDecisionValidator;
 import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
+import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
 import com.ddd.backend.frame.BrowserFrameMetadata;
 import com.ddd.backend.frame.BrowserFrameStore;
 import com.ddd.backend.service.decision.UserDecisionSessionState;
@@ -331,8 +332,30 @@ public class UserDecisionService {
 
     public AutomationSession confirmFinalAction(
             String sessionId,
+            SubmitConfirmationRequest request
+    ) {
+        if (frameStore == null && finalConfirmationStore == null) {
+            return confirmFinalAction(
+                    sessionId, request.confirmationId(), request.approved());
+        }
+        validateCurrentConfirmationFrame(sessionId, request);
+        return confirmFinalAction(sessionId, request.confirmationId(),
+                request.approved(), request.requestId(), request.expectedFrameId(),
+                request.expectedSequence());
+    }
+
+    public AutomationSession confirmFinalAction(
+            String sessionId,
             String confirmationId,
             Boolean approved
+    ) {
+        return confirmFinalAction(sessionId, confirmationId, approved,
+                "legacy-request", "legacy-frame", 1L);
+    }
+
+    private AutomationSession confirmFinalAction(
+            String sessionId, String confirmationId, Boolean approved,
+            String requestId, String expectedFrameId, long expectedSequence
     ) {
         validateConfirmationRequest(
                 confirmationId,
@@ -349,7 +372,17 @@ public class UserDecisionService {
                 getSession(sessionId);
 
         if (finalConfirmationStore != null) {
-            var confirmation = finalConfirmationStore.consume(sessionId, confirmationId);
+            var active = finalConfirmationStore.active(sessionId).orElseThrow(
+                    () -> new IllegalStateException(
+                            "현재 최종 확인 요청과 일치하지 않습니다."));
+            var confirmation = finalConfirmationStore.consume(
+                    sessionId, confirmationId, requestId,
+                    expectedFrameId.equals("legacy-frame")
+                            ? active.sourceFrameId()
+                            : expectedFrameId,
+                    expectedFrameId.equals("legacy-frame")
+                            ? active.sourceFrameSequence()
+                            : expectedSequence);
             if (actionExecutionService == null) {
                 throw new IllegalStateException("최종 실행기가 준비되지 않았습니다.");
             }
@@ -383,8 +416,30 @@ public class UserDecisionService {
 
     public AutomationSession rejectFinalAction(
             String sessionId,
+            SubmitConfirmationRequest request
+    ) {
+        if (frameStore == null && finalConfirmationStore == null) {
+            return rejectFinalAction(
+                    sessionId, request.confirmationId(), request.approved());
+        }
+        validateCurrentConfirmationFrame(sessionId, request);
+        return rejectFinalAction(sessionId, request.confirmationId(),
+                request.approved(), request.requestId(), request.expectedFrameId(),
+                request.expectedSequence());
+    }
+
+    public AutomationSession rejectFinalAction(
+            String sessionId,
             String confirmationId,
             Boolean approved
+    ) {
+        return rejectFinalAction(sessionId, confirmationId, approved,
+                "legacy-request", "legacy-frame", 1L);
+    }
+
+    private AutomationSession rejectFinalAction(
+            String sessionId, String confirmationId, Boolean approved,
+            String requestId, String expectedFrameId, long expectedSequence
     ) {
         validateConfirmationRequest(
                 confirmationId,
@@ -401,7 +456,13 @@ public class UserDecisionService {
                 getSession(sessionId);
 
         if (finalConfirmationStore != null) {
-            finalConfirmationStore.consume(sessionId, confirmationId);
+            var active = finalConfirmationStore.active(sessionId).orElseThrow(
+                    () -> new IllegalStateException("현재 최종 확인 요청과 일치하지 않습니다."));
+            finalConfirmationStore.consume(sessionId, confirmationId, requestId,
+                    expectedFrameId.equals("legacy-frame")
+                            ? active.sourceFrameId() : expectedFrameId,
+                    expectedFrameId.equals("legacy-frame")
+                            ? active.sourceFrameSequence() : expectedSequence);
             finalConfirmationStore.clear(sessionId);
         }
 
@@ -428,6 +489,30 @@ public class UserDecisionService {
         statusEventPublisher.publishConfirmationRejected(sessionId);
 
         return savedSession;
+    }
+
+    private void validateCurrentConfirmationFrame(
+            String sessionId,
+            SubmitConfirmationRequest request
+    ) {
+        if (frameStore == null || finalConfirmationStore == null) {
+            throw new IllegalStateException("최종 확인 frame 검증기가 준비되지 않았습니다.");
+        }
+        BrowserFrameMetadata latest = frameStore.latest(sessionId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "현재 Viewer Frame이 준비되지 않았습니다."))
+                .metadata();
+        var active = finalConfirmationStore.active(sessionId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "대기 중인 최종 확인 요청이 없습니다."));
+        boolean requestMatchesCurrent = latest.frameId().equals(request.expectedFrameId())
+                && latest.sequence() == request.expectedSequence();
+        boolean requestMatchesSource = active.sourceFrameId()
+                .equals(request.expectedFrameId())
+                && active.sourceFrameSequence() == request.expectedSequence();
+        if (!requestMatchesCurrent || !requestMatchesSource) {
+            throw new IllegalStateException("오래된 Viewer Frame의 최종 확인 요청입니다.");
+        }
     }
 
     private AutomationSession getSession(

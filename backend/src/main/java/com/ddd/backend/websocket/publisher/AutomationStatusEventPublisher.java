@@ -252,7 +252,7 @@ public final class AutomationStatusEventPublisher {
         if (sessionId != null) {
             uiStates.remove(sessionId);
             if (finalConfirmationStore != null) {
-                finalConfirmationStore.clear(sessionId);
+                finalConfirmationStore.removeSession(sessionId);
             }
         }
     }

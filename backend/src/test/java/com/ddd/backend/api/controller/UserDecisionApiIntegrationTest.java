@@ -189,8 +189,11 @@ class UserDecisionApiIntegrationTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-confirm-001",
                                           "confirmationId": "confirm-001",
-                                          "approved": true
+                                          "approved": true,
+                                          "expectedFrameId": "frm-001",
+                                          "expectedSequence": 1
                                         }
                                         """
                                 )
@@ -239,8 +242,11 @@ class UserDecisionApiIntegrationTest {
                                 .content(
                                         """
                                         {
+                                          "requestId": "req-reject-001",
                                           "confirmationId": "confirm-002",
-                                          "approved": false
+                                          "approved": false,
+                                          "expectedFrameId": "frm-002",
+                                          "expectedSequence": 2
                                         }
                                         """
                                 )
