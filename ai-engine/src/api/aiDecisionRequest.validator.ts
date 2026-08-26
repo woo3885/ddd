@@ -27,6 +27,7 @@ const PAGE_FIELDS = new Set([
   "productId",
   "productName",
   "productPeriod",
+  "depositAmount",
 ]);
 
 const SNAPSHOT_FIELDS = new Set([
@@ -481,6 +482,12 @@ export function validateBackendAiDecisionRequest(
     snapshot.page.productPeriod,
     "snapshot.page.productPeriod",
   );
+  if ("depositAmount" in snapshot.page) {
+    requireNullableExactString(
+      snapshot.page.depositAmount,
+      "snapshot.page.depositAmount",
+    );
+  }
 
   validateSnapshotElements(snapshot.elements);
 

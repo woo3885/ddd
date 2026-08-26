@@ -16,6 +16,9 @@ import {
 import {
   adaptStructuredResponseToBackend,
 } from "../api/aiDecisionResponse.adapter.js";
+import {
+  adaptBackendDomToModelInput,
+} from "../api/domRequest.adapter.js";
 import type {
   AiActionRequest,
   BackendSanitizedDomElement,
@@ -103,6 +106,7 @@ function snapshot(
       productId: null,
       productName: null,
       productPeriod: null,
+      depositAmount: null,
     },
     elements,
   };
@@ -136,11 +140,24 @@ function finalSnapshot(
     finalTarget(),
   ],
 ): BackendSanitizedDomSnapshot {
-  return snapshot(
+  const current = snapshot(
     `snap-final-${productId}`,
     `https://demo.test/deposit/confirmation/${productId}`,
     overrides,
   );
+
+  return {
+    ...current,
+    page: {
+      ...current.page,
+      productId,
+      productName: productId === "deposit-12m"
+        ? "12개월 정기예금"
+        : "우대금리 정기예금",
+      productPeriod: "12개월",
+      depositAmount: "1,000,000원",
+    },
+  };
 }
 
 function request(
@@ -599,6 +616,14 @@ test("D27 Backend adapter emits the exact 16 fields", async () => {
   assert.deepEqual(Object.keys(wire), RESPONSE_FIELDS);
   assert.equal("confirmationId" in wire, false);
   assert.equal("summary" in wire, false);
+});
+
+test("D27 accepts Backend authoritative amount without exposing it to the model", () => {
+  const current = finalSnapshot();
+  const modelInput = adaptBackendDomToModelInput(current);
+
+  assert.equal(current.page.depositAmount, "1,000,000원");
+  assert.equal("depositAmount" in modelInput.page, false);
 });
 
 test("D27 wire is compatible with the Backend canonical fixture", async () => {

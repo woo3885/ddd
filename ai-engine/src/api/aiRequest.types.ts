@@ -57,6 +57,8 @@ export interface BackendSanitizedDomSnapshot {
     productId: string | null;
     productName: string | null;
     productPeriod: string | null;
+    /** Backend-owned D27 final-summary context; never model-authored. */
+    depositAmount?: string | null;
   };
 
   elements: BackendSanitizedDomElement[];

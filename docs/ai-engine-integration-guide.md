@@ -1406,21 +1406,23 @@ process-global confirmation store가 없다. 승인/거절 이후 재개 여부�
 owner이므로 C가 `COMPLETED`를 wire에 만들지 않는다. 화면의 Demo 메인 버튼도 CLICK하지 않고
 실제 금융기관 가입·거래 성공을 주장하지 않는다.
 
-## 현재 공동 E2E 제한
+## 공동 E2E authoritative context
 
-2026-08-26 `origin/develop`의 `SanitizedDomSnapshotService`는 `page.productId`,
-`page.productName`, `page.productPeriod`를 상품 상세 화면에서만 채운다. 반면 Backend
-`FinalConfirmationSummaryExtractor`는 final snapshot의 `page.productName/productPeriod`를
-필수로 요구한다. 따라서 실제 Demo final 화면에서 이 metadata가 별도로 보존·주입되지 않으면
-C의 valid 16필드 response 이후 Backend confirmation activation이 summary 단계에서
-fail-closed할 수 있다. C가 summary를 보완 생성해서는 안 되며, 공동 E2E 전에 Backend가
-final snapshot에 선택 상품 semantic context를 제공하는 계약 확인이 필요하다.
+2026-08-26 `origin/develop`의 Backend는 검증된 상품 선택, 상품 상세의 상품명·기간, 가입 금액을
+세션별 `SelectedDepositProductStore`에 보존한다. final 화면에서 읽은 `productId`,
+`productName`, `productPeriod`, `depositAmount`가 이 context와 모두 일치할 때만 final snapshot을
+생성하고, `FinalConfirmationSummaryExtractor`가 그 snapshot으로 authoritative summary를 만든다.
+불일치나 누락은 confirmation activation 전에 fail-closed한다.
+
+C request validator는 최신 snapshot의 `page.depositAmount`를 수신할 수 있지만 이 값을 모델
+입력으로 전달하거나 summary 생성에 사용하지 않는다. C는 계속 valid 16필드 response만 반환하며
+summary와 confirmation ID의 생성·검증·보존은 Backend가 소유한다.
 
 ## D27 오프라인 평가
 
 `d27FinalConfirmation.test.ts`는 두 Demo 상품, target validation, premature final,
 secure/risk 우선순위, loop stop, completion, adapter invariant, Backend canonical fixture와
-실제 Express route를 포함한 44개 deterministic 테스트를 제공한다. package script는
+실제 Express route와 Backend-owned amount 수신 경계를 포함한 45개 deterministic 테스트를 제공한다. package script는
 추가하지 않고 `npm.cmd exec -- tsx --test src/tests/d27FinalConfirmation.test.ts`로 실행한다.
 
 ---
