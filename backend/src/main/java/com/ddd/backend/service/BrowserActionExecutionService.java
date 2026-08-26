@@ -25,6 +25,8 @@ import org.springframework.stereotype.Service;
 import java.util.Objects;
 import java.util.function.Supplier;
 import com.ddd.backend.security.secureinput.SecureInputRegistry;
+import com.ddd.backend.service.confirmation.ConfirmationException;
+import com.ddd.backend.common.exception.ErrorCode;
 
 @Service
 public final class BrowserActionExecutionService {
@@ -270,7 +272,7 @@ public final class BrowserActionExecutionService {
     ) {
         requireElementIdExecutor();
         return executeInternal(sessionId, () -> elementIdActionExecutor
-                .executeConfirmedFinalClick(sessionId, elementId));
+                .executeConfirmedFinalClick(sessionId, elementId), true);
     }
 
     public BrowserActionExecutionResult
@@ -345,6 +347,14 @@ public final class BrowserActionExecutionService {
             Supplier<BrowserActionExecutionResult>
                     execution
     ) {
+        return executeInternal(sessionId, execution, false);
+    }
+
+    private BrowserActionExecutionResult executeInternal(
+            String sessionId,
+            Supplier<BrowserActionExecutionResult> execution,
+            boolean requireFreshFrame
+    ) {
         Objects.requireNonNull(
                 execution,
                 "Browser Action 실행 작업은 필수입니다."
@@ -366,14 +376,10 @@ public final class BrowserActionExecutionService {
                     execution.get();
 
         } catch (RuntimeException executionException) {
-
-            updateExecutionErrorStatusSafely(
-                    session
-            );
-
-            publishExecutionErrorSafely(
-                    sessionId
-            );
+            if (!requireFreshFrame) {
+                updateExecutionErrorStatusSafely(session);
+                publishExecutionErrorSafely(sessionId);
+            }
 
             throw executionException;
         }
@@ -400,7 +406,15 @@ public final class BrowserActionExecutionService {
             sessionRepository.save(session);
             statusEventPublisher.publish(sessionId, WorkflowStatus.PAGE_LOADING,
                     "변경된 화면을 안전하게 확인하고 있습니다.");
-            refreshFrameAfterExecutedActionSafely(sessionId, result);
+            boolean frameReady = refreshFrameAfterExecutedActionSafely(sessionId, result);
+            if (requireFreshFrame && !frameReady) {
+                throw new ConfirmationException(
+                        ErrorCode.CONFIRMATION_FRAME_CAPTURE_FAILED);
+            }
+            return result;
+        }
+
+        if (requireFreshFrame) {
             return result;
         }
 
@@ -419,7 +433,7 @@ public final class BrowserActionExecutionService {
         return result;
     }
 
-    private void
+    private boolean
     refreshFrameAfterExecutedActionSafely(
             String sessionId,
             BrowserActionExecutionResult result
@@ -428,7 +442,7 @@ public final class BrowserActionExecutionService {
                 != BrowserActionExecutionStatus
                 .EXECUTED) {
 
-            return;
+            return false;
         }
 
         try {
@@ -442,7 +456,7 @@ public final class BrowserActionExecutionService {
                     || captureAttempt.frame()
                     == null) {
 
-                return;
+                return false;
             }
 
             browserFrameStore.publishAfterAction(
@@ -453,6 +467,7 @@ public final class BrowserActionExecutionService {
             frameWebSocketHandler.sendLatest(
                     sessionId
             );
+            return true;
 
         } catch (RuntimeException frameException) {
 
@@ -469,6 +484,7 @@ public final class BrowserActionExecutionService {
                             .getClass()
                             .getSimpleName()
             );
+            return false;
         }
     }
 

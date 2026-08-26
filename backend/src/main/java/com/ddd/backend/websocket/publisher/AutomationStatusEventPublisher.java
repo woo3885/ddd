@@ -14,6 +14,7 @@ import com.ddd.backend.service.decision.UserDecisionSessionState;
 import com.ddd.backend.security.secureinput.SecureInputRequest;
 import com.ddd.backend.service.confirmation.FinalConfirmationRequest;
 import com.ddd.backend.service.confirmation.FinalConfirmationStore;
+import com.ddd.backend.websocket.dto.ConfirmationEventPayload;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -45,6 +46,11 @@ public final class AutomationStatusEventPublisher {
     @Autowired
     void setFinalConfirmationStore(FinalConfirmationStore store) {
         this.finalConfirmationStore = store;
+        store.setExpirationListener((sessionId, confirmation) -> {
+            publishConfirmationClear(sessionId, confirmation);
+            publish(sessionId, WorkflowStatus.ERROR,
+                    "최종 확인 시간이 만료되어 요청을 안전하게 종료했습니다.");
+        });
     }
 
     private final ConcurrentMap<String, SessionUiState> uiStates =
@@ -91,6 +97,12 @@ public final class AutomationStatusEventPublisher {
                 "상태 이벤트는 필수입니다."
         );
 
+        if (clearsConfirmation(event.status()) && finalConfirmationStore != null) {
+            finalConfirmationStore.clear(event.sessionId())
+                    .ifPresent(confirmation ->
+                            publishConfirmationClear(event.sessionId(), confirmation));
+        }
+
         messagingTemplate.convertAndSend(
                 destination(event.sessionId()),
                 event
@@ -126,12 +138,6 @@ public final class AutomationStatusEventPublisher {
         }
         if (clearsSecureInput(event.status())) {
             publishSecureInputClear(event.sessionId());
-        }
-        if (clearsConfirmation(event.status())) {
-            if (finalConfirmationStore != null) {
-                finalConfirmationStore.clear(event.sessionId());
-            }
-            publishConfirmationClear(event.sessionId());
         }
     }
 
@@ -221,25 +227,34 @@ public final class AutomationStatusEventPublisher {
         return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_REQUIRED,
                 WorkflowStatus.FINAL_CONFIRMATION_REQUIRED,
                 "예금 가입 전 최종 확인이 필요합니다.", true,
-                null, null, null, confirmation);
+                null, null, null, ConfirmationEventPayload.from(confirmation));
     }
 
-    public AutomationUiEvent publishConfirmationResolved(String sessionId) {
+    public AutomationUiEvent publishConfirmationResolved(
+            String sessionId, FinalConfirmationRequest confirmation
+    ) {
         return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_RESOLVED,
                 WorkflowStatus.PAGE_LOADING, "최종 실행이 승인되었습니다.", false,
-                null, null, null, null);
+                null, null, null,
+                ConfirmationEventPayload.from(confirmation).identityOnly());
     }
 
-    public AutomationUiEvent publishConfirmationRejected(String sessionId) {
+    public AutomationUiEvent publishConfirmationRejected(
+            String sessionId, FinalConfirmationRequest confirmation
+    ) {
         return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_REJECTED,
                 WorkflowStatus.CANCELLED, "최종 실행이 거절되었습니다.", false,
-                null, null, null, null);
+                null, null, null,
+                ConfirmationEventPayload.from(confirmation).identityOnly());
     }
 
-    public AutomationUiEvent publishConfirmationClear(String sessionId) {
+    public AutomationUiEvent publishConfirmationClear(
+            String sessionId, FinalConfirmationRequest confirmation
+    ) {
         return publishUiEvent(sessionId, AutomationUiEventType.CONFIRMATION_CLEAR,
                 null, "최종 확인 요청이 정리되었습니다.", false,
-                null, null, null, null);
+                null, null, null,
+                ConfirmationEventPayload.from(confirmation).identityOnly());
     }
 
     public Optional<AutomationUiEventSnapshot> latestSnapshot(String sessionId) {
@@ -276,7 +291,7 @@ public final class AutomationStatusEventPublisher {
             WorkflowStatus status, String message, boolean actionRequired,
             AutomationTarget target, AutomationDecisionPrompt decision,
             SecureInputRequest secureInput,
-            FinalConfirmationRequest confirmation
+            ConfirmationEventPayload confirmation
     ) {
         String uiDestination = uiDestination(sessionId);
         SessionUiState state = uiStates.computeIfAbsent(
@@ -349,7 +364,9 @@ public final class AutomationStatusEventPublisher {
     }
 
     private boolean clearsConfirmation(WorkflowStatus status) {
-        return status == WorkflowStatus.COMPLETED
+        return status == WorkflowStatus.SECURE_INPUT_REQUIRED
+                || status == WorkflowStatus.RISK_WARNING
+                || status == WorkflowStatus.COMPLETED
                 || status == WorkflowStatus.CANCELLED
                 || status == WorkflowStatus.ERROR
                 || status == WorkflowStatus.TERMINATED;
@@ -370,7 +387,7 @@ public final class AutomationStatusEventPublisher {
                 boolean actionRequired, AutomationTarget targetValue,
                 AutomationDecisionPrompt decisionValue,
                 SecureInputRequest secureInputValue,
-                FinalConfirmationRequest confirmationValue
+                ConfirmationEventPayload confirmationValue
         ) {
             long next = sequence.incrementAndGet();
             AutomationUiEvent event = new AutomationUiEvent(

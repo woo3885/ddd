@@ -3,6 +3,7 @@ package com.ddd.backend.api.controller;
 import com.ddd.backend.api.dto.session.AutomationSessionResponse;
 import com.ddd.backend.api.dto.session.CreateSessionRequest;
 import com.ddd.backend.api.dto.session.SubmitConfirmationRequest;
+import com.ddd.backend.api.dto.session.ConfirmationActionResponse;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
 import com.ddd.backend.api.dto.session.CompleteSecureInputRequest;
 import com.ddd.backend.api.dto.session.SecureInputSubmissionResponse;
@@ -154,34 +155,30 @@ public class AutomationSessionController {
     }
 
     @PostMapping("/{sessionId}/confirm")
-    public ApiResponse<AutomationSessionResponse> confirmFinalAction(
+    public ApiResponse<ConfirmationActionResponse> confirmFinalAction(
             @PathVariable String sessionId,
             @Valid @RequestBody SubmitConfirmationRequest request
     ) {
-        AutomationSession session =
-                userDecisionService.confirmFinalAction(sessionId, request);
+        ConfirmationActionResponse response =
+                userDecisionService.confirmFinalActionAck(sessionId, request);
 
         return ApiResponse.success(
-                AutomationSessionResponse.from(
-                        session
-                ),
-                "최종 실행을 승인했습니다."
+                response,
+                "최종 승인 요청이 접수되었습니다."
         );
     }
 
     @PostMapping("/{sessionId}/reject")
-    public ApiResponse<AutomationSessionResponse> rejectFinalAction(
+    public ApiResponse<ConfirmationActionResponse> rejectFinalAction(
             @PathVariable String sessionId,
             @Valid @RequestBody SubmitConfirmationRequest request
     ) {
-        AutomationSession session =
-                userDecisionService.rejectFinalAction(sessionId, request);
+        ConfirmationActionResponse response =
+                userDecisionService.rejectFinalActionAck(sessionId, request);
 
         return ApiResponse.success(
-                AutomationSessionResponse.from(
-                        session
-                ),
-                "최종 실행을 거절했습니다."
+                response,
+                "최종 거절 요청이 접수되었습니다."
         );
     }
 }

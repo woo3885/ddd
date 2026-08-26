@@ -5,6 +5,7 @@ import com.ddd.backend.security.SensitiveDataMasker;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
+import java.util.HashSet;
 import java.util.regex.Pattern;
 
 @Component
@@ -19,6 +20,9 @@ public final class FinalConfirmationSummaryExtractor {
                     + "|auth[-_\\s]*code|(?<![a-z0-9])pin(?![a-z0-9])|핀\\s*번호)");
     private static final Pattern UNMASKED_ACCOUNT_NUMBER = Pattern.compile(
             "(?<![0-9])[0-9]{10,12}(?![0-9])");
+    private static final Pattern KEBAB_CASE = Pattern.compile("^[a-z0-9]+(?:-[a-z0-9]+)*$");
+    private static final Pattern INTERNAL_TERM = Pattern.compile(
+            "(?i)(selector|element[-_]?id|session[-_]?id)");
 
     public FinalConfirmationSummary extract(SanitizedDomSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "최종 확인 Snapshot은 필수입니다.");
@@ -35,8 +39,38 @@ public final class FinalConfirmationSummaryExtractor {
         }
         FinalConfirmationSummary summary =
                 new FinalConfirmationSummary(productName, productPeriod, amount);
-        validateWholeSummary(summary);
+        validate(summary);
         return summary;
+    }
+
+    public void validate(FinalConfirmationSummary summary) {
+        if (summary == null || !"정기예금 가입".equals(summary.transactionType())
+                || summary.items() == null || summary.items().size() != 3) {
+            throw new IllegalStateException("최종 확인 요약 형식이 올바르지 않습니다.");
+        }
+        var ids = new HashSet<String>();
+        for (ConfirmationSummaryItem item : summary.items()) {
+            if (item == null || item.id() == null || item.label() == null
+                    || item.value() == null || item.id().isBlank()
+                    || item.label().isBlank() || item.value().isBlank()
+                    || !KEBAB_CASE.matcher(item.id()).matches()
+                    || item.id().length() > 50 || item.label().length() > 30
+                    || item.value().length() > 100 || !ids.add(item.id())) {
+                throw new IllegalStateException("최종 확인 요약 형식이 올바르지 않습니다.");
+            }
+            validateSafeText(item.id(), true);
+            validateSafeText(item.label(), true);
+            validateSafeText(item.value(), !"deposit-amount".equals(item.id()));
+            if (INTERNAL_TERM.matcher(item.id()).find()
+                    || INTERNAL_TERM.matcher(item.label()).find()) {
+                throw new IllegalStateException("최종 확인 요약에 내부 정보가 포함되어 있습니다.");
+            }
+        }
+        if (!ids.equals(java.util.Set.of(
+                "product-name", "deposit-amount", "deposit-period"))) {
+            throw new IllegalStateException("최종 확인 요약 항목이 올바르지 않습니다.");
+        }
+        validateWholeSummary(summary);
     }
 
     private String safeRequired(String value, String fieldName, int maxLength) {
