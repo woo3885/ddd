@@ -37,10 +37,18 @@ public record SanitizedDomSnapshot(
             String title,
             String productId,
             String productName,
-            String productPeriod
+            String productPeriod,
+            String depositAmount
     ) {
         public PageSnapshot(String url, String title) {
-            this(url, title, null, null, null);
+            this(url, title, null, null, null, null);
+        }
+
+        public PageSnapshot(
+                String url, String title, String productId,
+                String productName, String productPeriod
+        ) {
+            this(url, title, productId, productName, productPeriod, null);
         }
     }
 

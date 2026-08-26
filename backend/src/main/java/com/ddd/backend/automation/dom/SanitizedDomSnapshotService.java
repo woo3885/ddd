@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.HashSet;
 import java.util.Set;
 import com.ddd.backend.security.secureinput.SecureInputRegistry;
+import com.ddd.backend.service.decision.SelectedDepositProductStore;
 
 @Service
 public final class SanitizedDomSnapshotService {
@@ -40,10 +41,18 @@ public final class SanitizedDomSnapshotService {
 
     private final ElementRegistry elementRegistry;
     private SecureInputRegistry secureInputRegistry;
+    private SelectedDepositProductStore selectedProductStore;
 
     @Autowired
     void setSecureInputRegistry(SecureInputRegistry secureInputRegistry) {
         this.secureInputRegistry = secureInputRegistry;
+    }
+
+    @Autowired
+    public void setSelectedProductStore(
+            SelectedDepositProductStore selectedProductStore
+    ) {
+        this.selectedProductStore = selectedProductStore;
     }
 
     /*
@@ -301,22 +310,8 @@ public final class SanitizedDomSnapshotService {
                         );
                     }
 
-                    SanitizedDomSnapshot.PageSnapshot
-                            pageSnapshot =
-                            new SanitizedDomSnapshot
-                                    .PageSnapshot(
-                                    sanitizer.sanitizeUrl(
-                                            page.url()
-                                    ),
-                                    sanitizer.sanitizeText(
-                                            page.title()
-                                    ),
-                                    detailProductId(page.url(), page),
-                                    detailSemanticText(page,
-                                            "#summary-deposit-product-name"),
-                                    detailSemanticText(page,
-                                            "#summary-deposit-product-period")
-                            );
+                    SanitizedDomSnapshot.PageSnapshot pageSnapshot =
+                            pageSnapshot(sessionId, page);
 
                     /*
                      * D16 핵심.
@@ -349,6 +344,62 @@ public final class SanitizedDomSnapshotService {
         String path = java.net.URI.create(url).getPath();
         String productId = path.substring(path.lastIndexOf('/') + 1);
         return sanitizer.sanitizeNullableText(productId);
+    }
+
+    private SanitizedDomSnapshot.PageSnapshot pageSnapshot(
+            String sessionId, com.microsoft.playwright.Page page
+    ) {
+        String safeUrl = sanitizer.sanitizeUrl(page.url());
+        String safeTitle = sanitizer.sanitizeText(page.title());
+        if (page.locator("#page-deposit-product-detail").count() == 1) {
+            return new SanitizedDomSnapshot.PageSnapshot(
+                    safeUrl, safeTitle,
+                    detailProductId(page.url(), page),
+                    detailSemanticText(page, "#summary-deposit-product-name"),
+                    detailSemanticText(page, "#summary-deposit-product-period"),
+                    null);
+        }
+        if (page.locator("#page-deposit-confirmation").count() != 1) {
+            return new SanitizedDomSnapshot.PageSnapshot(safeUrl, safeTitle);
+        }
+
+        String productId = productIdFromPath(
+                page.url(), "/deposit/confirmation/");
+        String productName = detailSemanticText(
+                page, "[data-ddd-summary-id=\"product-name\"] dd");
+        String productPeriod = detailSemanticText(
+                page, "[data-ddd-summary-id=\"deposit-period\"] dd");
+        String amount = detailSemanticText(
+                page, "[data-ddd-summary-id=\"deposit-amount\"] dd");
+        if (productId == null || productName == null
+                || productPeriod == null || amount == null) {
+            throw new IllegalStateException(
+                    "예금 최종 확인 semantic context가 완전하지 않습니다.");
+        }
+        if (selectedProductStore != null
+                && !selectedProductStore.validatesFinalContext(
+                sessionId, productId, productName, productPeriod, amount)) {
+            throw new IllegalStateException(
+                    "검증된 예금 상품 context와 최종 확인 화면이 일치하지 않습니다.");
+        }
+        return new SanitizedDomSnapshot.PageSnapshot(
+                safeUrl, safeTitle, productId, productName, productPeriod, amount);
+    }
+
+    private String productIdFromPath(String url, String prefix) {
+        try {
+            String path = java.net.URI.create(url).getPath();
+            if (path == null || !path.startsWith(prefix)) {
+                return null;
+            }
+            String productId = path.substring(prefix.length());
+            if (productId.isBlank() || productId.contains("/")) {
+                return null;
+            }
+            return sanitizer.sanitizeNullableText(productId);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     private String detailSemanticText(com.microsoft.playwright.Page page, String selector) {

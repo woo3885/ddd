@@ -25,7 +25,30 @@ class SelectedDepositProductStoreTest {
                     .isEqualTo("snap-products-1");
             assertThat(store.find(sessionId).orElseThrow().periodLabel())
                     .isEqualTo("12개월");
+            assertThat(store.observeAmount(
+                    sessionId, productId, "입력 금액: 1,000,000원")).isTrue();
+            assertThat(store.validatesFinalContext(
+                    sessionId, productId, productName,
+                    "12개월", "1,000,000원")).isTrue();
         }
+    }
+
+    @Test
+    void final_DOM이_이전_상품이나_금액과_다르면_거부한다() {
+        store.select("session", "btn-select-deposit-12m", "snap-1");
+        assertThat(store.observeDetail(
+                "session", "deposit-12m", "12개월 정기예금",
+                "12개월", "100만 원을 12개월 동안 가입"))
+                .isEqualTo(SelectedDepositProductStore.Verification.VALID);
+        assertThat(store.observeAmount(
+                "session", "deposit-12m", "입력 금액: 1,000,000원")).isTrue();
+
+        assertThat(store.validatesFinalContext(
+                "session", "deposit-preferred", "우대금리 정기예금",
+                "12개월", "1,000,000원")).isFalse();
+        assertThat(store.validatesFinalContext(
+                "session", "deposit-12m", "12개월 정기예금",
+                "12개월", "2,000,000원")).isFalse();
     }
 
     @Test
