@@ -163,6 +163,53 @@ export function useSessionStatusIntegration({
     dispatch({ type: 'SECURE_INPUT_SUBMIT_ABORTED', secureRequestId });
   }, []);
 
+  const setConfirmationConfirmed = useCallback(
+    (confirmationId: string, confirmed: boolean) => {
+      dispatch({
+        type: 'CONFIRMATION_CHECKED_CHANGED',
+        confirmationId,
+        confirmed
+      });
+    },
+    []
+  );
+
+  const markConfirmationSubmitStarted = useCallback(
+    (confirmationId: string, action: 'APPROVE' | 'REJECT') => {
+      dispatch({
+        type: 'CONFIRMATION_SUBMIT_STARTED',
+        confirmationId,
+        action
+      });
+    },
+    []
+  );
+
+  const markConfirmationSubmitAcknowledged = useCallback(
+    (confirmationId: string) => {
+      dispatch({ type: 'CONFIRMATION_SUBMIT_ACKNOWLEDGED', confirmationId });
+    },
+    []
+  );
+
+  const markConfirmationSubmitFailed = useCallback(
+    (confirmationId: string, message: string) => {
+      dispatch({
+        type: 'CONFIRMATION_SUBMIT_FAILED',
+        confirmationId,
+        message
+      });
+    },
+    []
+  );
+
+  const markConfirmationSubmitAborted = useCallback(
+    (confirmationId: string) => {
+      dispatch({ type: 'CONFIRMATION_SUBMIT_ABORTED', confirmationId });
+    },
+    []
+  );
+
   return {
     ...state,
     observeFrame,
@@ -175,6 +222,11 @@ export function useSessionStatusIntegration({
     markSecureInputSubmitStarted,
     markSecureInputSubmitAcknowledged,
     markSecureInputSubmitFailed,
-    markSecureInputSubmitAborted
+    markSecureInputSubmitAborted,
+    setConfirmationConfirmed,
+    markConfirmationSubmitStarted,
+    markConfirmationSubmitAcknowledged,
+    markConfirmationSubmitFailed,
+    markConfirmationSubmitAborted
   };
 }

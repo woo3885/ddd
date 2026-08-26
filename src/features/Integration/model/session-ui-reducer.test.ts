@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
+  SessionConfirmation,
   SessionDecision,
   SessionTarget,
   SessionUiEvent,
@@ -66,6 +67,22 @@ const DECISION: SessionDecision = {
   sourceSnapshotId: 'snap-001'
 };
 
+const CONFIRMATION: SessionConfirmation = {
+  confirmationId: 'confirm-001',
+  confirmationType: 'DEPOSIT_SUBSCRIPTION',
+  sourceSnapshotId: 'snap-001',
+  frameId: 'frm-001',
+  frameSequence: 7,
+  summary: {
+    transactionType: '정기예금 가입',
+    items: [
+      { id: 'product-name', label: '상품명', value: '12개월 정기예금' },
+      { id: 'deposit-amount', label: '가입 금액', value: '1,000,000원' },
+      { id: 'deposit-period', label: '가입 기간', value: '12개월' }
+    ]
+  }
+};
+
 function event(
   eventSequence: number,
   eventType: SessionUiEvent['eventType'],
@@ -83,11 +100,185 @@ function event(
     decision: eventType === 'DECISION_REQUIRED' ? DECISION : null,
     secureInput: null,
     occurredAt: '2026-08-19T12:00:00Z',
-    ...overrides
+    ...overrides,
+    confirmation: overrides.confirmation ?? null
   };
 }
 
 describe('sessionUiReducer', () => {
+  it('confirmation을 수신하고 checkbox·승인 ACK를 결과 대기 상태로 관리한다', () => {
+    const required = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'CONFIRMATION_REQUIRED', {
+        status: 'FINAL_CONFIRMATION_REQUIRED',
+        actionRequired: true,
+        confirmation: CONFIRMATION
+      })
+    });
+    expect(required).toMatchObject({
+      workflowStatus: 'FINAL_CONFIRMATION_REQUIRED',
+      activeConfirmation: CONFIRMATION,
+      confirmationConfirmed: false,
+      confirmationSubmitPhase: 'REVIEWING'
+    });
+
+    const checked = sessionUiReducer(required, {
+      type: 'CONFIRMATION_CHECKED_CHANGED',
+      confirmationId: CONFIRMATION.confirmationId,
+      confirmed: true
+    });
+    const submitting = sessionUiReducer(checked, {
+      type: 'CONFIRMATION_SUBMIT_STARTED',
+      confirmationId: CONFIRMATION.confirmationId,
+      action: 'APPROVE'
+    });
+    const waiting = sessionUiReducer(submitting, {
+      type: 'CONFIRMATION_SUBMIT_ACKNOWLEDGED',
+      confirmationId: CONFIRMATION.confirmationId
+    });
+    expect(waiting.confirmationSubmitPhase).toBe('WAITING_FOR_RESULT');
+    expect(waiting.activeConfirmation).toEqual(CONFIRMATION);
+    expect(waiting.workflowStatus).toBe('FINAL_CONFIRMATION_REQUIRED');
+  });
+
+  it.each([
+    'CONFIRMATION_RESOLVED',
+    'CONFIRMATION_REJECTED',
+    'CONFIRMATION_CLEAR'
+  ] as const)('%s에서 identity가 일치할 때만 confirmation을 해제한다', (eventType) => {
+    const active = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'CONFIRMATION_REQUIRED', {
+        status: 'FINAL_CONFIRMATION_REQUIRED',
+        actionRequired: true,
+        confirmation: CONFIRMATION
+      })
+    });
+    const mismatch = sessionUiReducer(active, {
+      type: 'EVENT_RECEIVED',
+      event: event(2, eventType, {
+        status:
+          eventType === 'CONFIRMATION_RESOLVED'
+            ? 'PAGE_LOADING'
+            : eventType === 'CONFIRMATION_REJECTED'
+              ? 'CANCELLED'
+              : null,
+        confirmation: {
+          ...CONFIRMATION,
+          confirmationId: 'confirm-other',
+          summary: null
+        }
+      })
+    });
+    expect(mismatch.activeConfirmation).toEqual(CONFIRMATION);
+
+    const cleared = sessionUiReducer(mismatch, {
+      type: 'EVENT_RECEIVED',
+      event: event(3, eventType, {
+        status:
+          eventType === 'CONFIRMATION_RESOLVED'
+            ? 'PAGE_LOADING'
+            : eventType === 'CONFIRMATION_REJECTED'
+              ? 'CANCELLED'
+              : null,
+        confirmation: { ...CONFIRMATION, summary: null }
+      })
+    });
+    expect(cleared.activeConfirmation).toBeNull();
+    expect(cleared.confirmationSubmitPhase).toBe('IDLE');
+    if (eventType === 'CONFIRMATION_RESOLVED') {
+      expect(cleared.workflowStatus).toBe('PAGE_LOADING');
+    }
+    if (eventType === 'CONFIRMATION_REJECTED') {
+      expect(cleared.workflowStatus).toBe('CANCELLED');
+    }
+  });
+
+  it('동일 confirmation snapshot은 checkbox를 보존하고 새 ID에서는 초기화한다', () => {
+    const active = {
+      ...createInitialSessionUiState(SESSION_ID, 'FINAL_CONFIRMATION_REQUIRED'),
+      activeConfirmation: CONFIRMATION,
+      confirmationConfirmed: true,
+      confirmationSubmitPhase: 'REVIEWING' as const,
+      lastEventSequence: 4
+    };
+    const confirmationEvent = event(5, 'CONFIRMATION_REQUIRED', {
+      status: 'FINAL_CONFIRMATION_REQUIRED',
+      actionRequired: true,
+      confirmation: CONFIRMATION
+    });
+    const same = sessionUiReducer(active, {
+      type: 'SNAPSHOT_REPLACED',
+      snapshot: {
+        sessionId: SESSION_ID,
+        latestEventSequence: 5,
+        state: event(4, 'STATE', { status: 'FINAL_CONFIRMATION_REQUIRED' }),
+        guide: null,
+        target: null,
+        decision: null,
+        secureInput: null,
+        confirmation: confirmationEvent
+      }
+    });
+    expect(same.confirmationConfirmed).toBe(true);
+
+    const nextConfirmation = {
+      ...CONFIRMATION,
+      confirmationId: 'confirm-002'
+    };
+    const next = sessionUiReducer(same, {
+      type: 'EVENT_RECEIVED',
+      event: event(6, 'CONFIRMATION_REQUIRED', {
+        status: 'FINAL_CONFIRMATION_REQUIRED',
+        actionRequired: true,
+        confirmation: nextConfirmation
+      })
+    });
+    expect(next.confirmationConfirmed).toBe(false);
+    expect(next.activeConfirmation?.confirmationId).toBe('confirm-002');
+  });
+
+  it('새 frame과 secure·risk·terminal 상태에서 confirmation을 fail-closed한다', () => {
+    const active = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
+      type: 'EVENT_RECEIVED',
+      event: event(1, 'CONFIRMATION_REQUIRED', {
+        status: 'FINAL_CONFIRMATION_REQUIRED',
+        actionRequired: true,
+        confirmation: CONFIRMATION
+      })
+    });
+    const stale = sessionUiReducer(active, {
+      type: 'FRAME_OBSERVED',
+      frame: { frameId: 'frm-002', sequence: 8 }
+    });
+    expect(stale.activeConfirmation).toBeNull();
+
+    for (const status of [
+      'SECURE_INPUT_REQUIRED',
+      'RISK_WARNING',
+      'COMPLETED',
+      'CANCELLED',
+      'ERROR',
+      'TERMINATED'
+    ] as const) {
+      const cleared = sessionUiReducer(active, {
+        type: 'EVENT_RECEIVED',
+        event: event(2, 'STATE', { status })
+      });
+      expect(cleared.activeConfirmation).toBeNull();
+      if (status === 'RISK_WARNING' || status === 'ERROR' || status === 'CANCELLED') {
+        const late = sessionUiReducer(cleared, {
+          type: 'EVENT_RECEIVED',
+          event: event(3, 'CONFIRMATION_REQUIRED', {
+            status: 'FINAL_CONFIRMATION_REQUIRED',
+            actionRequired: true,
+            confirmation: CONFIRMATION
+          })
+        });
+        expect(late.activeConfirmation).toBeNull();
+      }
+    }
+  });
   it('secure input lifecycle과 completion submit 상태를 fail-closed로 관리한다', () => {
     const secureInput = {
       secureRequestId: 'secure-request-001',
@@ -186,7 +377,8 @@ describe('sessionUiReducer', () => {
         guide: null,
         target: null,
         decision: null,
-        secureInput: secureInputEvent
+        secureInput: secureInputEvent,
+        confirmation: null
       }
     });
     expect(restored.activeSecureInput).toEqual(secureInputEvent.secureInput);
@@ -247,7 +439,8 @@ describe('sessionUiReducer', () => {
       guide: event(4, 'GUIDE', { message: '페이지를 준비하고 있습니다.' }),
       target: event(5, 'TARGET'),
       decision: null,
-      secureInput: null
+      secureInput: null,
+      confirmation: null
     };
     const replaced = sessionUiReducer(createInitialSessionUiState(SESSION_ID), {
       type: 'SNAPSHOT_REPLACED',

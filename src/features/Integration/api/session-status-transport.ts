@@ -1,6 +1,10 @@
 import { Client } from '@stomp/stompjs';
 
 import { getWorkflowStatusPresentation } from '@/shared/model/workflow-status-presentation';
+import {
+  analyzeFinalConfirmationSummary,
+  type FinalConfirmationSummary
+} from '@/shared/model/final-confirmation';
 import type { WorkflowStatus } from '@/types/frontend-state';
 import { resolveBackendBaseUrl } from './session-rest-client';
 
@@ -22,6 +26,16 @@ const FINANCIAL_NUMBER_PATTERN = /(?:^|\D)\d{2,6}(?:[- ]\d{2,6}){2,4}(?:\D|$)|(?
 const RESIDENT_NUMBER_PATTERN = /(?:^|\D)\d{6}-?[1-4]\d{6}(?:\D|$)/;
 const PHONE_NUMBER_PATTERN = /(?:^|\D)01[016789]-?\d{3,4}-?\d{4}(?:\D|$)/;
 const SENSITIVE_LABEL_PATTERN = /(?:sensitive|otp|password|passwd|pin|비밀번호|인증번호|인증\s*코드)/i;
+const CONFIRMATION_ITEM_IDS = [
+  'product-name',
+  'deposit-amount',
+  'deposit-period'
+] as const;
+const CONFIRMATION_ITEM_LABELS = [
+  '상품명',
+  '가입 금액',
+  '가입 기간'
+] as const;
 
 const WORKFLOW_STATUSES: ReadonlySet<WorkflowStatus> = new Set([
   'SESSION_CREATED',
@@ -75,6 +89,17 @@ export interface SessionSecureInput {
   message: string;
 }
 
+export type SessionConfirmationType = 'DEPOSIT_SUBSCRIPTION';
+
+export interface SessionConfirmation {
+  confirmationId: string;
+  confirmationType: SessionConfirmationType;
+  sourceSnapshotId: string;
+  frameId: string;
+  frameSequence: number;
+  summary: FinalConfirmationSummary | null;
+}
+
 export type SessionUiEventType =
   | 'STATE'
   | 'GUIDE'
@@ -85,7 +110,11 @@ export type SessionUiEventType =
   | 'DECISION_CLEAR'
   | 'SECURE_INPUT_REQUIRED'
   | 'SECURE_INPUT_RESOLVED'
-  | 'SECURE_INPUT_CLEAR';
+  | 'SECURE_INPUT_CLEAR'
+  | 'CONFIRMATION_REQUIRED'
+  | 'CONFIRMATION_RESOLVED'
+  | 'CONFIRMATION_REJECTED'
+  | 'CONFIRMATION_CLEAR';
 
 export interface SessionTarget {
   elementId: string;
@@ -110,6 +139,7 @@ export interface SessionUiEvent {
   target: SessionTarget | null;
   decision: SessionDecision | null;
   secureInput: SessionSecureInput | null;
+  confirmation: SessionConfirmation | null;
   occurredAt: string;
 }
 
@@ -121,6 +151,7 @@ export interface SessionUiSnapshot {
   target: SessionUiEvent | null;
   decision: SessionUiEvent | null;
   secureInput: SessionUiEvent | null;
+  confirmation: SessionUiEvent | null;
 }
 
 export type SessionStatusTransportEvent =
@@ -373,6 +404,81 @@ function validateSecureInput(value: unknown): SessionSecureInput {
   };
 }
 
+function validateConfirmationSummary(value: unknown): FinalConfirmationSummary {
+  if (
+    !isRecord(value) ||
+    value.transactionType !== '정기예금 가입' ||
+    !Array.isArray(value.items) ||
+    value.items.length !== CONFIRMATION_ITEM_IDS.length ||
+    SENSITIVE_LABEL_PATTERN.test(value.transactionType) ||
+    HTML_PATTERN.test(value.transactionType) ||
+    CONTROL_CHARACTER_PATTERN.test(value.transactionType)
+  ) {
+    return protocolError();
+  }
+
+  const summary: FinalConfirmationSummary = {
+    transactionType: value.transactionType,
+    items: value.items.map((item, index) => {
+      if (
+        !isRecord(item) ||
+        typeof item.id !== 'string' ||
+        item.id !== CONFIRMATION_ITEM_IDS[index] ||
+        item.id.length > 50 ||
+        typeof item.label !== 'string' ||
+        item.label !== CONFIRMATION_ITEM_LABELS[index] ||
+        Array.from(item.label).length > 30 ||
+        typeof item.value !== 'string' ||
+        Array.from(item.value).length > 100 ||
+        SENSITIVE_LABEL_PATTERN.test(item.label) ||
+        SENSITIVE_LABEL_PATTERN.test(item.value) ||
+        HTML_PATTERN.test(item.label) ||
+        HTML_PATTERN.test(item.value) ||
+        CONTROL_CHARACTER_PATTERN.test(item.label) ||
+        CONTROL_CHARACTER_PATTERN.test(item.value) ||
+        RESIDENT_NUMBER_PATTERN.test(item.label) ||
+        RESIDENT_NUMBER_PATTERN.test(item.value) ||
+        PHONE_NUMBER_PATTERN.test(item.label) ||
+        PHONE_NUMBER_PATTERN.test(item.value)
+      ) {
+        return protocolError();
+      }
+      return { id: item.id, label: item.label, value: item.value };
+    })
+  };
+  const analysis = analyzeFinalConfirmationSummary(summary);
+  if (analysis.state !== 'READY' || analysis.summary === null) {
+    return protocolError();
+  }
+  return analysis.summary;
+}
+
+function validateConfirmation(value: unknown): SessionConfirmation {
+  if (
+    !isRecord(value) ||
+    typeof value.confirmationId !== 'string' ||
+    !EVENT_ID_PATTERN.test(value.confirmationId) ||
+    value.confirmationType !== 'DEPOSIT_SUBSCRIPTION' ||
+    typeof value.sourceSnapshotId !== 'string' ||
+    !SNAPSHOT_ID_PATTERN.test(value.sourceSnapshotId) ||
+    typeof value.frameId !== 'string' ||
+    !FRAME_ID_PATTERN.test(value.frameId) ||
+    !Number.isSafeInteger(value.frameSequence) ||
+    Number(value.frameSequence) < 1
+  ) {
+    return protocolError();
+  }
+  return {
+    confirmationId: value.confirmationId,
+    confirmationType: 'DEPOSIT_SUBSCRIPTION',
+    sourceSnapshotId: value.sourceSnapshotId,
+    frameId: value.frameId,
+    frameSequence: Number(value.frameSequence),
+    summary:
+      value.summary === null ? null : validateConfirmationSummary(value.summary)
+  };
+}
+
 function validateTarget(value: unknown): SessionTarget {
   if (!isRecord(value)) return protocolError();
 
@@ -429,7 +535,11 @@ export function validateSessionUiEvent(
       'DECISION_CLEAR',
       'SECURE_INPUT_REQUIRED',
       'SECURE_INPUT_RESOLVED',
-      'SECURE_INPUT_CLEAR'
+      'SECURE_INPUT_CLEAR',
+      'CONFIRMATION_REQUIRED',
+      'CONFIRMATION_RESOLVED',
+      'CONFIRMATION_REJECTED',
+      'CONFIRMATION_CLEAR'
     ].includes(
       String(value.eventType)
     ) ||
@@ -446,12 +556,23 @@ export function validateSessionUiEvent(
   const decision = value.decision === null ? null : validateDecision(value.decision);
   const secureInput =
     value.secureInput === null ? null : validateSecureInput(value.secureInput);
+  const confirmation =
+    value.confirmation === null ? null : validateConfirmation(value.confirmation);
 
   const secureEvent =
     eventType === 'SECURE_INPUT_REQUIRED' ||
     eventType === 'SECURE_INPUT_RESOLVED';
   const allowedStatus =
-    eventType === 'STATE' || secureEvent;
+    eventType === 'STATE' ||
+    secureEvent ||
+    eventType === 'CONFIRMATION_REQUIRED' ||
+    eventType === 'CONFIRMATION_RESOLVED' ||
+    eventType === 'CONFIRMATION_REJECTED';
+  const confirmationEvent =
+    eventType === 'CONFIRMATION_REQUIRED' ||
+    eventType === 'CONFIRMATION_RESOLVED' ||
+    eventType === 'CONFIRMATION_REJECTED' ||
+    eventType === 'CONFIRMATION_CLEAR';
 
   if (
     (eventType === 'STATE' && status === null) ||
@@ -465,6 +586,24 @@ export function validateSessionUiEvent(
     (eventType !== 'DECISION_REQUIRED' && decision !== null) ||
     (secureEvent && secureInput === null) ||
     (!secureEvent && secureInput !== null) ||
+    (confirmationEvent && confirmation === null) ||
+    (!confirmationEvent && confirmation !== null) ||
+    (eventType === 'CONFIRMATION_REQUIRED' &&
+      (status !== 'FINAL_CONFIRMATION_REQUIRED' ||
+        confirmation?.summary === null ||
+        value.actionRequired !== true)) ||
+    (eventType === 'CONFIRMATION_RESOLVED' &&
+      (status !== 'PAGE_LOADING' ||
+        confirmation?.summary !== null ||
+        value.actionRequired !== false)) ||
+    (eventType === 'CONFIRMATION_REJECTED' &&
+      (status !== 'CANCELLED' ||
+        confirmation?.summary !== null ||
+        value.actionRequired !== false)) ||
+    (eventType === 'CONFIRMATION_CLEAR' &&
+      (status !== null ||
+        confirmation?.summary !== null ||
+        value.actionRequired !== false)) ||
     (eventType === 'DECISION_REQUIRED' && value.actionRequired !== true) ||
     (eventType === 'SECURE_INPUT_REQUIRED' && value.actionRequired !== true) ||
     ((eventType === 'DECISION_RESOLVED' || eventType === 'DECISION_CLEAR') &&
@@ -486,6 +625,7 @@ export function validateSessionUiEvent(
     target,
     decision,
     secureInput,
+    confirmation,
     occurredAt: value.occurredAt
   };
 }
@@ -510,8 +650,9 @@ export function validateSessionUiSnapshot(
   const target = parseEntry(value.target);
   const decision = parseEntry(value.decision);
   const secureInput = parseEntry(value.secureInput);
+  const confirmation = parseEntry(value.confirmation);
   const latestEventSequence = Number(value.latestEventSequence);
-  const entries = [state, guide, target, decision, secureInput].filter(
+  const entries = [state, guide, target, decision, secureInput, confirmation].filter(
     (entry): entry is SessionUiEvent => entry !== null
   );
 
@@ -522,6 +663,8 @@ export function validateSessionUiSnapshot(
     (decision !== null && decision.eventType !== 'DECISION_REQUIRED') ||
     (secureInput !== null &&
       secureInput.eventType !== 'SECURE_INPUT_REQUIRED') ||
+    (confirmation !== null &&
+      confirmation.eventType !== 'CONFIRMATION_REQUIRED') ||
     entries.some((entry) => entry.eventSequence > latestEventSequence)
   ) {
     return protocolError();
@@ -534,7 +677,8 @@ export function validateSessionUiSnapshot(
     guide,
     target,
     decision,
-    secureInput
+    secureInput,
+    confirmation
   };
 }
 

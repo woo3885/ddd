@@ -5,6 +5,7 @@ import type {
 import type { WorkflowStatus } from '@/types/frontend-state';
 import {
   TERMINAL_WORKFLOW_STATUSES,
+  clearSessionConfirmation,
   clearSessionDecision,
   clearSessionSecureInput,
   createInitialSessionUiState,
@@ -39,7 +40,24 @@ export type SessionUiAction =
   | { type: 'SECURE_INPUT_SUBMIT_STARTED'; secureRequestId: string }
   | { type: 'SECURE_INPUT_SUBMIT_ACKNOWLEDGED'; secureRequestId: string }
   | { type: 'SECURE_INPUT_SUBMIT_FAILED'; secureRequestId: string; message: string }
-  | { type: 'SECURE_INPUT_SUBMIT_ABORTED'; secureRequestId: string };
+  | { type: 'SECURE_INPUT_SUBMIT_ABORTED'; secureRequestId: string }
+  | {
+      type: 'CONFIRMATION_CHECKED_CHANGED';
+      confirmationId: string;
+      confirmed: boolean;
+    }
+  | {
+      type: 'CONFIRMATION_SUBMIT_STARTED';
+      confirmationId: string;
+      action: 'APPROVE' | 'REJECT';
+    }
+  | { type: 'CONFIRMATION_SUBMIT_ACKNOWLEDGED'; confirmationId: string }
+  | {
+      type: 'CONFIRMATION_SUBMIT_FAILED';
+      confirmationId: string;
+      message: string;
+    }
+  | { type: 'CONFIRMATION_SUBMIT_ABORTED'; confirmationId: string };
 
 function isSameSession(state: SessionUiState, sessionId: string): boolean {
   return state.sessionId === sessionId;
@@ -71,8 +89,11 @@ function applyEvent(
   };
 
   if (
-    TERMINAL_WORKFLOW_STATUSES.has(state.workflowStatus) &&
-    event.eventType === 'SECURE_INPUT_REQUIRED'
+    (TERMINAL_WORKFLOW_STATUSES.has(state.workflowStatus) ||
+      state.workflowStatus === 'ERROR' ||
+      state.workflowStatus === 'RISK_WARNING') &&
+    (event.eventType === 'SECURE_INPUT_REQUIRED' ||
+      event.eventType === 'CONFIRMATION_REQUIRED')
   ) {
     return sequenceState;
   }
@@ -96,9 +117,15 @@ function applyEvent(
       const decisionState = nextStatus === 'USER_DECISION_REQUIRED'
         ? nextState
         : clearSessionDecision(nextState);
-      return nextStatus === 'SECURE_INPUT_REQUIRED'
+      const secureState = nextStatus === 'SECURE_INPUT_REQUIRED'
         ? decisionState
         : clearSessionSecureInput(decisionState);
+      return nextStatus === 'SECURE_INPUT_REQUIRED' ||
+        nextStatus === 'RISK_WARNING' ||
+        TERMINAL_WORKFLOW_STATUSES.has(nextStatus) ||
+        nextStatus === 'ERROR'
+        ? clearSessionConfirmation(secureState)
+        : secureState;
     }
     case 'GUIDE':
       return {
@@ -185,6 +212,56 @@ function applyEvent(
     }
     case 'SECURE_INPUT_CLEAR':
       return clearSessionSecureInput(sequenceState);
+    case 'CONFIRMATION_REQUIRED': {
+      const confirmation = event.confirmation;
+      if (!confirmation?.summary) {
+        return clearSessionConfirmation(sequenceState);
+      }
+      const sameConfirmation =
+        state.activeConfirmation?.confirmationId === confirmation.confirmationId;
+      const nextState = clearSessionSecureInput(
+        clearSessionDecision({
+          ...sequenceState,
+          workflowStatus: 'FINAL_CONFIRMATION_REQUIRED',
+          guideMessage: messageForEvent(event, 'FINAL_CONFIRMATION_REQUIRED'),
+          target: null
+        })
+      );
+      return {
+        ...nextState,
+        activeConfirmation: confirmation,
+        confirmationConfirmed: sameConfirmation
+          ? state.confirmationConfirmed
+          : false,
+        confirmationSubmitPhase: sameConfirmation
+          ? state.confirmationSubmitPhase
+          : 'REVIEWING',
+        safeConfirmationError: sameConfirmation
+          ? state.safeConfirmationError
+          : ''
+      };
+    }
+    case 'CONFIRMATION_RESOLVED':
+    case 'CONFIRMATION_REJECTED': {
+      if (
+        state.activeConfirmation?.confirmationId !==
+        event.confirmation?.confirmationId
+      ) {
+        return sequenceState;
+      }
+      const nextStatus = event.status ?? state.workflowStatus;
+      return clearSessionConfirmation({
+        ...sequenceState,
+        workflowStatus: nextStatus,
+        guideMessage: messageForEvent(event, nextStatus),
+        target: null
+      });
+    }
+    case 'CONFIRMATION_CLEAR':
+      return state.activeConfirmation?.confirmationId ===
+        event.confirmation?.confirmationId
+        ? clearSessionConfirmation(sequenceState)
+        : sequenceState;
   }
 }
 
@@ -237,6 +314,23 @@ function replaceSnapshot(
     };
   }
   nextState = clearSessionSecureInput(nextState);
+  if (
+    workflowStatus === 'FINAL_CONFIRMATION_REQUIRED' &&
+    snapshot.confirmation !== null
+  ) {
+    nextState = applyEvent(
+      {
+        ...clearSessionDecision(nextState),
+        lastEventSequence: null
+      },
+      snapshot.confirmation
+    );
+    return {
+      ...nextState,
+      lastEventSequence: snapshot.latestEventSequence
+    };
+  }
+  nextState = clearSessionConfirmation(nextState);
   if (workflowStatus !== 'USER_DECISION_REQUIRED' || snapshot.decision === null) {
     return clearSessionDecision(nextState);
   }
@@ -274,6 +368,11 @@ export function sessionUiReducer(
           state.secureInputSubmitPhase === 'SUBMITTING'
             ? 'WAITING_FOR_USER'
             : state.secureInputSubmitPhase,
+        confirmationSubmitPhase:
+          state.confirmationSubmitPhase === 'SUBMITTING_APPROVAL' ||
+          state.confirmationSubmitPhase === 'SUBMITTING_REJECTION'
+            ? 'REVIEWING'
+            : state.confirmationSubmitPhase,
         safeError: ''
       };
     case 'CONNECTED':
@@ -291,6 +390,11 @@ export function sessionUiReducer(
           state.secureInputSubmitPhase === 'SUBMITTING'
             ? 'WAITING_FOR_USER'
             : state.secureInputSubmitPhase,
+        confirmationSubmitPhase:
+          state.confirmationSubmitPhase === 'SUBMITTING_APPROVAL' ||
+          state.confirmationSubmitPhase === 'SUBMITTING_REJECTION'
+            ? 'REVIEWING'
+            : state.confirmationSubmitPhase,
         safeError: '실시간 상태 연결이 끊겼습니다. 자동으로 복구하고 있습니다.'
       };
     case 'SAFE_ERROR':
@@ -306,6 +410,11 @@ export function sessionUiReducer(
           state.secureInputSubmitPhase === 'SUBMITTING'
             ? 'WAITING_FOR_USER'
             : state.secureInputSubmitPhase,
+        confirmationSubmitPhase:
+          state.confirmationSubmitPhase === 'SUBMITTING_APPROVAL' ||
+          state.confirmationSubmitPhase === 'SUBMITTING_REJECTION'
+            ? 'REVIEWING'
+            : state.confirmationSubmitPhase,
         safeError: action.message
       };
     case 'SNAPSHOT_REPLACED':
@@ -315,6 +424,7 @@ export function sessionUiReducer(
     case 'FRAME_OBSERVED': {
       const target = state.target;
       const decision = state.activeDecision;
+      const confirmation = state.activeConfirmation;
       if (!action.frame) return state;
       const targetIsStale = Boolean(
         target &&
@@ -328,8 +438,19 @@ export function sessionUiReducer(
             (action.frame.sequence === decision.frameSequence &&
               action.frame.frameId !== decision.frameId))
       );
+      const confirmationIsStale = Boolean(
+        confirmation &&
+          (action.frame.sequence > confirmation.frameSequence ||
+            (action.frame.sequence === confirmation.frameSequence &&
+              action.frame.frameId !== confirmation.frameId))
+      );
       const nextState = targetIsStale ? { ...state, target: null } : state;
-      return decisionIsStale ? clearSessionDecision(nextState) : nextState;
+      const decisionState = decisionIsStale
+        ? clearSessionDecision(nextState)
+        : nextState;
+      return confirmationIsStale
+        ? clearSessionConfirmation(decisionState)
+        : decisionState;
     }
     case 'DECISION_OPTION_SELECTED': {
       const decision = state.activeDecision;
@@ -446,6 +567,58 @@ export function sessionUiReducer(
             ...state,
             secureInputSubmitPhase: 'WAITING_FOR_USER',
             safeSecureInputError: ''
+          }
+        : state;
+    case 'CONFIRMATION_CHECKED_CHANGED':
+      return state.activeConfirmation?.confirmationId === action.confirmationId &&
+        (state.confirmationSubmitPhase === 'REVIEWING' ||
+          state.confirmationSubmitPhase === 'ERROR')
+        ? {
+            ...state,
+            confirmationConfirmed: action.confirmed,
+            confirmationSubmitPhase: 'REVIEWING',
+            safeConfirmationError: ''
+          }
+        : state;
+    case 'CONFIRMATION_SUBMIT_STARTED':
+      return state.activeConfirmation?.confirmationId === action.confirmationId &&
+        (state.confirmationSubmitPhase === 'REVIEWING' ||
+          state.confirmationSubmitPhase === 'ERROR')
+        ? {
+            ...state,
+            confirmationSubmitPhase:
+              action.action === 'APPROVE'
+                ? 'SUBMITTING_APPROVAL'
+                : 'SUBMITTING_REJECTION',
+            safeConfirmationError: ''
+          }
+        : state;
+    case 'CONFIRMATION_SUBMIT_ACKNOWLEDGED':
+      return state.activeConfirmation?.confirmationId === action.confirmationId &&
+        (state.confirmationSubmitPhase === 'SUBMITTING_APPROVAL' ||
+          state.confirmationSubmitPhase === 'SUBMITTING_REJECTION')
+        ? {
+            ...state,
+            confirmationSubmitPhase: 'WAITING_FOR_RESULT',
+            safeConfirmationError: ''
+          }
+        : state;
+    case 'CONFIRMATION_SUBMIT_FAILED':
+      return state.activeConfirmation?.confirmationId === action.confirmationId
+        ? {
+            ...state,
+            confirmationSubmitPhase: 'ERROR',
+            safeConfirmationError: action.message
+          }
+        : state;
+    case 'CONFIRMATION_SUBMIT_ABORTED':
+      return state.activeConfirmation?.confirmationId === action.confirmationId &&
+        (state.confirmationSubmitPhase === 'SUBMITTING_APPROVAL' ||
+          state.confirmationSubmitPhase === 'SUBMITTING_REJECTION')
+        ? {
+            ...state,
+            confirmationSubmitPhase: 'REVIEWING',
+            safeConfirmationError: ''
           }
         : state;
   }

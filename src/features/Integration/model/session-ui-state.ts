@@ -1,4 +1,5 @@
 import type {
+  SessionConfirmation,
   SessionDecision,
   SessionSecureInput,
   SessionTarget,
@@ -28,6 +29,14 @@ export type SecureInputSubmitPhase =
   | 'WAITING_FOR_RESUME'
   | 'ERROR';
 
+export type ConfirmationSubmitPhase =
+  | 'IDLE'
+  | 'REVIEWING'
+  | 'SUBMITTING_APPROVAL'
+  | 'SUBMITTING_REJECTION'
+  | 'WAITING_FOR_RESULT'
+  | 'ERROR';
+
 export interface SessionUiState {
   sessionId: string;
   workflowStatus: WorkflowStatus;
@@ -42,6 +51,10 @@ export interface SessionUiState {
   activeSecureInput: SessionSecureInput | null;
   secureInputSubmitPhase: SecureInputSubmitPhase;
   safeSecureInputError: string;
+  activeConfirmation: SessionConfirmation | null;
+  confirmationConfirmed: boolean;
+  confirmationSubmitPhase: ConfirmationSubmitPhase;
+  safeConfirmationError: string;
   connectionPhase: SessionUiConnectionPhase;
   safeError: string;
 }
@@ -86,8 +99,24 @@ export function createInitialSessionUiState(
     activeSecureInput: null,
     secureInputSubmitPhase: 'IDLE',
     safeSecureInputError: '',
+    activeConfirmation: null,
+    confirmationConfirmed: false,
+    confirmationSubmitPhase: 'IDLE',
+    safeConfirmationError: '',
     connectionPhase: 'CONNECTING',
     safeError: ''
+  };
+}
+
+export function clearSessionConfirmation(
+  state: SessionUiState
+): SessionUiState {
+  return {
+    ...state,
+    activeConfirmation: null,
+    confirmationConfirmed: false,
+    confirmationSubmitPhase: 'IDLE',
+    safeConfirmationError: ''
   };
 }
 
@@ -185,6 +214,54 @@ export function isSecureInputMatchingFrame(
     frame !== null &&
     secureInput.frameId === frame.frameId &&
     secureInput.frameSequence === frame.sequence
+  );
+}
+
+export function isConfirmationMatchingFrame(
+  confirmation: SessionConfirmation | null,
+  frame: SessionFrameIdentity | null
+): boolean {
+  return (
+    confirmation !== null &&
+    frame !== null &&
+    confirmation.frameId === frame.frameId &&
+    confirmation.frameSequence === frame.sequence
+  );
+}
+
+export function canSubmitFinalConfirmation(input: {
+  state: SessionUiState;
+  frame: SessionFrameIdentity | null;
+  frameReady: boolean;
+  frameReconnecting: boolean;
+  viewerActionPending: boolean;
+  action: 'APPROVE' | 'REJECT';
+}): boolean {
+  const {
+    state,
+    frame,
+    frameReady,
+    frameReconnecting,
+    viewerActionPending,
+    action
+  } = input;
+  const confirmation = state.activeConfirmation;
+  return (
+    state.workflowStatus === 'FINAL_CONFIRMATION_REQUIRED' &&
+    state.connectionPhase === 'CONNECTED' &&
+    confirmation !== null &&
+    confirmation.summary !== null &&
+    (state.confirmationSubmitPhase === 'REVIEWING' ||
+      state.confirmationSubmitPhase === 'ERROR') &&
+    (action === 'REJECT' || state.confirmationConfirmed) &&
+    frameReady &&
+    !frameReconnecting &&
+    !viewerActionPending &&
+    state.activeDecision === null &&
+    state.activeSecureInput === null &&
+    state.decisionSubmitPhase !== 'SUBMITTING' &&
+    state.secureInputSubmitPhase !== 'SUBMITTING' &&
+    isConfirmationMatchingFrame(confirmation, frame)
   );
 }
 

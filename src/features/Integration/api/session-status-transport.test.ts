@@ -27,6 +27,7 @@ function stateEvent(sequence = 1): SessionUiEvent {
     target: null,
     decision: null,
     secureInput: null,
+    confirmation: null,
     occurredAt: '2026-08-19T12:00:00Z'
   };
 }
@@ -53,6 +54,7 @@ function targetEvent(sequence = 2): SessionUiEvent {
     },
     decision: null,
     secureInput: null,
+    confirmation: null,
     occurredAt: '2026-08-19T12:00:01Z'
   };
 }
@@ -88,6 +90,7 @@ function decisionEvent(
       sourceSnapshotId: 'snap-001'
     },
     secureInput: null,
+    confirmation: null,
     occurredAt: '2026-08-19T12:00:02Z'
   };
 }
@@ -110,7 +113,71 @@ function secureInputEvent(sequence = 4): SessionUiEvent {
       frameSequence: 3,
       message: '보안 정보를 원격 화면에서 직접 입력해 주세요.'
     },
+    confirmation: null,
     occurredAt: '2026-08-19T12:00:03Z'
+  };
+}
+
+function confirmationEvent(
+  eventType: Extract<
+    SessionUiEvent['eventType'],
+    | 'CONFIRMATION_REQUIRED'
+    | 'CONFIRMATION_RESOLVED'
+    | 'CONFIRMATION_REJECTED'
+    | 'CONFIRMATION_CLEAR'
+  > = 'CONFIRMATION_REQUIRED',
+  sequence = 5
+): SessionUiEvent {
+  const required = eventType === 'CONFIRMATION_REQUIRED';
+  return {
+    eventId: `evt-${sequence}`,
+    eventSequence: sequence,
+    eventType,
+    sessionId: SESSION_ID,
+    status: required
+      ? 'FINAL_CONFIRMATION_REQUIRED'
+      : eventType === 'CONFIRMATION_RESOLVED'
+        ? 'PAGE_LOADING'
+        : eventType === 'CONFIRMATION_REJECTED'
+          ? 'CANCELLED'
+          : null,
+    message: required
+      ? '예금 가입 전 최종 확인이 필요합니다.'
+      : '최종 확인 요청이 정리되었습니다.',
+    actionRequired: required,
+    target: null,
+    decision: null,
+    secureInput: null,
+    confirmation: {
+      confirmationId: 'confirm-001',
+      confirmationType: 'DEPOSIT_SUBSCRIPTION',
+      sourceSnapshotId: 'snap-001',
+      frameId: 'frm-001',
+      frameSequence: 7,
+      summary: required
+        ? {
+            transactionType: '정기예금 가입',
+            items: [
+              {
+                id: 'product-name',
+                label: '상품명',
+                value: '12개월 정기예금'
+              },
+              {
+                id: 'deposit-amount',
+                label: '가입 금액',
+                value: '1,000,000원'
+              },
+              {
+                id: 'deposit-period',
+                label: '가입 기간',
+                value: '12개월'
+              }
+            ]
+          }
+        : null
+    },
+    occurredAt: '2026-08-27T00:00:00Z'
   };
 }
 
@@ -179,7 +246,8 @@ describe('session-status-transport', () => {
         guide: null,
         target: null,
         decision: null,
-        secureInput: null
+        secureInput: null,
+        confirmation: null
       })
     );
     await vi.waitFor(() => {
@@ -233,7 +301,8 @@ describe('session-status-transport', () => {
         guide: null,
         target: null,
         decision: null,
-        secureInput: null
+        secureInput: null,
+        confirmation: null
       })
     );
 
@@ -301,7 +370,8 @@ describe('session-status-transport', () => {
         guide: null,
         target: null,
         decision,
-        secureInput: null
+        secureInput: null,
+        confirmation: null
       },
       SESSION_ID
     );
@@ -321,11 +391,85 @@ describe('session-status-transport', () => {
         guide: null,
         target: null,
         decision: null,
-        secureInput
+        secureInput,
+        confirmation: null
       },
       SESSION_ID
     );
     expect(snapshot.secureInput?.eventType).toBe('SECURE_INPUT_REQUIRED');
+  });
+
+  it.each([
+    'CONFIRMATION_REQUIRED',
+    'CONFIRMATION_RESOLVED',
+    'CONFIRMATION_REJECTED',
+    'CONFIRMATION_CLEAR'
+  ] as const)('%s의 identity와 required summary를 검증한다', (eventType) => {
+    const validated = validateSessionUiEvent(
+      confirmationEvent(eventType),
+      SESSION_ID
+    );
+    expect(validated.confirmation).toMatchObject({
+      confirmationId: 'confirm-001',
+      frameId: 'frm-001',
+      frameSequence: 7
+    });
+    expect(validated.confirmation?.summary === null).toBe(
+      eventType !== 'CONFIRMATION_REQUIRED'
+    );
+  });
+
+  it('active confirmation을 snapshot에서 복원하고 순서를 보존한다', () => {
+    const confirmation = confirmationEvent('CONFIRMATION_REQUIRED', 5);
+    const snapshot = validateSessionUiSnapshot(
+      {
+        sessionId: SESSION_ID,
+        latestEventSequence: 5,
+        state: { ...stateEvent(4), status: 'FINAL_CONFIRMATION_REQUIRED' },
+        guide: null,
+        target: null,
+        decision: null,
+        secureInput: null,
+        confirmation
+      },
+      SESSION_ID
+    );
+    expect(
+      snapshot.confirmation?.confirmation?.summary?.items.map((item) => item.id)
+    ).toEqual(['product-name', 'deposit-amount', 'deposit-period']);
+  });
+
+  it('malformed·민감·중복 summary와 unsupported type을 fail-closed한다', () => {
+    const base = confirmationEvent();
+    const summary = base.confirmation?.summary;
+    const invalidConfirmations = [
+      { ...base.confirmation, confirmationType: 'TRANSFER' },
+      { ...base.confirmation, summary: { ...summary, items: [] } },
+      {
+        ...base.confirmation,
+        summary: {
+          ...summary,
+          items: [
+            { id: 'secret', label: '비밀번호', value: '1234' }
+          ]
+        }
+      },
+      {
+        ...base.confirmation,
+        summary: {
+          ...summary,
+          items: [
+            { id: 'same', label: '항목', value: '안전한 값' },
+            { id: 'same', label: '항목', value: '다른 값' }
+          ]
+        }
+      }
+    ];
+    for (const confirmation of invalidConfirmations) {
+      expect(() =>
+        validateSessionUiEvent({ ...base, confirmation }, SESSION_ID)
+      ).toThrow('실시간 상태 정보를 안전하게 확인할 수 없습니다.');
+    }
   });
 
   it('secure input의 알 수 없는 type과 민감 message를 fail-closed 처리한다', () => {
@@ -463,7 +607,8 @@ describe('session-status-transport', () => {
           guide: null,
           target: null,
           decision: null,
-          secureInput: null
+          secureInput: null,
+          confirmation: null
         })
       );
     const events: SessionStatusTransportEvent[] = [];
