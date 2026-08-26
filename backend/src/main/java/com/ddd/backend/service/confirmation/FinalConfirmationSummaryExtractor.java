@@ -6,25 +6,23 @@ import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 @Component
 public final class FinalConfirmationSummaryExtractor {
     private static final Pattern PERIOD = Pattern.compile("^[0-9]{1,3}\\s*(개월|년)$");
     private static final Pattern AMOUNT = Pattern.compile(
             "(?<![0-9])([0-9][0-9,]*)\\s*원(?![0-9])");
+    private static final Pattern HTML_OR_SCRIPT = Pattern.compile("[<>]");
+    private static final Pattern CREDENTIAL_TERM = Pattern.compile(
+            "(?i)(?:password|passwd|pwd|비밀번호|비번|otp|one[-_\\s]*time[-_\\s]*password"
+                    + "|인증\\s*(?:번호|코드)|verification[-_\\s]*code"
+                    + "|auth[-_\\s]*code|(?<![a-z0-9])pin(?![a-z0-9])|핀\\s*번호)");
+    private static final Pattern UNMASKED_ACCOUNT_NUMBER = Pattern.compile(
+            "(?<![0-9])[0-9]{10,12}(?![0-9])");
 
     public FinalConfirmationSummary extract(SanitizedDomSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "최종 확인 Snapshot은 필수입니다.");
-        String amount = snapshot.elements().stream()
-                .flatMap(element -> Stream.of(element.text(), element.ariaLabel()))
-                .filter(java.util.Objects::nonNull)
-                .map(String::trim)
-                .filter(value -> SensitiveDataMasker.maskFreeText(value).equals(value))
-                .map(AMOUNT::matcher)
-                .filter(java.util.regex.Matcher::find)
-                .map(matcher -> matcher.group(1) + "원")
-                .findFirst().orElse(null);
+        String amount = extractAmount(snapshot);
         String productName = safeRequired(snapshot.page().productName(), "상품명", 100);
         String productPeriod = safeRequired(snapshot.page().productPeriod(), "가입 기간", 20);
         if (!PERIOD.matcher(productPeriod).matches()) {
@@ -33,21 +31,69 @@ public final class FinalConfirmationSummaryExtractor {
         if (amount == null) {
             throw new IllegalStateException("최종 확인 가입 금액을 확인할 수 없습니다.");
         }
-        return new FinalConfirmationSummary(productName, productPeriod, amount);
+        FinalConfirmationSummary summary =
+                new FinalConfirmationSummary(productName, productPeriod, amount);
+        validateWholeSummary(summary);
+        return summary;
     }
 
     private String safeRequired(String value, String fieldName, int maxLength) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException("최종 확인 " + fieldName + "을 확인할 수 없습니다.");
         }
-        String masked = SensitiveDataMasker.maskFreeText(value.trim());
-        if (!masked.equals(value.trim())) {
-            throw new IllegalStateException("최종 확인 요약에 민감정보가 포함되어 있습니다.");
-        }
-        if (masked.length() > maxLength || masked.indexOf('\n') >= 0
-                || masked.indexOf('\r') >= 0) {
+        // trim 전에 검사해야 문자열 양끝의 제어문자도 숨겨지지 않는다.
+        validateSafeText(value, true);
+        String normalized = value.trim();
+        if (normalized.length() > maxLength) {
             throw new IllegalStateException("최종 확인 " + fieldName + " 형식이 올바르지 않습니다.");
         }
-        return masked;
+        return normalized;
+    }
+
+    private String extractAmount(SanitizedDomSnapshot snapshot) {
+        for (var element : snapshot.elements()) {
+            for (String value : new String[]{element.text(), element.ariaLabel()}) {
+                if (value == null || value.isBlank()) {
+                    continue;
+                }
+                var matcher = AMOUNT.matcher(value);
+                if (!matcher.find()) {
+                    continue;
+                }
+
+                // 정상 금액 토큰은 10~12자리일 수도 있으므로 제거한 주변 문맥을 검사한다.
+                String amountDigits = matcher.group(1);
+                String surroundingText = matcher.replaceFirst(" ");
+                validateSafeText(surroundingText, true);
+                String amount = amountDigits + "원";
+                validateSafeText(amount, false);
+                return amount;
+            }
+        }
+        return null;
+    }
+
+    private void validateWholeSummary(FinalConfirmationSummary summary) {
+        validateSafeText(summary.productName(), true);
+        validateSafeText(summary.productPeriod(), true);
+        // amount 자체의 10~12자리 숫자는 정상적인 고액 금액일 수 있다.
+        validateSafeText(summary.amount(), false);
+    }
+
+    private void validateSafeText(String value, boolean checkAccountNumber) {
+        if (containsControlCharacter(value)
+                || HTML_OR_SCRIPT.matcher(value).find()) {
+            throw new IllegalStateException("최종 확인 요약 형식이 올바르지 않습니다.");
+        }
+        if (CREDENTIAL_TERM.matcher(value).find()
+                || (checkAccountNumber
+                && UNMASKED_ACCOUNT_NUMBER.matcher(value).find())
+                || !SensitiveDataMasker.maskFreeText(value).equals(value)) {
+            throw new IllegalStateException("최종 확인 요약에 민감정보가 포함되어 있습니다.");
+        }
+    }
+
+    private boolean containsControlCharacter(String value) {
+        return value.codePoints().anyMatch(Character::isISOControl);
     }
 }

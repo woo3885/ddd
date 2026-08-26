@@ -8,6 +8,9 @@ Backend는 응답의 상태·type·snapshot·target 정책을 검증하고 `conf
 가입 요약을 생성한다. active confirmation에는 ID, type, pending target, source snapshot,
 `sourceFrameId`, `sourceFrameSequence`, summary를 저장한다. 가입 요약은 상품명·가입 기간·금액이
 모두 안전한 형식이어야 하며 민감정보가 감지되거나 필드가 누락되면 fail-closed한다.
+HTML/script, 모든 ISO 제어문자, password/비밀번호, OTP/인증번호/PIN 및 금액 토큰 외의
+구분자 없는 10~12자리 계좌번호를 허용하지 않는다. 세 필드 중 하나라도 위반하면 일부 필드만
+제외해 이벤트를 만들지 않고 confirmation 전체 생성을 중단한다.
 
 승인/거절 요청은 아래 필드를 모두 보낸다.
 
