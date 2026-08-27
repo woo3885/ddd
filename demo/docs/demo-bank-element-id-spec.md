@@ -279,8 +279,8 @@ screenshot, trace, video와 값 조회를 수행하지 않는다. 실제 전환�
 | `page-deposit-confirmation` | 예금 최종 확인 페이지 루트 |
 | `summary-deposit-confirmation` | 예금 최종 확인 요약 `<dl>` |
 | `notice-deposit-confirmation` | Demo·민감정보 미포함 안내 |
-| `status-deposit-final-approval` | 최종 확인 선택 상태 live region |
-| `checkbox-final-confirmation` | 사용자가 직접 선택하는 최종 확인 checkbox |
+| `status-deposit-final-approval` | Demo 내용 확인·Frontend 최종 승인 안내 live region |
+| `checkbox-final-confirmation` | 승인 버튼과 독립된 선택적 Demo 내용 확인 checkbox |
 | `btn-deposit-confirmation-back` | 동일 상품의 비밀번호 화면 복귀 |
 | `btn-final-cancel` | 예금 최종 승인 거절·메인 복귀 |
 | `btn-final-approve` | 예금 최종 승인·Demo 완료 화면 이동 |
@@ -309,6 +309,8 @@ screenshot, trace, video와 값 조회를 수행하지 않는다. 실제 전환�
 공동 시나리오 상수 `1,000,000원`을 표시한다. 비밀번호, 인증정보, 계좌번호,
 동의·승인 상태는 요약이나 `data-*` 속성에 넣지 않는다.
 
-`btn-final-approve`는 `data-ddd-policy="final-confirmation"`을 제공하고 checkbox
-미선택 시 실제 `disabled` 상태다. checkbox 선택만으로 승인이나 navigation을
-실행하지 않는다.
+`btn-final-approve`는 `data-ddd-policy="final-confirmation"`을 제공하고 Demo
+checkbox 상태와 관계없이 enabled다. checkbox 선택만으로 승인이나
+navigation을 실행하지 않는다. Production 최종 승인 Gate는 Frontend
+`FinalConfirmationPanel`의 checkbox와 별도 approve Action이며, Backend가 이를
+검증한 후에만 pending final CLICK을 실행한다.
