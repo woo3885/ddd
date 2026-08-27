@@ -68,6 +68,12 @@ describe('UserDecisionPanel', () => {
       screen.getByTestId(USER_DECISION_PANEL_SELECTORS.confirm),
       USER_DECISION_PANEL_SELECTORS.confirm
     );
+    expect(
+      screen.getByTestId(USER_DECISION_PANEL_SELECTORS.confirm)
+    ).toHaveAttribute(
+      'aria-describedby',
+      USER_DECISION_PANEL_SELECTORS.status
+    );
     expect(screen.getByRole('group', { name: '선택 항목' })).toBeInTheDocument();
   });
 

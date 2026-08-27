@@ -86,6 +86,8 @@ describe('speech-synthesis model', () => {
 
   it('브라우저 factory 지원을 판정하되 생성만으로 음성 API를 호출하지 않는다', () => {
     const speak = vi.fn();
+    const pause = vi.fn();
+    const resume = vi.fn();
     const cancel = vi.fn();
     const getVoices = vi.fn(() => []);
     const addEventListener = vi.fn();
@@ -105,6 +107,8 @@ describe('speech-synthesis model', () => {
     const factory = resolveBrowserSpeechSynthesisFactory({
       speechSynthesis: {
         speak,
+        pause,
+        resume,
         cancel,
         getVoices,
         addEventListener,

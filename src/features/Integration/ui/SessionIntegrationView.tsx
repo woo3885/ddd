@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import F2_StreamViewer from '@/features/F2_StreamViewer/ui/F2_StreamViewer';
 import F3_SmartOverlay from '@/features/F3_SmartOverlay/ui/F3_SmartOverlay';
+import F4_VoiceController from '@/features/F4_VoiceController/ui/F4_VoiceController';
 import { useSessionFrameIntegration } from '@/features/Integration/hooks/useSessionFrameIntegration';
 import { useSessionDecisionIntegration } from '@/features/Integration/hooks/useSessionDecisionIntegration';
 import { useSessionSecureInputIntegration } from '@/features/Integration/hooks/useSessionSecureInputIntegration';
@@ -31,6 +32,7 @@ export const SESSION_INTEGRATION_SELECTORS = {
   decisionSubmitState: 'status-session-decision-submit',
   secureInputSubmitState: 'status-session-secure-input-submit',
   confirmationSubmitState: 'status-session-confirmation-submit',
+  exitStatus: 'status-session-integration-exit',
   exitButton: 'btn-session-integration-exit'
 } as const;
 
@@ -76,6 +78,8 @@ export default function SessionIntegrationView({
   session,
   onExit
 }: SessionIntegrationViewProps) {
+  const exitRequestInFlight = useRef(false);
+  const [isExiting, setIsExiting] = useState(false);
   const frameIntegration = useSessionFrameIntegration({
     existingSession: session
   });
@@ -166,6 +170,7 @@ export default function SessionIntegrationView({
     decisionIntegration.isBusy ||
     secureInputIntegration.isBusy ||
     confirmationIntegration.isBusy ||
+    isExiting ||
     statusIntegration.connectionPhase === 'CONNECTING' ||
     statusIntegration.connectionPhase === 'RESYNCING';
   const secureInputRequired =
@@ -176,11 +181,22 @@ export default function SessionIntegrationView({
     statusIntegration.decisionSubmitPhase !== 'WAITING_FOR_RESUME';
 
   const handleExit = async () => {
+    if (exitRequestInFlight.current || !frameIntegration.canReset) {
+      return;
+    }
+
+    exitRequestInFlight.current = true;
+    setIsExiting(true);
     decisionIntegration.abort();
     secureInputIntegration.abort();
     confirmationIntegration.abort();
-    await frameIntegration.reset();
-    onExit();
+    try {
+      await frameIntegration.reset();
+      onExit();
+    } finally {
+      exitRequestInFlight.current = false;
+      setIsExiting(false);
+    }
   };
 
   return (
@@ -360,6 +376,13 @@ export default function SessionIntegrationView({
         </div>
       ) : null}
 
+      <F4_VoiceController
+        sessionId={session.sessionId}
+        message={statusIntegration.guideMessage}
+        disabled={!statusTransportReady || frameReconnecting || isExiting}
+        isSecureInput={secureInputRequired}
+      />
+
       <section aria-label="실시간 원격 화면">
         <F2_StreamViewer
           frame={frameIntegration.frame}
@@ -398,12 +421,26 @@ export default function SessionIntegrationView({
       </Panel>
 
       <div className="flex justify-end">
+        {isExiting ? (
+          <p
+            {...elementIdentity(SESSION_INTEGRATION_SELECTORS.exitStatus)}
+            role="status"
+            aria-live="polite"
+            className="mr-4 self-center text-base font-semibold leading-relaxed text-text-primary"
+          >
+            세션 종료를 요청하고 있습니다. 잠시만 기다려 주세요.
+          </p>
+        ) : null}
         <Button
           {...elementIdentity(SESSION_INTEGRATION_SELECTORS.exitButton)}
           variant="danger"
           size="lg"
           type="button"
-          disabled={!frameIntegration.canReset}
+          disabled={!frameIntegration.canReset || isExiting}
+          isLoading={isExiting}
+          aria-describedby={
+            isExiting ? SESSION_INTEGRATION_SELECTORS.exitStatus : undefined
+          }
           onClick={() => void handleExit()}
         >
           세션 종료 후 대시보드로

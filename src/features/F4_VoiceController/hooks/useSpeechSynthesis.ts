@@ -37,6 +37,7 @@ export interface UseSpeechSynthesisResult {
   isSupported: boolean;
   play: () => void;
   replay: () => void;
+  togglePause: () => void;
   stop: () => void;
   setRate: (rate: SpeechSynthesisRate) => void;
 }
@@ -184,7 +185,8 @@ export function useSpeechSynthesis({
         !resolvedFactory ||
         (!shouldRestart &&
           (statusRef.current === 'STARTING' ||
-            statusRef.current === 'SPEAKING'))
+            statusRef.current === 'SPEAKING' ||
+            statusRef.current === 'PAUSED'))
       ) {
         if (!resolvedFactory) {
           setStatusValue('UNSUPPORTED');
@@ -282,10 +284,32 @@ export function useSpeechSynthesis({
     startPlayback(true);
   }, [startPlayback]);
 
+  const togglePause = useCallback(() => {
+    const adapter = adapterRef.current;
+    if (!adapter || disabledRef.current || secureInputRef.current) {
+      return;
+    }
+
+    try {
+      if (statusRef.current === 'SPEAKING') {
+        adapter.pause();
+        setStatusValue('PAUSED');
+      } else if (statusRef.current === 'PAUSED') {
+        adapter.resume();
+        setStatusValue('SPEAKING');
+      }
+    } catch {
+      invalidateActive(true);
+      setErrorMessage(SPEECH_SYNTHESIS_GENERIC_ERROR_MESSAGE);
+      setStatusValue('ERROR');
+    }
+  }, [invalidateActive, setStatusValue]);
+
   const stop = useCallback(() => {
     if (
       statusRef.current !== 'STARTING' &&
-      statusRef.current !== 'SPEAKING'
+      statusRef.current !== 'SPEAKING' &&
+      statusRef.current !== 'PAUSED'
     ) {
       return;
     }
@@ -307,7 +331,9 @@ export function useSpeechSynthesis({
     return () => {
       mountedRef.current = false;
       const shouldCancel =
-        statusRef.current === 'STARTING' || statusRef.current === 'SPEAKING';
+        statusRef.current === 'STARTING' ||
+        statusRef.current === 'SPEAKING' ||
+        statusRef.current === 'PAUSED';
       invalidateActive(shouldCancel);
       detachVoiceListener();
       adapterRef.current = null;
@@ -399,6 +425,7 @@ export function useSpeechSynthesis({
     isSupported,
     play,
     replay,
+    togglePause,
     stop,
     setRate
   };

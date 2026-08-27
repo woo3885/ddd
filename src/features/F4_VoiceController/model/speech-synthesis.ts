@@ -4,6 +4,7 @@ export type SpeechSynthesisStatus =
   | 'IDLE'
   | 'STARTING'
   | 'SPEAKING'
+  | 'PAUSED'
   | 'COMPLETED'
   | 'ERROR'
   | 'UNSUPPORTED';
@@ -47,6 +48,8 @@ export interface SpeechSynthesisUtteranceLike {
 export interface SpeechSynthesisAdapter {
   createUtterance: (text: string) => SpeechSynthesisUtteranceLike;
   speak: (utterance: SpeechSynthesisUtteranceLike) => void;
+  pause: () => void;
+  resume: () => void;
   cancel: () => void;
   getVoices: () => readonly SpeechSynthesisVoiceLike[];
   addEventListener: (
@@ -68,6 +71,8 @@ interface SpeechSynthesisGlobalLike {
 
 interface BrowserSpeechSynthesisLike {
   speak: (utterance: SpeechSynthesisUtterance) => void;
+  pause: () => void;
+  resume: () => void;
   cancel: () => void;
   getVoices: () => SpeechSynthesisVoice[];
   addEventListener: (type: 'voiceschanged', listener: () => void) => void;
@@ -81,6 +86,7 @@ export const TTS_CONTROLLER_SELECTORS = {
   root: 'controller-tts',
   playButton: 'btn-tts-play',
   replayButton: 'btn-tts-replay',
+  pauseButton: 'btn-tts-pause',
   stopButton: 'btn-tts-stop',
   rateSelect: 'select-tts-rate',
   playbackStatus: 'status-tts-playback',
@@ -109,6 +115,8 @@ function isBrowserSpeechSynthesis(
 
   return (
     typeof value.speak === 'function' &&
+    typeof value.pause === 'function' &&
+    typeof value.resume === 'function' &&
     typeof value.cancel === 'function' &&
     typeof value.getVoices === 'function' &&
     typeof value.addEventListener === 'function' &&
@@ -195,6 +203,8 @@ export function resolveBrowserSpeechSynthesisFactory(
       new Utterance(text) as SpeechSynthesisUtteranceLike,
     speak: (utterance) =>
       synthesis.speak(utterance as SpeechSynthesisUtterance),
+    pause: () => synthesis.pause(),
+    resume: () => synthesis.resume(),
     cancel: () => synthesis.cancel(),
     getVoices: () => synthesis.getVoices(),
     addEventListener: (type, listener) =>
