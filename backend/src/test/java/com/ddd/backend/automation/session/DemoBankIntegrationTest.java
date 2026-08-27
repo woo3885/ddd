@@ -329,7 +329,7 @@ class DemoBankIntegrationTest {
                     .isEqualTo(com.ddd.backend.automation.BrowserActionExecutionStatus.EXECUTED);
             manager.execute(sessionId, COMMAND_TIMEOUT, page -> {
                 page.waitForURL("**/deposit/completed/deposit-12m");
-                assertThat(page.locator("#page-deposit-completed")).isVisible();
+                assertThat(page.locator("#page-deposit-completion")).isVisible();
                 return null;
             });
             org.assertj.core.api.Assertions.assertThatThrownBy(() ->
