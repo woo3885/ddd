@@ -37,8 +37,8 @@ export default function DepositConfirmationPage({
       title="예금 가입 내용을 최종 확인해 주세요"
     >
       <p className="page-introduction">
-        상품과 가입 조건을 확인한 뒤 사용자가 직접 최종 승인 여부를
-        선택합니다.
+        상품과 가입 조건을 확인해 주세요. 최종 승인은 금융길잡이
+        화면에서 직접 진행합니다.
       </p>
 
       <aside
@@ -96,11 +96,13 @@ export default function DepositConfirmationPage({
               onChange={handleConfirmationChange}
             />
             <span>
-              표시된 Demo 예금 가입 내용을 확인했으며 최종 승인 단계에
-              동의합니다.
+              표시된 Demo 예금 가입 내용을 확인했습니다.
             </span>
           </label>
-          <p>체크박스 선택만으로 최종 승인이 실행되지는 않습니다.</p>
+          <p>
+            Demo 내부 확인 항목은 최종 승인 버튼의 활성화
+            조건이 아닙니다.
+          </p>
         </fieldset>
 
         <p
@@ -110,8 +112,8 @@ export default function DepositConfirmationPage({
           aria-live="polite"
         >
           {confirmed
-            ? '내용을 확인했습니다. 최종 승인 또는 취소 버튼을 직접 선택해 주세요.'
-            : '최종 승인 전에 확인 항목을 직접 선택해 주세요.'}
+            ? 'Demo 내용을 확인했습니다. 최종 승인은 금융길잡이 화면에서 진행합니다.'
+            : '최종 승인은 금융길잡이 화면에서 진행합니다.'}
         </p>
 
         <div className="transfer-confirmation-actions">
@@ -140,7 +142,6 @@ export default function DepositConfirmationPage({
             type="button"
             className="primary-button"
             data-ddd-policy="final-confirmation"
-            disabled={!confirmed}
             aria-describedby={ELEMENT_IDS.STATUS_DEPOSIT_FINAL_APPROVAL}
             onClick={() =>
               window.location.assign(createDepositCompletedPath(product.id))

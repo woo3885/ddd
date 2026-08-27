@@ -250,11 +250,13 @@ checkbox 선택과 승인을 증명하지 않는다. 메인 복귀만 제공하�
 않는다.
 
 `DEPOSIT_CONFIRMATION`은 상품 데이터의 상품명·기간과 D25 공동 시나리오의
-Demo 가입 금액 `1,000,000원`을 고정 순서로 표시한다. 최종 승인 checkbox는
-초기 미선택이고 `btn-final-approve`는 실제 disabled다. checkbox를 선택하는
-것만으로는 승인되지 않으며 사용자가 승인 버튼을 직접 눌러야
-`/deposit/completed/:productId`로 이동한다. 거절 버튼은 완료 화면에 진입하지
-않고 메인으로 돌아간다.
+Demo 가입 금액 `1,000,000원`을 고정 순서로 표시한다. Demo 내부
+checkbox는 선택적인 내용 확인 표시이며 `btn-final-approve` 활성화
+조건이 아니다. enabled approve 버튼은 `data-ddd-policy="final-confirmation"`을
+유지한다. Production 통합에서 C는 해당 버튼을 자동 CLICK하지 않고
+Frontend 최종 승인을 기다린다. Backend는 Frontend checkbox 선택과 별도
+approve Action을 검증한 후에만 pending final CLICK을 exactly-once로
+실행한다. 거절은 pending CLICK과 완료 화면 이동을 실행하지 않는다.
 
 `DEPOSIT_COMPLETED`는 사용자 확인 UI 절차가 끝났다는 Demo 안내만 제공한다.
 실제 예금 가입, 금융기관 처리, 인증 결과, 잔액 변경, 거래번호나 영수증을
