@@ -73,6 +73,12 @@ describe('TermsAgreementPanel', () => {
       screen.getByTestId(TERMS_AGREEMENT_PANEL_SELECTORS.confirm),
       TERMS_AGREEMENT_PANEL_SELECTORS.confirm
     );
+    expect(
+      screen.getByTestId(TERMS_AGREEMENT_PANEL_SELECTORS.confirm)
+    ).toHaveAttribute(
+      'aria-describedby',
+      TERMS_AGREEMENT_PANEL_SELECTORS.status
+    );
     expect(panel).toHaveAccessibleName('약관 확인');
   });
 

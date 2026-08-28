@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   decisionHook: vi.fn(),
   secureInputHook: vi.fn(),
   confirmationHook: vi.fn(),
+  voiceProps: vi.fn(),
   overlayProps: vi.fn()
 }));
 
@@ -38,6 +39,18 @@ vi.mock('@/features/Integration/hooks/useSessionSecureInputIntegration', () => (
 
 vi.mock('@/features/Integration/hooks/useSessionFinalConfirmationIntegration', () => ({
   useSessionFinalConfirmationIntegration: mocks.confirmationHook
+}));
+
+vi.mock('@/features/F4_VoiceController/ui/F4_VoiceController', () => ({
+  default: (props: {
+    sessionId: string;
+    message: string;
+    disabled: boolean;
+    isSecureInput: boolean;
+  }) => {
+    mocks.voiceProps(props);
+    return <div data-testid="mock-voice-controller" />;
+  }
 }));
 
 vi.mock('@/features/F2_StreamViewer/ui/F2_StreamViewer', () => ({
@@ -209,6 +222,7 @@ beforeEach(() => {
   mocks.decisionHook.mockReturnValue(decisionHook());
   mocks.secureInputHook.mockReturnValue(secureInputHook());
   mocks.confirmationHook.mockReturnValue(confirmationHook());
+  mocks.voiceProps.mockClear();
   mocks.overlayProps.mockClear();
 });
 
@@ -217,6 +231,20 @@ afterEach(() => {
 });
 
 describe('SessionIntegrationView', () => {
+  it('운영 세션에 안내 메시지와 연결 상태를 음성 컨트롤러에 전달한다', () => {
+    render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
+
+    expect(screen.getByTestId('mock-voice-controller')).toBeInTheDocument();
+    expect(mocks.voiceProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: SESSION.sessionId,
+        message: expect.any(String),
+        disabled: false,
+        isSecureInput: false
+      })
+    );
+  });
+
   it('동일 session을 Frame·Status Hook에 전달하고 live 상태를 표시한다', () => {
     render(<SessionIntegrationView session={SESSION} onExit={vi.fn()} />);
 
@@ -317,6 +345,9 @@ describe('SessionIntegrationView', () => {
     );
     expect(submitViewerAction).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.voiceProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isSecureInput: true })
+    );
     expect(screen.queryByText(/인증 성공|가입 성공/)).not.toBeInTheDocument();
   });
 
@@ -402,6 +433,39 @@ describe('SessionIntegrationView', () => {
     expect(reset.mock.invocationCallOrder[0]).toBeLessThan(
       onExit.mock.invocationCallOrder[0]
     );
+  });
+
+  it('세션 종료 중 버튼과 중복 요청을 차단하고 상태를 안내한다', async () => {
+    let resolveReset: (() => void) | undefined;
+    const reset = vi.fn(
+      () => new Promise<void>((resolve) => {
+        resolveReset = resolve;
+      })
+    );
+    const onExit = vi.fn();
+    mocks.frameHook.mockReturnValue(frameHook({ reset }));
+    render(<SessionIntegrationView session={SESSION} onExit={onExit} />);
+
+    const button = screen.getByTestId(
+      SESSION_INTEGRATION_SELECTORS.exitButton
+    );
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(reset).toHaveBeenCalledOnce();
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute(
+      'aria-describedby',
+      SESSION_INTEGRATION_SELECTORS.exitStatus
+    );
+    expect(
+      screen.getByTestId(SESSION_INTEGRATION_SELECTORS.exitStatus)
+    ).toHaveTextContent(
+      '세션 종료를 요청하고 있습니다.'
+    );
+
+    resolveReset?.();
+    await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
   });
 
   it.each([

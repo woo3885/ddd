@@ -131,6 +131,14 @@ class PreviewSynthesisHarness implements SpeechSynthesisAdapter {
     );
   }
 
+  pause() {
+    this.onAction('Mock pause');
+  }
+
+  resume() {
+    this.onAction('Mock resume');
+  }
+
   cancel() {
     this.cancelCount += 1;
     this.onAction(`Mock cancel ${this.cancelCount}회`);

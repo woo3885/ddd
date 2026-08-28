@@ -37,6 +37,7 @@ const STARTING_STATUS_MESSAGE = '세션을 준비하고 있습니다.';
 const SUCCESS_STATUS_MESSAGE = '금융 업무 세션이 준비되었습니다.';
 const ERROR_STATUS_MESSAGE =
   '세션을 준비하지 못했습니다. 다시 시도해 주세요.';
+const START_REQUIREMENTS_ID = 'description-dashboard-start-requirements';
 
 const taskRadioIds: Record<DashboardTaskType, string> = {
   OPEN_DEPOSIT: 'radio-task-open-deposit',
@@ -159,6 +160,7 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
           size="lg"
           disabled={!canStart || isStarting}
           isLoading={isStarting}
+          aria-describedby={START_REQUIREMENTS_ID}
           onClick={handleStart}
         >
           선택한 업무 시작
@@ -354,6 +356,15 @@ export default function F1_Dashboard({ onStart }: F1DashboardProps) {
           title="선택 결과"
           description="사이트와 업무를 모두 선택하면 시작할 수 있습니다."
         >
+          <Text
+            id={START_REQUIREMENTS_ID}
+            variant="body"
+            className="mb-4 font-semibold text-text-primary"
+          >
+            {canStart
+              ? '시작 준비가 완료되었습니다.'
+              : '사이트와 업무를 모두 선택해 주세요.'}
+          </Text>
           <dl className="grid gap-4 text-base sm:grid-cols-2">
             <div>
               <dt className="font-bold text-text-secondary">선택 사이트</dt>

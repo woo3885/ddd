@@ -265,6 +265,7 @@ export function TermsAgreementPanel({
           size="lg"
           disabled={!confirmEnabled}
           isLoading={isBusy}
+          aria-describedby={TERMS_AGREEMENT_PANEL_SELECTORS.status}
           onClick={handleConfirm}
         >
           약관 선택 확인

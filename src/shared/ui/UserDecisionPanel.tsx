@@ -222,6 +222,7 @@ export function UserDecisionPanel({
           size="lg"
           disabled={!confirmEnabled}
           isLoading={isBusy}
+          aria-describedby={USER_DECISION_PANEL_SELECTORS.status}
           onClick={handleConfirm}
         >
           선택 확인

@@ -127,6 +127,8 @@ class MockTtsHarness implements SpeechSynthesisAdapter {
     return utterance;
   });
   speak = vi.fn();
+  pause = vi.fn();
+  resume = vi.fn();
   cancel = vi.fn();
   getVoices = vi.fn(() => this.voices);
   addEventListener = vi.fn(
@@ -424,15 +426,20 @@ describe('F4_VoiceController', () => {
 
     const play = screen.getByRole('button', { name: '안내 듣기' });
     const replay = screen.getByRole('button', { name: '다시 듣기' });
+    const pause = screen.getByRole('button', { name: '안내 일시정지' });
     const stop = screen.getByRole('button', { name: '음성 중지' });
-    for (const button of [play, replay, stop]) {
+    for (const button of [play, replay, pause, stop]) {
       expect(button).toHaveAttribute('type', 'button');
       expect(button.className).toContain('min-h-14');
       expect(button.id).toBe(button.getAttribute('data-testid'));
-      expect(button).not.toHaveAttribute('aria-pressed');
     }
+    expect(play).not.toHaveAttribute('aria-pressed');
+    expect(replay).not.toHaveAttribute('aria-pressed');
+    expect(pause).toHaveAttribute('aria-pressed', 'false');
+    expect(stop).not.toHaveAttribute('aria-pressed');
     expect(play).toBeEnabled();
     expect(replay).toBeDisabled();
+    expect(pause).toBeDisabled();
     expect(stop).toBeDisabled();
 
     const rate = screen.getByRole('combobox', { name: '안내 속도' });
@@ -468,6 +475,12 @@ describe('F4_VoiceController', () => {
     act(() => tts.utterances[0].emitStart());
     expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.playbackStatus))
       .toHaveTextContent('음성 안내를 재생하고 있습니다.');
+    await user.click(screen.getByRole('button', { name: '안내 일시정지' }));
+    expect(tts.pause).toHaveBeenCalledOnce();
+    expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.playbackStatus))
+      .toHaveTextContent('음성 안내를 일시정지했습니다.');
+    await user.click(screen.getByRole('button', { name: '안내 계속 듣기' }));
+    expect(tts.resume).toHaveBeenCalledOnce();
     act(() => tts.utterances[0].emitEnd());
     expect(screen.getByTestId(TTS_CONTROLLER_SELECTORS.playbackStatus))
       .toHaveTextContent('음성 안내 재생이 끝났습니다.');

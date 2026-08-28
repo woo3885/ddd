@@ -207,9 +207,8 @@ describe('F1_Dashboard', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(createSessionSpy).not.toHaveBeenCalled();
     expect(webSocketMock).not.toHaveBeenCalled();
-    expect(
-      screen.getByText('WorkflowStatus: SESSION_CREATED')
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/WorkflowStatus:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ScreenType:/)).not.toBeInTheDocument();
     expect(
       screen.getByText('WebSocket 연결 안 됨')
     ).toBeInTheDocument();
@@ -325,9 +324,8 @@ describe('F1_Dashboard', () => {
     expect(screen.getByTestId('dashboard-session-result')).toHaveTextContent(
       'session-001'
     );
-    expect(
-      screen.getByText('ScreenType: SESSION_READY')
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/WorkflowStatus:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ScreenType:/)).not.toBeInTheDocument();
     expect(screen.getByText('WebSocket 연결 안 됨')).toBeInTheDocument();
     expect(screen.queryByText(/createdAt/)).not.toBeInTheDocument();
   });
@@ -395,5 +393,16 @@ describe('F1_Dashboard', () => {
       expect(radio.closest('label')).toHaveAttribute('for', radio.id);
       expect(radio).toHaveClass('focus-visible:ring-4');
     }
+  });
+
+  it('시작 버튼에 활성화 조건 안내를 프로그램적으로 연결한다', () => {
+    render(<F1_Dashboard />);
+
+    const startButton = screen.getByTestId('btn-start-financial-task');
+    const descriptionId = startButton.getAttribute('aria-describedby');
+    expect(descriptionId).toBe('description-dashboard-start-requirements');
+    expect(document.getElementById(descriptionId ?? '')).toHaveTextContent(
+      '사이트와 업무를 모두 선택해 주세요.'
+    );
   });
 });

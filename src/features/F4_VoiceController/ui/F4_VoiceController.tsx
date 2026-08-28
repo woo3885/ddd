@@ -46,6 +46,7 @@ const TTS_STATUS_MESSAGES: Record<SpeechSynthesisStatus, string> = {
   IDLE: '안내 듣기 버튼으로 음성 안내를 시작할 수 있습니다.',
   STARTING: '음성 안내 시작을 요청했습니다.',
   SPEAKING: '음성 안내를 재생하고 있습니다.',
+  PAUSED: '음성 안내를 일시정지했습니다.',
   COMPLETED: '음성 안내 재생이 끝났습니다.',
   ERROR: '음성 안내를 재생하지 못했습니다. 다시 시도해 주세요.',
   UNSUPPORTED: '이 브라우저에서는 음성 안내를 사용할 수 없습니다.'
@@ -92,6 +93,7 @@ export default function F4_VoiceController({
     isSupported: isTtsSupported,
     play,
     replay,
+    togglePause,
     stop: stopTts,
     setRate
   } = useSpeechSynthesis({
@@ -123,19 +125,24 @@ export default function F4_VoiceController({
     !retryable;
   const normalizedMessage = message.trim();
   const isTtsBusy = ttsStatus === 'STARTING' || ttsStatus === 'SPEAKING';
+  const isTtsActive = isTtsBusy || ttsStatus === 'PAUSED';
   const playDisabled =
     disabled ||
     isSecureInput ||
     !isTtsSupported ||
     !normalizedMessage ||
-    isTtsBusy;
+    isTtsActive;
   const replayDisabled =
     disabled ||
     isSecureInput ||
     !isTtsSupported ||
     !normalizedMessage ||
     !hasPlaybackRequest;
-  const ttsStopDisabled = disabled || isSecureInput || !isTtsBusy;
+  const ttsPauseDisabled =
+    disabled ||
+    isSecureInput ||
+    (ttsStatus !== 'SPEAKING' && ttsStatus !== 'PAUSED');
+  const ttsStopDisabled = disabled || isSecureInput || !isTtsActive;
   const rateDisabled = disabled || isSecureInput || !isTtsSupported;
   const selectedRate = SPEECH_SYNTHESIS_RATE_OPTIONS.find(
     (option) => option.value === rate
@@ -337,7 +344,7 @@ export default function F4_VoiceController({
           </NoticeBox>
         )}
 
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Button
             {...elementIdentity(TTS_CONTROLLER_SELECTORS.playButton)}
             type="button"
@@ -358,6 +365,18 @@ export default function F4_VoiceController({
             onClick={replay}
           >
             다시 듣기
+          </Button>
+          <Button
+            {...elementIdentity(TTS_CONTROLLER_SELECTORS.pauseButton)}
+            type="button"
+            variant="secondary"
+            size="lg"
+            className="w-full whitespace-normal"
+            disabled={ttsPauseDisabled}
+            aria-pressed={ttsStatus === 'PAUSED'}
+            onClick={togglePause}
+          >
+            {ttsStatus === 'PAUSED' ? '안내 계속 듣기' : '안내 일시정지'}
           </Button>
           <Button
             {...elementIdentity(TTS_CONTROLLER_SELECTORS.stopButton)}

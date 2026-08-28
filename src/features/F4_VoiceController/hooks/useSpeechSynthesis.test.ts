@@ -47,6 +47,8 @@ class SynthesisHarness implements SpeechSynthesisAdapter {
     return utterance;
   });
   speak = vi.fn();
+  pause = vi.fn();
+  resume = vi.fn();
   cancel = vi.fn();
   getVoices = vi.fn(() => this.voices);
   addEventListener = vi.fn(
@@ -180,6 +182,24 @@ describe('useSpeechSynthesis', () => {
     expect(result.current.status).toBe('SPEAKING');
     act(() => utterance.emitEnd());
     expect(result.current.status).toBe('COMPLETED');
+  });
+
+  it('재생 중 일시정지하고 새 utterance 없이 계속 듣기를 지원한다', () => {
+    const harness = new SynthesisHarness();
+    const { result } = renderHook(() =>
+      useSpeechSynthesis(createOptions(harness))
+    );
+    act(() => result.current.play());
+    act(() => harness.utterances[0].emitStart());
+
+    act(() => result.current.togglePause());
+    expect(harness.pause).toHaveBeenCalledOnce();
+    expect(result.current.status).toBe('PAUSED');
+
+    act(() => result.current.togglePause());
+    expect(harness.resume).toHaveBeenCalledOnce();
+    expect(result.current.status).toBe('SPEAKING');
+    expect(harness.utterances).toHaveLength(1);
   });
 
   it('동기 speak 예외와 예상하지 않은 onerror를 안전한 ERROR로 처리한다', () => {
