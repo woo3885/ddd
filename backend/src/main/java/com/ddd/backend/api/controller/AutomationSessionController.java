@@ -7,6 +7,9 @@ import com.ddd.backend.api.dto.session.ConfirmationActionResponse;
 import com.ddd.backend.api.dto.session.SubmitDecisionRequest;
 import com.ddd.backend.api.dto.session.CompleteSecureInputRequest;
 import com.ddd.backend.api.dto.session.SecureInputSubmissionResponse;
+import com.ddd.backend.api.dto.conversation.SessionMessageAcceptedResponse;
+import com.ddd.backend.conversation.ConversationService;
+import com.ddd.backend.conversation.MessageAcceptance;
 import com.ddd.backend.common.response.ApiResponse;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.service.AutomationSessionService;
@@ -33,6 +36,12 @@ public class AutomationSessionController {
     private final UserDecisionService userDecisionService;
     private final SecureInputService secureInputService;
     private final SecureInputTransportPolicy secureInputTransportPolicy;
+    private ConversationService conversationService;
+
+    @Autowired(required = false)
+    void setConversationService(ConversationService conversationService) {
+        this.conversationService = conversationService;
+    }
 
     @Autowired
     public AutomationSessionController(
@@ -73,13 +82,20 @@ public class AutomationSessionController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<AutomationSessionResponse>>
+    public ResponseEntity<ApiResponse<?>>
     createSession(
             @Valid @RequestBody CreateSessionRequest request
     ) {
+        String sessionContent = request.resolvedContent();
+        if (request.usesConversationContract()) {
+            if (conversationService == null) {
+                throw new IllegalStateException("대화 서비스를 사용할 수 없습니다.");
+            }
+            sessionContent = conversationService.validateContent(sessionContent);
+        }
         AutomationSession session =
                 sessionService.createSession(
-                        request.userRequest(),
+                        sessionContent,
                         request.siteId(),
                         request.initialPath()
                 );
@@ -90,6 +106,16 @@ public class AutomationSessionController {
                 );
 
         /* 응답 DTO를 SESSION_CREATED로 확정한 뒤 비동기 Agent loop를 예약한다. */
+        if (request.usesConversationContract()) {
+            MessageAcceptance acceptance = conversationService.acceptInitial(
+                    session.getSessionId(), request.requestId(), request.messageId(),
+                    request.content(), request.clientOccurredAt());
+            sessionService.startInitialAi(session.getSessionId());
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(
+                    SessionMessageAcceptedResponse.from(acceptance, session.getStatus()),
+                    "메시지가 접수되었습니다. AI 판단이나 실행 성공을 의미하지 않습니다."));
+        }
+
         sessionService.startInitialAi(session.getSessionId());
 
         return ResponseEntity

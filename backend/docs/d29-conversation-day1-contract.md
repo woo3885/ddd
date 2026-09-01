@@ -1,0 +1,35 @@
+# D29 Day 1 대화형 Agent Backend 계약
+
+## 결정
+
+- 3일 MVP는 Demo Bank 동일 Page widget을 사용한다.
+- Backend가 headed Playwright BrowserContext/Page와 session ID의 권위를 가진다.
+- Browser Extension 배포는 3일 이후 전환 범위로 둔다.
+- Agent widget·overlay는 `data-ddd-agent-ui` marker로 구분하고 Day 2 sanitizer에서 제외한다.
+- Canvas Viewer는 삭제하지 않고 진단·fallback으로 유지한다.
+
+## 메시지 계약
+
+- 최초 새 계약은 세션 생성 요청의 `requestId`, `messageId`, `content`, `clientOccurredAt`을 사용한다.
+- 후속 메시지는 `POST /api/v1/sessions/{sessionId}/messages`로 접수한다.
+- ACK는 정제·idempotency 검증·queue 접수만 의미하며 AI 판단이나 Action 성공을 의미하지 않는다.
+- Backend가 `sessionId`, 질문 ID, event ID, sequence와 goal revision의 권위를 가진다.
+- 동일 `requestId + messageId` 재전송은 기존 sequence를 가진 duplicate ACK로 처리한다.
+- 같은 request ID를 다른 message ID에 사용하거나 같은 message ID를 다른 request에 사용하면 거부한다.
+- `expectedConversationSequence`와 `expectedGoalRevision`이 현재 상태와 달라지면 stale 요청으로 거부한다.
+- 세션마다 active AI message 1개와 pending 1개만 허용하며 세 번째 요청은 `MESSAGE_409_BUSY`이다.
+
+## 저장·보안
+
+- 정제된 안전 메시지만 session별 state에 보관한다.
+- 대화 상태는 세션 TTL 설정인 `ddd.session-store.ttl`을 공유한다.
+- 최근 메시지는 최대 50개로 제한한다.
+- password, OTP, PIN, 인증번호 패턴과 제어문자는 fail-closed한다.
+- credential 원문은 conversation state, event와 로그에 기록하지 않는다.
+- Day 1 snapshot은 sequence, goal revision, active question, 최근 안전 메시지와 만료시각을 제공한다.
+
+## Day 1 범위 제한
+
+- C의 UserGoal patch와 scripted model이 병합되기 전이므로 AI 질문 생성은 이번 Backend 단독 변경에 포함하지 않는다.
+- active message 완료 후 pending 승격은 Day 2 message-driven Agent loop adapter에서 연결한다.
+- Redis 영속 conversation repository와 terminal/만료 scheduler 통합은 Day 3 reconnect·cleanup 검증에서 완성한다.

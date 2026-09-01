@@ -6,6 +6,9 @@ import com.ddd.backend.service.AutomationSessionService;
 import com.ddd.backend.service.UserDecisionService;
 import com.ddd.backend.security.secureinput.SecureInputService;
 import com.ddd.backend.security.secureinput.SecureInputTransportPolicy;
+import com.ddd.backend.conversation.ConversationService;
+import com.ddd.backend.conversation.MessageAcceptance;
+import com.ddd.backend.conversation.MessageQueueStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -50,6 +53,9 @@ class AutomationSessionControllerTest {
 
     @MockitoBean
     private SecureInputTransportPolicy secureInputTransportPolicy;
+
+    @MockitoBean
+    private ConversationService conversationService;
 
     @Test
     void 보안입력완료는_raw_value없는_전용_endpoint로_접수한다()
@@ -210,6 +216,45 @@ class AutomationSessionControllerTest {
                 "demo-bank",
                 "/transfer/accounts"
         );
+        verify(sessionService).startInitialAi(session.getSessionId());
+    }
+
+    @Test
+    void 새_메시지_계약으로_세션을_생성하면_202_ACK를_반환한다() throws Exception {
+        AutomationSession session = AutomationSession.create("100만원 예금");
+        when(conversationService.validateContent("100만원 예금"))
+                .thenReturn("100만원 예금");
+        when(sessionService.createSession("100만원 예금", "demo-bank", "/deposits"))
+                .thenReturn(session);
+        when(conversationService.acceptInitial(
+                org.mockito.ArgumentMatchers.eq(session.getSessionId()),
+                org.mockito.ArgumentMatchers.eq("req-1"),
+                org.mockito.ArgumentMatchers.eq("msg-1"),
+                org.mockito.ArgumentMatchers.eq("100만원 예금"),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new MessageAcceptance(
+                        session.getSessionId(), "req-1", "msg-1", 1,
+                        MessageQueueStatus.ACTIVE,
+                        java.time.Instant.parse("2026-09-01T00:00:00Z"), false));
+
+        mockMvc.perform(post("/api/v1/sessions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestId":"req-1",
+                                  "messageId":"msg-1",
+                                  "content":"100만원 예금",
+                                  "siteId":"demo-bank",
+                                  "initialPath":"/deposits",
+                                  "clientOccurredAt":"2026-09-01T09:00:00+09:00"
+                                }
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.acceptedSequence").value(1))
+                .andExpect(jsonPath("$.data.queueStatus").value("ACTIVE"))
+                .andExpect(jsonPath("$.message").value(
+                        "메시지가 접수되었습니다. AI 판단이나 실행 성공을 의미하지 않습니다."));
+
         verify(sessionService).startInitialAi(session.getSessionId());
     }
 

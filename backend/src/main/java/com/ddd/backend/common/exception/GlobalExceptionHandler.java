@@ -17,6 +17,16 @@ public class GlobalExceptionHandler {
                     GlobalExceptionHandler.class
             );
 
+    @ExceptionHandler(com.ddd.backend.conversation.ConversationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConversation(
+            com.ddd.backend.conversation.ConversationException exception
+    ) {
+        var error = exception.error();
+        log.warn("Conversation request rejected. errorCode={}", error.code());
+        return ResponseEntity.status(error.status())
+                .body(com.ddd.backend.common.response.ConversationErrorResponseFactory.create(error));
+    }
+
     @ExceptionHandler(com.ddd.backend.service.confirmation.ConfirmationException.class)
     public ResponseEntity<ApiResponse<Void>> handleConfirmation(
             com.ddd.backend.service.confirmation.ConfirmationException exception
@@ -122,11 +132,11 @@ public class GlobalExceptionHandler {
                                 error ->
                                         error.getDefaultMessage()
                         )
-                        .orElse(
-                                ErrorCode
-                                        .INVALID_REQUEST
-                                        .getMessage()
-                        );
+                        .orElseGet(() -> exception.getBindingResult().getGlobalErrors()
+                                .stream()
+                                .findFirst()
+                                .map(error -> error.getDefaultMessage())
+                                .orElse(ErrorCode.INVALID_REQUEST.getMessage()));
 
         ErrorCode errorCode =
                 ErrorCode.INVALID_REQUEST;

@@ -18,6 +18,7 @@ import com.ddd.backend.websocket.publisher.AutomationStatusEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.ddd.backend.security.secureinput.SecureInputRegistry;
+import com.ddd.backend.conversation.ConversationService;
 
 @Service
 public class AutomationSessionService {
@@ -65,10 +66,16 @@ public class AutomationSessionService {
     private final SanitizedDomSnapshotService snapshotService;
     private final AgentLoopService agentLoopService;
     private SecureInputRegistry secureInputRegistry;
+    private ConversationService conversationService;
 
     @Autowired
     void setSecureInputRegistry(SecureInputRegistry secureInputRegistry) {
         this.secureInputRegistry = secureInputRegistry;
+    }
+
+    @Autowired(required = false)
+    void setConversationService(ConversationService conversationService) {
+        this.conversationService = conversationService;
     }
 
     /*
@@ -466,6 +473,7 @@ public class AutomationSessionService {
         cleanupUserDecisionStateSafely(sessionId);
         cleanupAgentLoopSafely(sessionId);
         cleanupSecureInputStateSafely(sessionId);
+        cleanupConversationStateSafely(sessionId);
 
         /*
          * Playwright BrowserContext / Page 종료.
@@ -548,6 +556,7 @@ public class AutomationSessionService {
         cleanupUserDecisionStateSafely(sessionId);
         cleanupAgentLoopSafely(sessionId);
         cleanupSecureInputStateSafely(sessionId);
+        cleanupConversationStateSafely(sessionId);
 
         /*
          * BrowserContext / Page 종료.
@@ -637,6 +646,14 @@ public class AutomationSessionService {
              * Public Action 상태 cleanup 실패가
              * 전체 Session cleanup을 실패시키면 안 된다.
              */
+        }
+    }
+
+    private void cleanupConversationStateSafely(String sessionId) {
+        try {
+            if (conversationService != null) conversationService.removeSession(sessionId);
+        } catch (RuntimeException ignored) {
+            // Conversation cleanup failure must not block browser/session cleanup.
         }
     }
 
