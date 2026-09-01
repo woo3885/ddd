@@ -22,10 +22,17 @@ public final class UserGoalAuthority {
     }
 
     public synchronized UserGoal apply(
+            String expectedGoalId,
             long expectedRevision,
             String turnId,
             UserGoalPatch patch
     ) {
+        if (expectedGoalId == null || !goal.goalId().equals(expectedGoalId)) {
+            throw new IllegalArgumentException("Goal ID가 현재 세션 Goal과 일치하지 않습니다.");
+        }
+        if (turnId != null && turnId.equals(goal.lastAppliedTurnId())) {
+            return goal;
+        }
         if (goal.revision() != expectedRevision) {
             throw new ConversationException(ConversationError.STALE_GOAL_REVISION);
         }
@@ -45,6 +52,14 @@ public final class UserGoalAuthority {
                 turnId.trim()
         );
         return goal;
+    }
+
+    public synchronized UserGoal apply(
+            long expectedRevision,
+            String turnId,
+            UserGoalPatch patch
+    ) {
+        return apply(goal.goalId(), expectedRevision, turnId, patch);
     }
 
     private String choose(String candidate, String current) {

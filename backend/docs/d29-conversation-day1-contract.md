@@ -40,6 +40,11 @@
 - `ASK_USER`와 DOM 무관 `STOP`은 `sourceSnapshotId=null`을 허용한다.
 - DOM 기반 `AUTO_EXECUTE`, `GUIDE_USER`, `SECURE_INPUT_REQUIRED`, `RISK_WARNING`, `FINAL_CONFIRMATION_REQUIRED`, `COMPLETE`는 source snapshot 일치를 요구한다.
 - `actionCandidate.snapshotElementRef`는 C가 생성한 ID가 아니라 Backend snapshot reference의 echo이다.
+- 사용자 답변에서 Goal 변경 후보만 생성한 경우 mode는 `GOAL_PATCH_PROPOSED`이다.
+- `GOAL_PATCH_PROPOSED`는 업무 완료나 Browser Action이 아니며 `goalPatch`가 필수이고 `question`, `actionCandidate`, `sourceSnapshotId`는 null이다.
+- Backend는 active turn·active question·goal identity·base revision을 확인한 뒤 patch를 적용하고 revision을 증가시킨다.
+- 적용 후 보호 상태를 재검증하고 최신 sanitized DOM snapshot으로 Agent Loop를 exactly-once 재개한다.
+- stale revision patch는 폐기하고 현재 revision으로 자동 재적용하지 않는다.
 
 ## Day 1 범위 제한
 

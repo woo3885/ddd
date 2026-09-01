@@ -107,11 +107,43 @@ public final class ConversationState {
     }
 
     public synchronized UserGoal applyGoalPatch(
+            String expectedGoalId,
+            long expectedRevision,
+            String turnId,
+            UserGoalPatch patch
+    ) {
+        return goalAuthority.apply(expectedGoalId, expectedRevision, turnId, patch);
+    }
+
+    public synchronized UserGoal applyGoalPatch(
             long expectedRevision,
             String turnId,
             UserGoalPatch patch
     ) {
         return goalAuthority.apply(expectedRevision, turnId, patch);
+    }
+
+    public synchronized void activateQuestion(String questionId) {
+        if (questionId == null || questionId.isBlank()) {
+            throw new IllegalArgumentException("questionId는 필수입니다.");
+        }
+        if (activeQuestionId != null && !activeQuestionId.equals(questionId)) {
+            throw new IllegalStateException("이미 활성 사용자 질문이 존재합니다.");
+        }
+        activeQuestionId = questionId.trim();
+    }
+
+    public synchronized void clearQuestion(String answerToQuestionId) {
+        requireActiveQuestion(answerToQuestionId);
+        activeQuestionId = null;
+    }
+
+    public synchronized void requireActiveQuestion(String answerToQuestionId) {
+        if (activeQuestionId == null
+                || answerToQuestionId == null
+                || !activeQuestionId.equals(answerToQuestionId)) {
+            throw new IllegalStateException("답변 대상 질문이 현재 활성 질문과 일치하지 않습니다.");
+        }
     }
 
     public synchronized String activeQuestionId() {

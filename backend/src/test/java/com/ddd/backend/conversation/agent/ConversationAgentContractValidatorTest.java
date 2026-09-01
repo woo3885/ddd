@@ -61,6 +61,30 @@ class ConversationAgentContractValidatorTest {
                 .hasMessageContaining("identity");
     }
 
+    @Test
+    void goal_patch_proposed는_patch만_허용하고_snapshot_question_action을_금지한다() {
+        var request = request(null);
+        var valid = new ConversationAgentDecision(
+                "req-1", "msg-1", request.goal().goalId(), 0,
+                ConversationInteractionMode.GOAL_PATCH_PROPOSED,
+                null, 0.95, "ANSWER_PATCHED", "LATEST_DOM_DECISION",
+                null,
+                new UserGoalPatch(null, null, null, 12,
+                        List.of(), null, null),
+                null, null);
+
+        assertThat(validator.validate(request, valid)).isSameAs(valid);
+
+        var invalid = new ConversationAgentDecision(
+                "req-1", "msg-1", request.goal().goalId(), 0,
+                ConversationInteractionMode.GOAL_PATCH_PROPOSED,
+                null, 0.95, "ANSWER_PATCHED", "LATEST_DOM_DECISION",
+                "snap-old", valid.goalPatch(), null, null);
+        assertThatThrownBy(() -> validator.validate(request, invalid))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("snapshot/question/action");
+    }
+
     private ConversationAgentRequest request(
             ConversationAgentRequest.SnapshotContext snapshot
     ) {

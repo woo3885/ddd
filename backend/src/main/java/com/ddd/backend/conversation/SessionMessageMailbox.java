@@ -40,6 +40,14 @@ public final class SessionMessageMailbox {
         }
     }
 
+    public boolean isActive(String sessionId, String messageId) {
+        Mailbox mailbox = mailboxes.get(sessionId);
+        if (mailbox == null) return false;
+        synchronized (mailbox) {
+            return messageId != null && messageId.equals(mailbox.active);
+        }
+    }
+
     public void removeSession(String sessionId) {
         if (sessionId != null) mailboxes.remove(sessionId);
     }

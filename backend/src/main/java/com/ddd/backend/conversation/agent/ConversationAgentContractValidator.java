@@ -63,6 +63,17 @@ public final class ConversationAgentContractValidator {
         } else if (decision.question() != null) {
             throw new IllegalArgumentException("ASK_USER 외 mode에는 question을 사용할 수 없습니다.");
         }
+        if (decision.mode() == ConversationInteractionMode.GOAL_PATCH_PROPOSED) {
+            if (decision.goalPatch() == null || decision.goalPatch().isEmpty()) {
+                throw new IllegalArgumentException("GOAL_PATCH_PROPOSED에는 typed goalPatch가 필요합니다.");
+            }
+            if (decision.sourceSnapshotId() != null
+                    || decision.question() != null
+                    || decision.actionCandidate() != null) {
+                throw new IllegalArgumentException(
+                        "GOAL_PATCH_PROPOSED에는 snapshot/question/action 후보를 사용할 수 없습니다.");
+            }
+        }
         if (decision.actionCandidate() != null && request.snapshot() == null) {
             throw new IllegalArgumentException("Action 후보에는 sanitized snapshot이 필요합니다.");
         }

@@ -21,4 +21,14 @@ public record UserGoalPatch(
             throw new IllegalArgumentException("기간은 0개월보다 커야 합니다.");
         }
     }
+
+    public boolean isEmpty() {
+        return status == null
+                && intent == null
+                && amount == null
+                && durationMonths == null
+                && missingFields == null
+                && stage == null
+                && safety == null;
+    }
 }
