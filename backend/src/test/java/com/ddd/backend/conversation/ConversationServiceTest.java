@@ -39,6 +39,8 @@ class ConversationServiceTest {
         assertThat(service.snapshot(sessionId).recentSafeMessages())
                 .extracting(ConversationMessage::content)
                 .containsExactly("100만원 예금");
+        assertThat(service.snapshot(sessionId).goal().goalId()).isNotBlank();
+        assertThat(service.snapshot(sessionId).goal().revision()).isZero();
     }
 
     @Test

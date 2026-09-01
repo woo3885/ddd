@@ -5,6 +5,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.ddd.backend.conversation.goal.UserGoal;
+import com.ddd.backend.conversation.goal.UserGoalAuthority;
+import com.ddd.backend.conversation.goal.UserGoalPatch;
 
 /** Session별 안전한 대화 snapshot. 원문 credential은 이 경계에 들어올 수 없다. */
 public final class ConversationState {
@@ -15,9 +18,9 @@ public final class ConversationState {
     private final List<ConversationMessage> messages = new ArrayList<>();
     private final Map<String, MessageAcceptance> acceptedRequests = new LinkedHashMap<>();
     private long sequence;
-    private long goalRevision;
     private String activeQuestionId;
     private Instant expiresAt;
+    private final UserGoalAuthority goalAuthority = new UserGoalAuthority();
 
     public ConversationState(String sessionId, Instant expiresAt) {
         if (sessionId == null || sessionId.isBlank()) {
@@ -69,7 +72,8 @@ public final class ConversationState {
         return new ConversationSnapshot(
                 sessionId,
                 sequence,
-                goalRevision,
+                goalAuthority.snapshot().revision(),
+                goalAuthority.snapshot(),
                 activeQuestionId,
                 List.copyOf(messages),
                 expiresAt
@@ -99,7 +103,15 @@ public final class ConversationState {
     }
 
     public synchronized long goalRevision() {
-        return goalRevision;
+        return goalAuthority.snapshot().revision();
+    }
+
+    public synchronized UserGoal applyGoalPatch(
+            long expectedRevision,
+            String turnId,
+            UserGoalPatch patch
+    ) {
+        return goalAuthority.apply(expectedRevision, turnId, patch);
     }
 
     public synchronized String activeQuestionId() {

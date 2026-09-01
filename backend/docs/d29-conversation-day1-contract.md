@@ -14,6 +14,10 @@
 - 후속 메시지는 `POST /api/v1/sessions/{sessionId}/messages`로 접수한다.
 - ACK는 정제·idempotency 검증·queue 접수만 의미하며 AI 판단이나 Action 성공을 의미하지 않는다.
 - Backend가 `sessionId`, 질문 ID, event ID, sequence와 goal revision의 권위를 가진다.
+- Frontend가 `requestId`와 user `messageId`를 생성하고 Backend가 검증한다.
+- C 응답은 user message ID를 `requestMessageId`로 echo하며 assistant message ID를 생성하지 않는다.
+- C의 `goalRevision`은 증가값이 아니라 판단 기준인 `baseGoalRevision`이다.
+- C는 typed `goalPatch` 후보만 반환하고 Backend가 expected revision 검증 후 적용·증가시킨다.
 - 동일 `requestId + messageId` 재전송은 기존 sequence를 가진 duplicate ACK로 처리한다.
 - 같은 request ID를 다른 message ID에 사용하거나 같은 message ID를 다른 request에 사용하면 거부한다.
 - `expectedConversationSequence`와 `expectedGoalRevision`이 현재 상태와 달라지면 stale 요청으로 거부한다.
@@ -27,6 +31,15 @@
 - password, OTP, PIN, 인증번호 패턴과 제어문자는 fail-closed한다.
 - credential 원문은 conversation state, event와 로그에 기록하지 않는다.
 - Day 1 snapshot은 sequence, goal revision, active question, 최근 안전 메시지와 만료시각을 제공한다.
+
+## B↔C 계약
+
+- B→C: `sessionId`, `requestId`, `requestMessageId`, `conversationSequence`, `goal`, `userMessage`, `snapshot`
+- C→B: `requestId`, `requestMessageId`, `goalId`, `baseGoalRevision`, `mode`, `message`, `confidence`, `reasonCode`, `nextCondition`, `sourceSnapshotId`, `goalPatch`, `question`, `actionCandidate`
+- Backend가 `assistantMessageId`, `questionId`, `eventId`, `eventSequence`를 생성한다.
+- `ASK_USER`와 DOM 무관 `STOP`은 `sourceSnapshotId=null`을 허용한다.
+- DOM 기반 `AUTO_EXECUTE`, `GUIDE_USER`, `SECURE_INPUT_REQUIRED`, `RISK_WARNING`, `FINAL_CONFIRMATION_REQUIRED`, `COMPLETE`는 source snapshot 일치를 요구한다.
+- `actionCandidate.snapshotElementRef`는 C가 생성한 ID가 아니라 Backend snapshot reference의 echo이다.
 
 ## Day 1 범위 제한
 
