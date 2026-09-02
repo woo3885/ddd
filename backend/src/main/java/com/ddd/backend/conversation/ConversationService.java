@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Set;
 import com.ddd.backend.domain.session.WorkflowStatus;
+import com.ddd.backend.conversation.event.ConversationEventStore;
 
 @Service
 public final class ConversationService {
@@ -24,17 +25,26 @@ public final class ConversationService {
     private final ConversationStateStore stateStore;
     private final SessionMessageMailbox mailbox;
     private final ConversationMessagePolicy messagePolicy;
+    private final ConversationEventStore eventStore;
 
     public ConversationService(
             AutomationSessionRepository sessionRepository,
             ConversationStateStore stateStore,
             SessionMessageMailbox mailbox,
-            ConversationMessagePolicy messagePolicy
+            ConversationMessagePolicy messagePolicy,
+            ConversationEventStore eventStore
     ) {
         this.sessionRepository = sessionRepository;
         this.stateStore = stateStore;
         this.mailbox = mailbox;
         this.messagePolicy = messagePolicy;
+        this.eventStore = eventStore;
+    }
+
+    public ConversationService(AutomationSessionRepository sessionRepository,
+            ConversationStateStore stateStore, SessionMessageMailbox mailbox,
+            ConversationMessagePolicy messagePolicy) {
+        this(sessionRepository, stateStore, mailbox, messagePolicy, new ConversationEventStore());
     }
 
     public MessageAcceptance acceptInitial(
@@ -97,10 +107,13 @@ public final class ConversationService {
             state.ensureMessageIdAvailable(messageId.trim());
             MessageQueueStatus queueStatus = mailbox.offer(sessionId, messageId);
             try {
-                return state.appendUserMessage(
+                MessageAcceptance acceptance = state.appendUserMessage(
                         requestId.trim(), messageId.trim(), safeContent,
                         Instant.now(),
                         queueStatus);
+                eventStore.accepted(sessionId, acceptance.messageId(), acceptance.acceptedSequence(),
+                        session.getStatus(), acceptance.acceptedAt());
+                return acceptance;
             } catch (RuntimeException exception) {
                 if (queueStatus == MessageQueueStatus.ACTIVE) {
                     mailbox.completeActive(sessionId, messageId);
@@ -111,16 +124,24 @@ public final class ConversationService {
     }
 
     public ConversationSnapshot snapshot(String sessionId) {
-        sessionRepository.findById(sessionId)
+        AutomationSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException(sessionId));
         return stateStore.find(sessionId)
-                .map(ConversationState::snapshot)
-                .orElseGet(() -> stateStore.getOrCreate(sessionId).snapshot());
+                .map(state -> state.snapshot(eventStore.lastSequence(sessionId), session.getStatus()))
+                .orElseGet(() -> stateStore.getOrCreate(sessionId)
+                        .snapshot(eventStore.lastSequence(sessionId), session.getStatus()));
     }
+
+    public ConversationState state(String sessionId) {
+        return stateStore.find(sessionId).orElseThrow(() -> new IllegalStateException("Conversation state not found"));
+    }
+
+    public ConversationEventStore eventStore() { return eventStore; }
 
     public void removeSession(String sessionId) {
         mailbox.removeSession(sessionId);
         stateStore.removeSession(sessionId);
+        eventStore.removeSession(sessionId);
     }
 
     private void requireId(String value, String name) {

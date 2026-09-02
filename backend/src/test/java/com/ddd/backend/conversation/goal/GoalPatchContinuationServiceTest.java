@@ -65,7 +65,7 @@ class GoalPatchContinuationServiceTest {
         assertThat(result.duplicate()).isFalse();
         assertThat(result.agentLoopResumeAccepted()).isTrue();
         assertThat(state.snapshot().activeQuestionId()).isNull();
-        assertThat(state.snapshot().goal().durationMonths()).isEqualTo(12);
+        assertThat(state.snapshot().goal().duration().value()).isEqualTo(12);
         assertThat(session.getStatus()).isEqualTo(WorkflowStatus.AI_EXECUTING);
         verify(snapshotService).createSnapshot(session.getSessionId());
         verify(agentLoopService).resume(session.getSessionId());
@@ -98,8 +98,8 @@ class GoalPatchContinuationServiceTest {
                 ConversationInteractionMode.GOAL_PATCH_PROPOSED,
                 null, 1.0, "ANSWER_PATCHED", "LATEST_DOM_DECISION",
                 null,
-                new UserGoalPatch(null, null, null, 12,
-                        List.of(), null, null),
+                new UserGoalPatch(baseRevision, null, null,
+                        new UserGoal.Duration(12, "MONTH"), List.of(), null, null),
                 null, null);
     }
 }

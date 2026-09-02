@@ -10,6 +10,7 @@ import com.ddd.backend.api.dto.session.SecureInputSubmissionResponse;
 import com.ddd.backend.api.dto.conversation.SessionMessageAcceptedResponse;
 import com.ddd.backend.conversation.ConversationService;
 import com.ddd.backend.conversation.MessageAcceptance;
+import com.ddd.backend.conversation.agent.ConversationAgentCoordinator;
 import com.ddd.backend.common.response.ApiResponse;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.service.AutomationSessionService;
@@ -37,10 +38,16 @@ public class AutomationSessionController {
     private final SecureInputService secureInputService;
     private final SecureInputTransportPolicy secureInputTransportPolicy;
     private ConversationService conversationService;
+    private ConversationAgentCoordinator conversationAgentCoordinator;
 
     @Autowired(required = false)
     void setConversationService(ConversationService conversationService) {
         this.conversationService = conversationService;
+    }
+
+    @Autowired(required = false)
+    void setConversationAgentCoordinator(ConversationAgentCoordinator coordinator) {
+        this.conversationAgentCoordinator = coordinator;
     }
 
     @Autowired
@@ -110,7 +117,10 @@ public class AutomationSessionController {
             MessageAcceptance acceptance = conversationService.acceptInitial(
                     session.getSessionId(), request.requestId(), request.messageId(),
                     request.content(), request.clientOccurredAt());
-            sessionService.startInitialAi(session.getSessionId());
+            if (conversationAgentCoordinator != null) {
+                conversationAgentCoordinator.process(session.getSessionId(), acceptance,
+                        request.content(), null);
+            }
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(
                     SessionMessageAcceptedResponse.from(acceptance, session.getStatus()),
                     "메시지가 접수되었습니다. AI 판단이나 실행 성공을 의미하지 않습니다."));

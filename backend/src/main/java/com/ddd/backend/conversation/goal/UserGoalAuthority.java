@@ -2,67 +2,45 @@ package com.ddd.backend.conversation.goal;
 
 import com.ddd.backend.conversation.ConversationError;
 import com.ddd.backend.conversation.ConversationException;
-
 import java.util.List;
 import java.util.UUID;
 
-/** goal identity와 revision을 Backend만 변경하도록 고정하는 aggregate. */
 public final class UserGoalAuthority {
+    private UserGoal goal = new UserGoal(UUID.randomUUID().toString(), 0, "ACTIVE", "UNKNOWN",
+            "pending", null, null, List.of(), null, "INFORMATION_COLLECTION",
+            new UserGoal.Safety(false, "NONE", "NONE"), null);
 
-    private UserGoal goal;
+    public synchronized UserGoal snapshot() { return goal; }
 
-    public UserGoalAuthority() {
-        goal = new UserGoal(
-                UUID.randomUUID().toString(), 0, "COLLECTING",
-                null, null, null, List.of(), "STARTED", "SAFE", null);
+    public synchronized void initializeRequest(String request) {
+        if (goal.lastAppliedMessageId() == null && "pending".equals(goal.normalizedRequest())) {
+            goal = copy(goal.revision(), goal.status(), goal.intent(), request, goal.amount(), goal.duration(),
+                    goal.missingFields(), goal.pendingQuestion(), null);
+        }
     }
 
-    public synchronized UserGoal snapshot() {
-        return goal;
-    }
-
-    public synchronized UserGoal apply(
-            String expectedGoalId,
-            long expectedRevision,
-            String turnId,
-            UserGoalPatch patch
-    ) {
-        if (expectedGoalId == null || !goal.goalId().equals(expectedGoalId)) {
-            throw new IllegalArgumentException("Goal ID가 현재 세션 Goal과 일치하지 않습니다.");
-        }
-        if (turnId != null && turnId.equals(goal.lastAppliedTurnId())) {
-            return goal;
-        }
-        if (goal.revision() != expectedRevision) {
+    public synchronized UserGoal apply(String goalId, long revision, String messageId,
+                                       UserGoalPatch patch, UserGoal.PendingQuestion question) {
+        if (goalId == null || !goal.goalId().equals(goalId)) throw new IllegalArgumentException("Goal identity mismatch");
+        if (messageId != null && messageId.equals(goal.lastAppliedMessageId())) return goal;
+        if (goal.revision() != revision || patch == null || patch.basedOnRevision() != revision) {
             throw new ConversationException(ConversationError.STALE_GOAL_REVISION);
         }
-        if (turnId == null || turnId.isBlank() || patch == null) {
-            throw new IllegalArgumentException("Goal patch와 turnId는 필수입니다.");
+        if (messageId == null || messageId.isBlank() || patch.isEmpty()) {
+            throw new IllegalArgumentException("Non-empty Goal patch and message identity are required");
         }
-        goal = new UserGoal(
-                goal.goalId(),
-                goal.revision() + 1,
-                choose(patch.status(), goal.status()),
-                choose(patch.intent(), goal.intent()),
-                patch.amount() != null ? patch.amount() : goal.amount(),
-                patch.durationMonths() != null ? patch.durationMonths() : goal.durationMonths(),
-                patch.missingFields() != null ? patch.missingFields() : goal.missingFields(),
-                choose(patch.stage(), goal.stage()),
-                choose(patch.safety(), goal.safety()),
-                turnId.trim()
-        );
+        goal = copy(revision + 1, choose(patch.status(), goal.status()), choose(patch.intent(), goal.intent()),
+                goal.normalizedRequest(), patch.amount() != null ? patch.amount() : goal.amount(),
+                patch.duration() != null ? patch.duration() : goal.duration(),
+                patch.missingFields() != null ? patch.missingFields() : goal.missingFields(), question, messageId.trim());
         return goal;
     }
 
-    public synchronized UserGoal apply(
-            long expectedRevision,
-            String turnId,
-            UserGoalPatch patch
-    ) {
-        return apply(goal.goalId(), expectedRevision, turnId, patch);
+    private UserGoal copy(long revision, String status, String intent, String request,
+                          UserGoal.Amount amount, UserGoal.Duration duration, List<String> missing,
+                          UserGoal.PendingQuestion question, String lastMessage) {
+        return new UserGoal(goal.goalId(), revision, status, intent, request, amount, duration, missing,
+                question, "INFORMATION_COLLECTION", goal.safety(), lastMessage);
     }
-
-    private String choose(String candidate, String current) {
-        return candidate == null || candidate.isBlank() ? current : candidate.trim();
-    }
+    private String choose(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
 }

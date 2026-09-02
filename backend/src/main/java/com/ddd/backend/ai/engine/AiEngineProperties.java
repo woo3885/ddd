@@ -15,6 +15,9 @@ public class AiEngineProperties {
     private String endpoint =
             "http://127.0.0.1:3001/api/ai/action";
 
+    private String conversationEndpoint =
+            "http://127.0.0.1:3001/api/ai/conversation/decision";
+
     private Duration connectTimeout =
             Duration.ofSeconds(3);
 
@@ -68,6 +71,13 @@ public class AiEngineProperties {
         return URI.create(
                 endpoint.trim()
         );
+    }
+
+    public String getConversationEndpoint() { return conversationEndpoint; }
+    public void setConversationEndpoint(String value) { conversationEndpoint = value; }
+    public URI conversationEndpointUri() {
+        validateUri(conversationEndpoint, "AI Engine conversation endpoint");
+        return URI.create(conversationEndpoint.trim());
     }
 
     public void validate() {
@@ -145,6 +155,19 @@ public class AiEngineProperties {
             throw new IllegalStateException(
                     "AI Engine request timeout이 올바르지 않습니다."
             );
+        }
+        validateUri(conversationEndpoint, "AI Engine conversation endpoint");
+    }
+
+    private void validateUri(String value, String name) {
+        if (value == null || value.isBlank()) throw new IllegalStateException(name + " is required");
+        URI uri;
+        try { uri = URI.create(value.trim()); }
+        catch (IllegalArgumentException error) { throw new IllegalStateException(name + " is invalid", error); }
+        if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null || uri.getUserInfo() != null
+                || uri.getQuery() != null || uri.getFragment() != null) {
+            throw new IllegalStateException(name + " must be a safe HTTP endpoint");
         }
     }
 }

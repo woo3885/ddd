@@ -1,34 +1,34 @@
 package com.ddd.backend.conversation.goal;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
-/** C가 제안할 수 있는 필드만 노출한다. goalId/revision은 의도적으로 없다. */
 public record UserGoalPatch(
-        String status,
-        String intent,
-        Long amount,
-        Integer durationMonths,
-        List<String> missingFields,
-        String stage,
-        String safety
+        long basedOnRevision, String intent, UserGoal.Amount amount,
+        UserGoal.Duration duration, List<String> missingFields,
+        String pendingQuestionFieldKey, String status
 ) {
+    private static final Set<String> INTENTS = Set.of("DEPOSIT", "TRANSFER", "INQUIRY", "CHANGE", "UNKNOWN");
+    private static final Set<String> STATUSES = Set.of("ACTIVE", "CANCELLED", "SUPERSEDED");
     public UserGoalPatch {
-        missingFields = missingFields == null ? null : List.copyOf(missingFields);
-        if (amount != null && amount <= 0) {
-            throw new IllegalArgumentException("금액은 0보다 커야 합니다.");
+        if (basedOnRevision < 0) throw new IllegalArgumentException("basedOnRevision must be non-negative");
+        if (intent != null && !INTENTS.contains(intent)) throw new IllegalArgumentException("Unknown goal intent");
+        if (status != null && !STATUSES.contains(status)) throw new IllegalArgumentException("Unknown goal status");
+        if (amount != null && (amount.value() == null || !amount.value().matches("[0-9]+")
+                || "0".equals(amount.value()) || !"KRW".equals(amount.currency()))) {
+            throw new IllegalArgumentException("Invalid KRW amount");
         }
-        if (durationMonths != null && durationMonths <= 0) {
-            throw new IllegalArgumentException("기간은 0개월보다 커야 합니다.");
+        if (duration != null && (duration.value() <= 0 || !"MONTH".equals(duration.unit()))) {
+            throw new IllegalArgumentException("Invalid duration");
+        }
+        missingFields = missingFields == null ? null : List.copyOf(missingFields);
+        if (missingFields != null && new HashSet<>(missingFields).size() != missingFields.size()) {
+            throw new IllegalArgumentException("Duplicate missingFields");
         }
     }
-
     public boolean isEmpty() {
-        return status == null
-                && intent == null
-                && amount == null
-                && durationMonths == null
-                && missingFields == null
-                && stage == null
-                && safety == null;
+        return intent == null && amount == null && duration == null && missingFields == null
+                && pendingQuestionFieldKey == null && status == null;
     }
 }

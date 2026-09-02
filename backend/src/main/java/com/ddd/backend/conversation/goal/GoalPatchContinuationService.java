@@ -62,8 +62,8 @@ public final class GoalPatchContinuationService {
                 .orElseThrow(() -> new SessionNotFoundException(sessionId));
         ConversationState state = stateStore.find(sessionId)
                 .orElseThrow(() -> new IllegalStateException("대화 상태를 찾을 수 없습니다."));
-        UserGoal currentGoal = state.snapshot().goal();
-        if (decision.requestMessageId().equals(currentGoal.lastAppliedTurnId())) {
+        UserGoal currentGoal = state.goal();
+        if (decision.requestMessageId().equals(currentGoal.lastAppliedMessageId())) {
             return new GoalPatchContinuationResult(
                     sessionId, decision.requestMessageId(), currentGoal.goalId(),
                     currentGoal.revision(), true, false);
@@ -82,14 +82,14 @@ public final class GoalPatchContinuationService {
             state.requireActiveQuestion(answerToQuestionId);
             state.applyGoalPatch(
                     decision.goalId(), decision.baseGoalRevision(),
-                    decision.requestMessageId(), decision.goalPatch());
+                    decision.requestMessageId(), decision.goalPatch(), null);
             state.clearQuestion(answerToQuestionId);
             session.submitDecision();
             sessionRepository.save(session);
             mailbox.completeActive(sessionId, decision.requestMessageId());
             snapshotService.createSnapshot(sessionId);
             boolean resumed = agentLoopService.resume(sessionId);
-            UserGoal applied = state.snapshot().goal();
+            UserGoal applied = state.goal();
             return new GoalPatchContinuationResult(
                     sessionId, decision.requestMessageId(), applied.goalId(),
                     applied.revision(), false, resumed);

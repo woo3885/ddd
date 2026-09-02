@@ -255,7 +255,7 @@ class AutomationSessionControllerTest {
                 .andExpect(jsonPath("$.message").value(
                         "메시지가 접수되었습니다. AI 판단이나 실행 성공을 의미하지 않습니다."));
 
-        verify(sessionService).startInitialAi(session.getSessionId());
+        verify(sessionService, never()).startInitialAi(session.getSessionId());
     }
 
     @Test

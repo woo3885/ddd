@@ -1,160 +1,92 @@
 package com.ddd.backend.conversation;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import com.ddd.backend.conversation.goal.UserGoal;
 import com.ddd.backend.conversation.goal.UserGoalAuthority;
 import com.ddd.backend.conversation.goal.UserGoalPatch;
+import com.ddd.backend.domain.session.WorkflowStatus;
+import java.time.Instant;
+import java.util.*;
 
-/** Session별 안전한 대화 snapshot. 원문 credential은 이 경계에 들어올 수 없다. */
 public final class ConversationState {
-
     private static final int MAX_MESSAGES = 50;
-
     private final String sessionId;
     private final List<ConversationMessage> messages = new ArrayList<>();
     private final Map<String, MessageAcceptance> acceptedRequests = new LinkedHashMap<>();
-    private long sequence;
-    private String activeQuestionId;
-    private Instant expiresAt;
     private final UserGoalAuthority goalAuthority = new UserGoalAuthority();
+    private long sequence;
+    private ConversationSnapshot.ActiveQuestion activeQuestion;
+    private Instant expiresAt;
 
     public ConversationState(String sessionId, Instant expiresAt) {
-        if (sessionId == null || sessionId.isBlank()) {
-            throw new IllegalArgumentException("세션 ID는 비어 있을 수 없습니다.");
-        }
-        this.sessionId = sessionId.trim();
-        this.expiresAt = expiresAt;
+        if (sessionId == null || sessionId.isBlank()) throw new IllegalArgumentException("sessionId is required");
+        this.sessionId = sessionId.trim(); this.expiresAt = expiresAt;
     }
 
-    public synchronized MessageAcceptance appendUserMessage(
-            String requestId,
-            String messageId,
-            String content,
-            Instant occurredAt,
-            MessageQueueStatus queueStatus
-    ) {
+    public synchronized MessageAcceptance appendUserMessage(String requestId, String messageId,
+            String content, Instant occurredAt, MessageQueueStatus queueStatus) {
         MessageAcceptance duplicate = acceptedRequests.get(requestId);
         if (duplicate != null) {
-            if (!duplicate.messageId().equals(messageId)) {
-                throw new ConversationException(ConversationError.DUPLICATE_REQUEST);
-            }
+            if (!duplicate.messageId().equals(messageId)) throw new ConversationException(ConversationError.DUPLICATE_REQUEST);
             return duplicate.asDuplicate();
         }
-        boolean messageIdExists = messages.stream()
-                .anyMatch(message -> message.messageId().equals(messageId));
-        if (messageIdExists) {
-            throw new ConversationException(ConversationError.DUPLICATE_MESSAGE);
-        }
-
+        ensureMessageIdAvailable(messageId);
+        goalAuthority.initializeRequest(content);
         long acceptedSequence = ++sequence;
-        messages.add(new ConversationMessage(
-                messageId, requestId, acceptedSequence,
-                ConversationRole.USER, content, occurredAt));
-        while (messages.size() > MAX_MESSAGES) {
-            messages.removeFirst();
-        }
-        MessageAcceptance acceptance = new MessageAcceptance(
-                sessionId, requestId, messageId, acceptedSequence,
+        messages.add(new ConversationMessage(messageId, requestId, acceptedSequence,
+                ConversationRole.USER, content, "MESSAGE", null, null, occurredAt));
+        trim();
+        var acceptance = new MessageAcceptance(sessionId, requestId, messageId, acceptedSequence,
                 queueStatus, occurredAt, false);
         acceptedRequests.put(requestId, acceptance);
-        while (acceptedRequests.size() > MAX_MESSAGES) {
-            String firstKey = acceptedRequests.keySet().iterator().next();
-            acceptedRequests.remove(firstKey);
-        }
+        while (acceptedRequests.size() > MAX_MESSAGES) acceptedRequests.remove(acceptedRequests.keySet().iterator().next());
         return acceptance;
     }
 
-    public synchronized ConversationSnapshot snapshot() {
-        return new ConversationSnapshot(
-                sessionId,
-                sequence,
-                goalAuthority.snapshot().revision(),
-                goalAuthority.snapshot(),
-                activeQuestionId,
-                List.copyOf(messages),
-                expiresAt
-        );
+    public synchronized ConversationSnapshot.ActiveQuestion appendQuestion(
+            String messageId, String questionId, String text, long goalRevision, Instant at) {
+        long messageSequence = ++sequence;
+        messages.add(new ConversationMessage(messageId, null, messageSequence, ConversationRole.AI,
+                text, "QUESTION", questionId, goalRevision, at));
+        trim();
+        activeQuestion = new ConversationSnapshot.ActiveQuestion(
+                questionId, messageId, messageSequence, text, goalRevision, at);
+        return activeQuestion;
     }
 
-    public synchronized long sequence() {
-        return sequence;
+    public synchronized ConversationSnapshot snapshot(long eventSequence, WorkflowStatus status) {
+        UserGoal goal = goalAuthority.snapshot();
+        return new ConversationSnapshot(UUID.randomUUID().toString(), sessionId, eventSequence, sequence,
+                goal.revision(), goal, activeQuestion, List.copyOf(messages), status, expiresAt);
     }
-
-    public synchronized MessageAcceptance duplicateAcceptance(
-            String requestId,
-            String messageId
-    ) {
-        MessageAcceptance acceptance = acceptedRequests.get(requestId);
-        if (acceptance == null) return null;
-        if (!acceptance.messageId().equals(messageId)) {
-            throw new ConversationException(ConversationError.DUPLICATE_REQUEST);
-        }
-        return acceptance.asDuplicate();
-    }
-
-    public synchronized void ensureMessageIdAvailable(String messageId) {
-        if (messages.stream().anyMatch(message -> message.messageId().equals(messageId))) {
-            throw new ConversationException(ConversationError.DUPLICATE_MESSAGE);
-        }
-    }
-
-    public synchronized long goalRevision() {
-        return goalAuthority.snapshot().revision();
-    }
-
-    public synchronized UserGoal applyGoalPatch(
-            String expectedGoalId,
-            long expectedRevision,
-            String turnId,
-            UserGoalPatch patch
-    ) {
-        return goalAuthority.apply(expectedGoalId, expectedRevision, turnId, patch);
-    }
-
-    public synchronized UserGoal applyGoalPatch(
-            long expectedRevision,
-            String turnId,
-            UserGoalPatch patch
-    ) {
-        return goalAuthority.apply(expectedRevision, turnId, patch);
-    }
-
+    public synchronized ConversationSnapshot snapshot() { return snapshot(0, WorkflowStatus.SESSION_CREATED); }
     public synchronized void activateQuestion(String questionId) {
-        if (questionId == null || questionId.isBlank()) {
-            throw new IllegalArgumentException("questionId는 필수입니다.");
-        }
-        if (activeQuestionId != null && !activeQuestionId.equals(questionId)) {
-            throw new IllegalStateException("이미 활성 사용자 질문이 존재합니다.");
-        }
-        activeQuestionId = questionId.trim();
+        activeQuestion = new ConversationSnapshot.ActiveQuestion(questionId, "legacy-question", sequence,
+                "pending question", goalRevision(), Instant.now());
     }
-
-    public synchronized void clearQuestion(String answerToQuestionId) {
-        requireActiveQuestion(answerToQuestionId);
-        activeQuestionId = null;
+    public synchronized long sequence() { return sequence; }
+    public synchronized long goalRevision() { return goalAuthority.snapshot().revision(); }
+    public synchronized UserGoal goal() { return goalAuthority.snapshot(); }
+    public synchronized MessageAcceptance duplicateAcceptance(String requestId, String messageId) {
+        MessageAcceptance value = acceptedRequests.get(requestId);
+        if (value == null) return null;
+        if (!value.messageId().equals(messageId)) throw new ConversationException(ConversationError.DUPLICATE_REQUEST);
+        return value.asDuplicate();
     }
-
-    public synchronized void requireActiveQuestion(String answerToQuestionId) {
-        if (activeQuestionId == null
-                || answerToQuestionId == null
-                || !activeQuestionId.equals(answerToQuestionId)) {
-            throw new IllegalStateException("답변 대상 질문이 현재 활성 질문과 일치하지 않습니다.");
-        }
+    public synchronized void ensureMessageIdAvailable(String messageId) {
+        if (messages.stream().anyMatch(message -> message.messageId().equals(messageId)))
+            throw new ConversationException(ConversationError.DUPLICATE_MESSAGE);
     }
-
-    public synchronized String activeQuestionId() {
-        return activeQuestionId;
+    public synchronized UserGoal applyGoalPatch(String goalId, long revision, String messageId,
+                                                 UserGoalPatch patch, UserGoal.PendingQuestion question) {
+        return goalAuthority.apply(goalId, revision, messageId, patch, question);
     }
-
-    public synchronized void refreshExpiry(Instant nextExpiry) {
-        expiresAt = nextExpiry;
+    public synchronized void requireActiveQuestion(String id) {
+        if (activeQuestion == null || id == null || !activeQuestion.questionId().equals(id))
+            throw new IllegalStateException("answerToQuestionId does not match active question");
     }
-
-    public synchronized Instant expiresAt() {
-        return expiresAt;
-    }
+    public synchronized void clearQuestion(String id) { requireActiveQuestion(id); activeQuestion = null; }
+    public synchronized String activeQuestionId() { return activeQuestion == null ? null : activeQuestion.questionId(); }
+    public synchronized void refreshExpiry(Instant value) { expiresAt = value; }
+    public synchronized Instant expiresAt() { return expiresAt; }
+    private void trim() { while (messages.size() > MAX_MESSAGES) messages.removeFirst(); }
 }

@@ -16,28 +16,29 @@ class UserGoalAuthorityTest {
         UserGoalAuthority authority = new UserGoalAuthority();
         UserGoal initial = authority.snapshot();
 
-        UserGoal updated = authority.apply(0, "turn-1",
-                new UserGoalPatch(null, "DEPOSIT", 1_000_000L,
-                        null, List.of("durationMonths"), null, null));
+        UserGoal updated = authority.apply(initial.goalId(), 0, "turn-1",
+                new UserGoalPatch(0, "DEPOSIT", new UserGoal.Amount("1000000", "KRW"),
+                        null, List.of("duration"), "duration", null), null);
 
         assertThat(updated.goalId()).isEqualTo(initial.goalId());
         assertThat(updated.revision()).isEqualTo(1);
         assertThat(updated.intent()).isEqualTo("DEPOSIT");
-        assertThat(updated.amount()).isEqualTo(1_000_000L);
-        assertThat(updated.missingFields()).containsExactly("durationMonths");
-        assertThat(updated.lastAppliedTurnId()).isEqualTo("turn-1");
+        assertThat(updated.amount().value()).isEqualTo("1000000");
+        assertThat(updated.missingFields()).containsExactly("duration");
+        assertThat(updated.lastAppliedMessageId()).isEqualTo("turn-1");
     }
 
     @Test
     void stale_base_revision의_patch는_적용하지_않는다() {
         UserGoalAuthority authority = new UserGoalAuthority();
-        authority.apply(0, "turn-1",
-                new UserGoalPatch(null, "DEPOSIT", null, null,
-                        List.of("durationMonths"), null, null));
+        UserGoal initial = authority.snapshot();
+        authority.apply(initial.goalId(), 0, "turn-1",
+                new UserGoalPatch(0, "DEPOSIT", null, null,
+                        List.of("duration"), "duration", null), null);
 
-        assertThatThrownBy(() -> authority.apply(0, "turn-2",
-                new UserGoalPatch(null, null, null, 12,
-                        List.of(), null, null)))
+        assertThatThrownBy(() -> authority.apply(initial.goalId(), 0, "turn-2",
+                new UserGoalPatch(0, null, null, new UserGoal.Duration(12, "MONTH"),
+                        List.of(), null, null), null))
                 .isInstanceOf(ConversationException.class)
                 .extracting(error -> ((ConversationException) error).error())
                 .isEqualTo(ConversationError.STALE_GOAL_REVISION);

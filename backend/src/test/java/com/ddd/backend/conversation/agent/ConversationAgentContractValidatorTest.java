@@ -23,8 +23,8 @@ class ConversationAgentContractValidatorTest {
                 ConversationInteractionMode.ASK_USER,
                 "기간을 알려주세요.", 0.9, "MISSING_FIELD", "USER_ANSWER",
                 null,
-                new UserGoalPatch(null, "DEPOSIT", 1_000_000L,
-                        null, List.of("durationMonths"), null, null),
+                new UserGoalPatch(0, "DEPOSIT", new com.ddd.backend.conversation.goal.UserGoal.Amount("1000000", "KRW"),
+                        null, List.of("duration"), "duration", null),
                 new ConversationAgentDecision.QuestionCandidate("durationMonths"),
                 null);
 
@@ -40,7 +40,7 @@ class ConversationAgentContractValidatorTest {
                 ConversationInteractionMode.GUIDE_USER,
                 "버튼을 직접 눌러주세요.", 0.8, "USER_ACTION_REQUIRED", "DOM_CHANGE",
                 null, null, null,
-                new ConversationAgentDecision.ActionCandidate("CLICK", "el-1", null));
+                new ConversationAgentDecision.ActionCandidate("CLICK"));
 
         assertThatThrownBy(() -> validator.validate(request, decision))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -69,7 +69,8 @@ class ConversationAgentContractValidatorTest {
                 ConversationInteractionMode.GOAL_PATCH_PROPOSED,
                 null, 0.95, "ANSWER_PATCHED", "LATEST_DOM_DECISION",
                 null,
-                new UserGoalPatch(null, null, null, 12,
+                new UserGoalPatch(0, null, null,
+                        new com.ddd.backend.conversation.goal.UserGoal.Duration(12, "MONTH"),
                         List.of(), null, null),
                 null, null);
 
@@ -82,7 +83,7 @@ class ConversationAgentContractValidatorTest {
                 "snap-old", valid.goalPatch(), null, null);
         assertThatThrownBy(() -> validator.validate(request, invalid))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("snapshot/question/action");
+                .hasMessageContaining("GOAL_PATCH_PROPOSED");
     }
 
     private ConversationAgentRequest request(
