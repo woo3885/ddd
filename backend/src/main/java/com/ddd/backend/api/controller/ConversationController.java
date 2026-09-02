@@ -8,6 +8,8 @@ import com.ddd.backend.conversation.ConversationSnapshot;
 import com.ddd.backend.conversation.MessageAcceptance;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.service.AutomationSessionService;
+import com.ddd.backend.conversation.agent.ConversationAgentAsyncProcessor;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +26,7 @@ public class ConversationController {
 
     private final ConversationService conversationService;
     private final AutomationSessionService sessionService;
+    private ConversationAgentAsyncProcessor agentProcessor;
 
     public ConversationController(
             ConversationService conversationService,
@@ -33,6 +36,11 @@ public class ConversationController {
         this.sessionService = sessionService;
     }
 
+    @Autowired(required = false)
+    void setAgentProcessor(ConversationAgentAsyncProcessor agentProcessor) {
+        this.agentProcessor = agentProcessor;
+    }
+
     @PostMapping("/messages")
     public ResponseEntity<ApiResponse<SessionMessageAcceptedResponse>> submitMessage(
             @PathVariable String sessionId,
@@ -40,6 +48,9 @@ public class ConversationController {
     ) {
         MessageAcceptance acceptance = conversationService.acceptFollowUp(sessionId, request);
         AutomationSession session = sessionService.getSession(sessionId);
+        if (agentProcessor != null) {
+            agentProcessor.submit(sessionId, acceptance, request.content(), request.answerToQuestionId());
+        }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(
                 SessionMessageAcceptedResponse.from(acceptance, session.getStatus()),
                 "메시지가 접수되었습니다. AI 판단이나 실행 성공을 의미하지 않습니다."));

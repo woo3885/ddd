@@ -74,8 +74,7 @@ public class GlobalExceptionHandler {
                 )
                 .body(
                         ApiResponse.failure(
-                                errorCode,
-                                exception.getMessage()
+                                errorCode
                         )
                 );
     }
@@ -122,6 +121,11 @@ public class GlobalExceptionHandler {
     handleValidation(
             MethodArgumentNotValidException exception
     ) {
+        if (exception.getParameter().getParameterType().getName().contains("conversation")) {
+            var error = com.ddd.backend.conversation.ConversationError.INVALID_REQUEST;
+            return ResponseEntity.status(error.status())
+                    .body(com.ddd.backend.common.response.ConversationErrorResponseFactory.create(error));
+        }
         String message =
                 exception
                         .getBindingResult()

@@ -224,7 +224,7 @@ class AutomationSessionControllerTest {
         AutomationSession session = AutomationSession.create("100만원 예금");
         when(conversationService.validateContent("100만원 예금"))
                 .thenReturn("100만원 예금");
-        when(sessionService.createSession("100만원 예금", "demo-bank", "/deposits"))
+        when(sessionService.createConversationSession("100만원 예금"))
                 .thenReturn(session);
         when(conversationService.acceptInitial(
                 org.mockito.ArgumentMatchers.eq(session.getSessionId()),
@@ -410,8 +410,7 @@ class AutomationSessionControllerTest {
                         jsonPath(
                                 "$.message"
                         ).value(
-                                "자동화 세션을 찾을 수 없습니다. "
-                                        + "sessionId=not-found-session"
+                                "자동화 세션을 찾을 수 없습니다."
                         )
                 );
     }

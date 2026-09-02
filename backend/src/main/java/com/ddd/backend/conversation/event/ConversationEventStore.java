@@ -20,6 +20,13 @@ public final class ConversationEventStore {
                 messageSequence, questionId, text, "QUESTION", goalRevision, at);
         events.computeIfAbsent(sessionId, ignored -> new ArrayList<>()).add(event); return event;
     }
+    public synchronized AiMessageEvent message(String sessionId, String messageId, long messageSequence,
+            String text, long goalRevision, WorkflowStatus status, String errorCode, Instant at) {
+        var event = new AiMessageEvent(UUID.randomUUID().toString(), lastSequence(sessionId) + 1,
+                "AI_MESSAGE", sessionId, status, messageId, messageSequence, text, "MESSAGE",
+                goalRevision, errorCode, at);
+        events.computeIfAbsent(sessionId, ignored -> new ArrayList<>()).add(event); return event;
+    }
     public synchronized long lastSequence(String sessionId) {
         var values = events.get(sessionId); return values == null || values.isEmpty() ? 0 : values.getLast().eventSequence();
     }

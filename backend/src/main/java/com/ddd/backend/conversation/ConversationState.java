@@ -53,6 +53,16 @@ public final class ConversationState {
         return activeQuestion;
     }
 
+    public synchronized ConversationMessage appendAiMessage(
+            String messageId, String text, long goalRevision, Instant at) {
+        long messageSequence = ++sequence;
+        ConversationMessage message = new ConversationMessage(messageId, null, messageSequence,
+                ConversationRole.AI, text, "MESSAGE", null, goalRevision, at);
+        messages.add(message);
+        trim();
+        return message;
+    }
+
     public synchronized ConversationSnapshot snapshot(long eventSequence, WorkflowStatus status) {
         UserGoal goal = goalAuthority.snapshot();
         return new ConversationSnapshot(UUID.randomUUID().toString(), sessionId, eventSequence, sequence,
@@ -82,7 +92,7 @@ public final class ConversationState {
     }
     public synchronized void requireActiveQuestion(String id) {
         if (activeQuestion == null || id == null || !activeQuestion.questionId().equals(id))
-            throw new IllegalStateException("answerToQuestionId does not match active question");
+            throw new ConversationException(ConversationError.QUESTION_MISMATCH);
     }
     public synchronized void clearQuestion(String id) { requireActiveQuestion(id); activeQuestion = null; }
     public synchronized String activeQuestionId() { return activeQuestion == null ? null : activeQuestion.questionId(); }

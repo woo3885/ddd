@@ -242,6 +242,12 @@ public class AutomationSessionService {
         }
     }
 
+    /** Conversation intake creates only the authoritative session record.
+     * Browser/DOM work starts after a later explicit LATEST_DOM_DECISION boundary. */
+    public AutomationSession createConversationSession(String userRequest) {
+        return sessionRepository.save(AutomationSession.create(userRequest));
+    }
+
     /*
      * 실제 Viewer Session 생성.
      *

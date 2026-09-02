@@ -10,7 +10,7 @@ import com.ddd.backend.api.dto.session.SecureInputSubmissionResponse;
 import com.ddd.backend.api.dto.conversation.SessionMessageAcceptedResponse;
 import com.ddd.backend.conversation.ConversationService;
 import com.ddd.backend.conversation.MessageAcceptance;
-import com.ddd.backend.conversation.agent.ConversationAgentCoordinator;
+import com.ddd.backend.conversation.agent.ConversationAgentAsyncProcessor;
 import com.ddd.backend.common.response.ApiResponse;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.service.AutomationSessionService;
@@ -38,7 +38,7 @@ public class AutomationSessionController {
     private final SecureInputService secureInputService;
     private final SecureInputTransportPolicy secureInputTransportPolicy;
     private ConversationService conversationService;
-    private ConversationAgentCoordinator conversationAgentCoordinator;
+    private ConversationAgentAsyncProcessor conversationAgentProcessor;
 
     @Autowired(required = false)
     void setConversationService(ConversationService conversationService) {
@@ -46,8 +46,8 @@ public class AutomationSessionController {
     }
 
     @Autowired(required = false)
-    void setConversationAgentCoordinator(ConversationAgentCoordinator coordinator) {
-        this.conversationAgentCoordinator = coordinator;
+    void setConversationAgentProcessor(ConversationAgentAsyncProcessor processor) {
+        this.conversationAgentProcessor = processor;
     }
 
     @Autowired
@@ -100,12 +100,9 @@ public class AutomationSessionController {
             }
             sessionContent = conversationService.validateContent(sessionContent);
         }
-        AutomationSession session =
-                sessionService.createSession(
-                        sessionContent,
-                        request.siteId(),
-                        request.initialPath()
-                );
+        AutomationSession session = request.usesConversationContract()
+                ? sessionService.createConversationSession(sessionContent)
+                : sessionService.createSession(sessionContent, request.siteId(), request.initialPath());
 
         AutomationSessionResponse response =
                 AutomationSessionResponse.from(
@@ -117,8 +114,8 @@ public class AutomationSessionController {
             MessageAcceptance acceptance = conversationService.acceptInitial(
                     session.getSessionId(), request.requestId(), request.messageId(),
                     request.content(), request.clientOccurredAt());
-            if (conversationAgentCoordinator != null) {
-                conversationAgentCoordinator.process(session.getSessionId(), acceptance,
+            if (conversationAgentProcessor != null) {
+                conversationAgentProcessor.submit(session.getSessionId(), acceptance,
                         request.content(), null);
             }
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(

@@ -5,6 +5,7 @@ import com.ddd.backend.common.exception.SessionNotFoundException;
 import com.ddd.backend.domain.session.AutomationSession;
 import com.ddd.backend.domain.session.AutomationSessionRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Instant;
 import java.util.Set;
@@ -27,6 +28,7 @@ public final class ConversationService {
     private final ConversationMessagePolicy messagePolicy;
     private final ConversationEventStore eventStore;
 
+    @Autowired
     public ConversationService(
             AutomationSessionRepository sessionRepository,
             ConversationStateStore stateStore,
@@ -66,6 +68,11 @@ public final class ConversationService {
             String sessionId,
             SubmitSessionMessageRequest request
     ) {
+        ConversationState state = stateStore.find(sessionId)
+                .orElseThrow(() -> new IllegalStateException("Conversation state not found"));
+        if (state.activeQuestionId() != null) {
+            state.requireActiveQuestion(request.answerToQuestionId());
+        }
         return accept(sessionId, request.requestId(), request.messageId(), request.content(),
                 request.expectedConversationSequence(), request.expectedGoalRevision(),
                 request.clientOccurredAt());
@@ -111,8 +118,6 @@ public final class ConversationService {
                         requestId.trim(), messageId.trim(), safeContent,
                         Instant.now(),
                         queueStatus);
-                eventStore.accepted(sessionId, acceptance.messageId(), acceptance.acceptedSequence(),
-                        session.getStatus(), acceptance.acceptedAt());
                 return acceptance;
             } catch (RuntimeException exception) {
                 if (queueStatus == MessageQueueStatus.ACTIVE) {

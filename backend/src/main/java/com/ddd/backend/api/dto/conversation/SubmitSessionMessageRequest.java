@@ -2,16 +2,17 @@ package com.ddd.backend.api.dto.conversation;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
 
 public record SubmitSessionMessageRequest(
-        @NotBlank String requestId,
-        @NotBlank String messageId,
-        @NotBlank String content,
+        @NotBlank(message = "메시지 요청이 올바르지 않습니다.") String requestId,
+        @NotBlank(message = "메시지 요청이 올바르지 않습니다.") String messageId,
+        @NotBlank(message = "메시지 요청이 올바르지 않습니다.") String content,
         String answerToQuestionId,
-        @PositiveOrZero long expectedConversationSequence,
-        @PositiveOrZero long expectedGoalRevision,
+        @NotNull(message = "메시지 요청이 올바르지 않습니다.") @PositiveOrZero Long expectedConversationSequence,
+        @NotNull(message = "메시지 요청이 올바르지 않습니다.") @PositiveOrZero Long expectedGoalRevision,
         Instant clientOccurredAt
 ) {
 }

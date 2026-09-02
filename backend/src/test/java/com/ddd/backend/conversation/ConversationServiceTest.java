@@ -97,6 +97,6 @@ class ConversationServiceTest {
     ) {
         return new SubmitSessionMessageRequest(
                 requestId, messageId, content, null,
-                expectedSequence, 0, null);
+                Long.valueOf(expectedSequence), 0L, null);
     }
 }
