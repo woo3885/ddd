@@ -3,8 +3,10 @@ import express from "express";
 import {
   aiActionRouter,
 } from "./aiAction.route.js";
+import { createConversationDecisionRouter } from "./conversationDecision.route.js";
+import type { ConversationModelPort } from "../conversation/conversationModel.port.js";
 
-export function createServer() {
+export function createServer(conversationModel?: ConversationModelPort) {
   const app = express();
 
   app.use(express.json());
@@ -20,6 +22,7 @@ export function createServer() {
     "/api/ai",
     aiActionRouter,
   );
+  app.use("/api/ai", createConversationDecisionRouter(conversationModel));
 
   return app;
 }
