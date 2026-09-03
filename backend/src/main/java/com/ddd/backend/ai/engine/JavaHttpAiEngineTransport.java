@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
+import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Objects;
@@ -48,6 +49,11 @@ public final class JavaHttpAiEngineTransport
     public String post(
             String requestBody
     ) {
+        return post(properties.endpointUri(), requestBody);
+    }
+
+    @Override
+    public String post(URI endpoint, String requestBody) {
 
         if (requestBody == null
                 || requestBody.isBlank()) {
@@ -60,7 +66,7 @@ public final class JavaHttpAiEngineTransport
         HttpRequest request =
                 HttpRequest
                         .newBuilder(
-                                properties.endpointUri()
+                                endpoint
                         )
                         .timeout(
                                 properties.getRequestTimeout()

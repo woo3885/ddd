@@ -2,16 +2,25 @@ package com.ddd.backend.api.dto.session;
 
 import jakarta.validation.constraints.NotBlank;
 
+import java.time.Instant;
+
 public record CreateSessionRequest(
 
-        @NotBlank(message = "사용자 요청은 비어 있을 수 없습니다.")
         String userRequest,
 
         @NotBlank(message = "siteId는 비어 있을 수 없습니다.")
         String siteId,
 
         @NotBlank(message = "initialPath는 비어 있을 수 없습니다.")
-        String initialPath
+        String initialPath,
+
+        String requestId,
+
+        String messageId,
+
+        String content,
+
+        Instant clientOccurredAt
 
 ) {
 
@@ -25,10 +34,30 @@ public record CreateSessionRequest(
         public CreateSessionRequest(
                 String userRequest
         ) {
-                this(
-                        userRequest,
-                        "demo-bank",
-                        "/transfer/accounts"
-                );
+                this(userRequest, "demo-bank", "/transfer/accounts",
+                        null, null, null, null);
+        }
+
+        public CreateSessionRequest(String userRequest, String siteId, String initialPath) {
+                this(userRequest, siteId, initialPath, null, null, null, null);
+        }
+
+        public boolean usesConversationContract() {
+                return requestId != null || messageId != null || content != null;
+        }
+
+        public String resolvedContent() {
+                return content != null ? content : userRequest;
+        }
+
+        @jakarta.validation.constraints.AssertTrue(
+                message = "사용자 요청은 비어 있을 수 없습니다.")
+        public boolean isMessageContractValid() {
+                if (!usesConversationContract()) {
+                        return userRequest != null && !userRequest.isBlank();
+                }
+                return requestId != null && !requestId.isBlank()
+                        && messageId != null && !messageId.isBlank()
+                        && content != null && !content.isBlank();
         }
 }
