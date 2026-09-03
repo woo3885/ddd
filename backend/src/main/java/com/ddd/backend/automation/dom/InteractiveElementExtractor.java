@@ -101,6 +101,14 @@ public final class InteractiveElementExtractor {
                             index
                     );
 
+            /* Demo Agent widget/overlay는 실제 사이트 DOM이 아니므로 읽기 전에 제외한다. */
+            Object agentUiOwned = candidate.evaluate(
+                    "element => Boolean(element.closest('[data-ddd-agent-ui]'))"
+            );
+            if (Boolean.TRUE.equals(agentUiOwned)) {
+                continue;
+            }
+
             String tagName =
                     readTagName(
                             candidate

@@ -63,6 +63,12 @@ ddd:
     completion-timeout: ${DDD_SECURE_COMPLETION_TIMEOUT:5m}
     cleanup-interval-ms: ${DDD_SECURE_CLEANUP_INTERVAL_MS:1000}
 
+  demo-agent-bridge:
+    enabled: ${DDD_DEMO_AGENT_BRIDGE_ENABLED:false}
+    headed-enabled: ${DDD_DEMO_AGENT_BRIDGE_HEADED_ENABLED:false}
+    ttl: ${DDD_DEMO_AGENT_BRIDGE_TTL:30m}
+    allowed-origins: ${DDD_DEMO_AGENT_BRIDGE_ALLOWED_ORIGINS:http://127.0.0.1:5190}
+
   ai:
     engine:
       enabled: ${DDD_AI_ENGINE_ENABLED:true}
