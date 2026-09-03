@@ -10,9 +10,22 @@ import {
   questionMessage,
   type GoalPatchExtractionResult,
 } from "./userGoalPatch.extractor.js";
+import {
+  decideConversationInteraction,
+} from "./conversationInteraction.policy.js";
 
 export class ScriptedConversationModel implements ConversationModelPort {
   async decide(input: ConversationAgentRequest): Promise<AgentDecision> {
+    if (
+      input.snapshot !== null &&
+      input.goal.intent === "DEPOSIT" &&
+      input.goal.amount !== null &&
+      input.goal.duration !== null &&
+      input.goal.missingFields.length === 0 &&
+      input.goal.pendingQuestion === null
+    ) {
+      return decideConversationInteraction(input);
+    }
     const result = input.goal.pendingQuestion === null
       ? extractInitialGoalPatch(input.goal, input.userMessage.content)
       : mergeGoalAnswer(input.goal, input.userMessage.content);
