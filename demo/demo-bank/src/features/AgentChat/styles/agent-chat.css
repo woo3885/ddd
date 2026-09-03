@@ -37,6 +37,48 @@
   cursor: pointer;
 }
 
+.agent-connection-status {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: 2px solid #667085;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #1d2939;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.agent-message-speech,
+.agent-speech-stop,
+.agent-reconnect-button,
+.agent-voice-actions button {
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 2px solid #475467;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1d2939;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agent-voice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-message-speech:disabled,
+.agent-voice-actions button:disabled {
+  color: #475467;
+  background: #e4e7ec;
+  cursor: not-allowed;
+}
+
 .agent-chat-toggle {
   width: 100%;
   margin-bottom: 12px;
@@ -223,7 +265,11 @@
 }
 
 .agent-chat-shell button:focus-visible,
-.agent-chat-shell textarea:focus-visible {
+.agent-chat-shell textarea:focus-visible,
+.agent-message-speech:focus-visible,
+.agent-speech-stop:focus-visible,
+.agent-reconnect-button:focus-visible,
+.agent-voice-actions button:focus-visible {
   outline: 4px solid #fdb022;
   outline-offset: 4px;
 }

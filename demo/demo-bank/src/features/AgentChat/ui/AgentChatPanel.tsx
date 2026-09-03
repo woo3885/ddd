@@ -1,4 +1,5 @@
 import type {
+  ConversationConnectionPhase,
   ConversationMessage,
   ConversationSafeError,
   ConversationSubmitPhase
@@ -15,6 +16,21 @@ export interface AgentChatPanelProps {
   onDraftChange: (value: string) => void;
   onSubmit: (message: string) => void;
   onDismissError: () => void;
+  connectionPhase?: ConversationConnectionPhase;
+  interactionBlocked?: boolean;
+  onReconnect?: () => void;
+  speechRecognition?: {
+    isSupported: boolean;
+    isListening: boolean;
+    start: () => void;
+    stop: () => void;
+  };
+  speechSynthesis?: {
+    isSupported: boolean;
+    isSpeaking: boolean;
+    speak: (text: string) => void;
+    stop: () => void;
+  };
 }
 
 const quickRequests = [
@@ -35,7 +51,12 @@ export default function AgentChatPanel({
   safeError,
   onDraftChange,
   onSubmit,
-  onDismissError
+  onDismissError,
+  connectionPhase = 'DISCONNECTED',
+  interactionBlocked = false,
+  onReconnect,
+  speechRecognition,
+  speechSynthesis
 }: AgentChatPanelProps) {
   const phaseMessage = phaseMessages[submitPhase];
   const isPending =
@@ -46,7 +67,7 @@ export default function AgentChatPanel({
   return (
     <section className="agent-chat-panel" aria-labelledby="agent-chat-title">
       <div className="agent-chat-heading">
-        <p className="agent-chat-kicker">Day 1 대화 UI</p>
+        <p className="agent-chat-kicker">대화형 AI 연결</p>
         <h2 id="agent-chat-title">AI 금융 도우미</h2>
         <p>
           원하는 업무를 입력하면 AI가 필요한 정보를 질문하는
@@ -54,7 +75,21 @@ export default function AgentChatPanel({
         </p>
       </div>
 
-      <ConversationMessageList messages={messages} />
+      <p className="agent-connection-status" aria-live="polite">
+        대화 연결: {connectionPhase === 'CONNECTED' ? '연결됨' : connectionPhase === 'RECONNECTING' ? '다시 연결 중' : connectionPhase === 'CONNECTING' ? '연결 중' : '연결 전'}
+      </p>
+
+      <ConversationMessageList
+        messages={messages}
+        onSpeak={speechSynthesis?.speak}
+        canSpeak={Boolean(speechSynthesis?.isSupported && !interactionBlocked)}
+      />
+
+      {speechSynthesis?.isSpeaking ? (
+        <button type="button" className="agent-speech-stop" onClick={speechSynthesis.stop}>
+          읽기 중지
+        </button>
+      ) : null}
 
       {phaseMessage ? (
         <p className="agent-submit-status" role="status" aria-live="polite">
@@ -67,6 +102,11 @@ export default function AgentChatPanel({
           onDismiss={onDismissError}
         />
       ) : null}
+      {(connectionPhase === 'RECONNECTING' || connectionPhase === 'ERROR') && onReconnect ? (
+        <button type="button" className="agent-reconnect-button" onClick={onReconnect}>
+          대화 다시 연결
+        </button>
+      ) : null}
 
       <div className="agent-quick-requests" aria-label="빠른 요청 예시">
         <p>빠른 요청은 입력창에만 넣어 드립니다.</p>
@@ -75,7 +115,7 @@ export default function AgentChatPanel({
             <button
               key={request}
               type="button"
-              disabled={isPending}
+              disabled={isPending || interactionBlocked}
               onClick={() => onDraftChange(request)}
             >
               {request}
@@ -87,6 +127,8 @@ export default function AgentChatPanel({
       <MessageComposer
         value={value}
         submitPhase={submitPhase}
+        interactionBlocked={interactionBlocked}
+        speechRecognition={speechRecognition}
         onDraftChange={onDraftChange}
         onSubmit={onSubmit}
       />

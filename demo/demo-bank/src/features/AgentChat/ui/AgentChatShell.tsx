@@ -1,75 +1,28 @@
-import { useReducer, useRef, useState } from 'react';
+import { useState } from 'react';
 
-import { conversationReducer } from '../model/conversation-reducer';
-import {
-  createInitialConversationState,
-  type ConversationMessage
-} from '../model/conversation-types';
+import { useAgentConversation, type AgentChatSubmitRequest, type AgentConversationDependencies } from '../hooks/use-agent-conversation';
+import { useAgentSpeechRecognition, useAgentSpeechSynthesis } from '../hooks/use-agent-speech';
+import { CHAT_SENSITIVE_ERROR } from '../model/chat-message-policy';
+import { isConversationInteractionBlocked } from '../model/conversation-safety';
 import AgentChatPanel from './AgentChatPanel';
 import '../styles/agent-chat.css';
 
-export interface AgentChatSubmitRequest {
-  requestId: string;
-  message: ConversationMessage;
+interface AgentChatShellProps extends Omit<AgentConversationDependencies, 'onSubmitRequest'> {
+  onSubmitRequest?: (request: AgentChatSubmitRequest) => void | Promise<void>;
 }
 
-interface AgentChatShellProps {
-  onSubmitRequest?: (
-    request: AgentChatSubmitRequest
-  ) => void | Promise<void>;
-}
+export type { AgentChatSubmitRequest };
 
-let localIdSequence = 0;
-
-function createLocalId(prefix: string) {
-  localIdSequence += 1;
-  return `${prefix}-${Date.now()}-${localIdSequence}`;
-}
-
-export default function AgentChatShell({
-  onSubmitRequest
-}: AgentChatShellProps) {
-  const [state, dispatch] = useReducer(
-    conversationReducer,
-    undefined,
-    createInitialConversationState
-  );
+export default function AgentChatShell(props: AgentChatShellProps) {
+  const { state, dispatch, submit, reconnect } = useAgentConversation(props);
   const [isOpen, setIsOpen] = useState(true);
-  const submitLockRef = useRef(false);
-
-  const handleSubmit = (text: string) => {
-    if (submitLockRef.current) {
-      return;
-    }
-    submitLockRef.current = true;
-
-    const requestId = createLocalId('chat-request');
-    const message: ConversationMessage = {
-      messageId: createLocalId('chat-message'),
-      role: 'USER',
-      kind: 'MESSAGE',
-      sequence: null,
-      text,
-      questionId: null,
-      goalRevision: null,
-      occurredAt: new Date().toISOString()
-    };
-
-    dispatch({
-      type: 'MESSAGE_SUBMIT_STARTED',
-      requestId,
-      message
-    });
-
-    Promise.resolve(onSubmitRequest?.({ requestId, message }))
-      .then(() => {
-        dispatch({ type: 'MESSAGE_SUBMIT_DISPATCHED', requestId });
-      })
-      .catch(() => {
-        submitLockRef.current = false;
-        dispatch({ type: 'MESSAGE_SUBMIT_FAILED', requestId });
-      });
-  };
+  const blocked = isConversationInteractionBlocked(state);
+  const speechRecognition = useAgentSpeechRecognition({
+    blocked,
+    onDraft: (draft) => dispatch({ type: 'DRAFT_CHANGED', draft }),
+    onSensitive: () => dispatch({ type: 'SAFE_ERROR_SET', error: CHAT_SENSITIVE_ERROR })
+  });
+  const speechSynthesis = useAgentSpeechSynthesis(blocked, state.sessionId);
 
   return (
     <aside
@@ -92,14 +45,15 @@ export default function AgentChatShell({
             value={state.draft}
             messages={state.messages}
             submitPhase={state.submitPhase}
+            connectionPhase={state.connectionPhase}
             safeError={state.safeError}
-            onDraftChange={(draft) =>
-              dispatch({ type: 'DRAFT_CHANGED', draft })
-            }
-            onSubmit={handleSubmit}
-            onDismissError={() =>
-              dispatch({ type: 'DRAFT_CHANGED', draft: state.draft })
-            }
+            interactionBlocked={blocked}
+            speechRecognition={speechRecognition}
+            speechSynthesis={speechSynthesis}
+            onReconnect={reconnect}
+            onDraftChange={(draft) => dispatch({ type: 'DRAFT_CHANGED', draft })}
+            onSubmit={(message) => void submit(message)}
+            onDismissError={() => dispatch({ type: 'DRAFT_CHANGED', draft: state.draft })}
           />
         </div>
       ) : null}
