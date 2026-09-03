@@ -145,6 +145,9 @@ describe('AgentChatPanel', () => {
     expect(screen.getByRole('textbox', { name: '업무 요청' })).toHaveAttribute(
       'readonly'
     );
+    await user.click(screen.getByRole('button', { name: '안내 닫기' }));
+    await user.type(screen.getByRole('textbox', { name: '업무 요청' }), '예금 기간을 알려줘');
+    expect(screen.getByRole('textbox', { name: '업무 요청' })).toHaveValue('예금 기간을 알려줘');
   });
 
   it('AI 메시지의 HTML 문자열을 DOM으로 해석하지 않는다', () => {

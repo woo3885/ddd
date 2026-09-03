@@ -3,10 +3,14 @@ import ConversationMessageItem from './ConversationMessageItem';
 
 interface ConversationMessageListProps {
   messages: ConversationMessage[];
+  onSpeak?: (text: string) => void;
+  canSpeak?: boolean;
 }
 
 export default function ConversationMessageList({
-  messages
+  messages,
+  onSpeak,
+  canSpeak
 }: ConversationMessageListProps) {
   return (
     <div className="agent-message-region">
@@ -27,6 +31,8 @@ export default function ConversationMessageList({
             <ConversationMessageItem
               key={message.messageId}
               message={message}
+              onSpeak={onSpeak}
+              canSpeak={canSpeak}
             />
           ))
         )}
