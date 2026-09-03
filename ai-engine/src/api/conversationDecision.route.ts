@@ -7,6 +7,9 @@ import {
 } from "../conversation/conversationAgent.validator.js";
 import { containsCredentialContext } from "../conversation/userGoalPatch.extractor.js";
 import type { ConversationAgentRequest } from "../conversation/conversationAgent.types.js";
+import {
+  validateConversationInteractionDecision,
+} from "../conversation/conversationInteraction.policy.js";
 
 const MODEL_TIMEOUT_MS = 5_000;
 
@@ -27,7 +30,10 @@ export function createConversationDecisionRouter(
     }
     try {
       const decision = await withTimeout(model.decide(request));
-      if (!validateAgentDecision(decision).valid) {
+      if (
+        !validateAgentDecision(decision).valid ||
+        !validateConversationInteractionDecision(request, decision).valid
+      ) {
         res.status(502).json({ code: "CONVERSATION_INVALID_DECISION", message: "AI 응답 계약이 올바르지 않습니다." });
         return;
       }
